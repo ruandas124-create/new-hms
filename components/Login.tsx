@@ -5,7 +5,7 @@ import { Role } from "../types";
 import { 
   Building2, Mail, Lock, Loader2, Stethoscope, 
   Users, Briefcase, ChevronRight, ShieldCheck, 
-  Sparkles, Fingerprint 
+  Sparkles, Fingerprint, Crown 
 } from 'lucide-react';
 
 export const Login: React.FC = () => {
@@ -17,17 +17,21 @@ export const Login: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const roleMap: Record<string, Role> = {
+    'master@hms.com': 'MASTER',
     'office@hms.com': 'FRONT_OFFICE',
     'doctor@hms.com': 'DOCTOR',
     'team@hms.com': 'PACKAGE_TEAM',
     'report@hms.com': 'ANALYTICS',
+    'sales@hms.com': 'SALES',
   };
 
   const demoPasswords: Record<string, string> = {
+    'master@hms.com': 'Master@123',
     'office@hms.com': 'Hms1984@',
     'doctor@hms.com': 'Doctor@123',
     'team@hms.com': 'Team8131@',
-    'report@hms.com': 'Report@123'
+    'report@hms.com': 'Report@123',
+    'sales@hms.com': 'Sales@123'
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -36,6 +40,22 @@ export const Login: React.FC = () => {
     setIsLoading(true);
 
     const emailTrimmed = email.toLowerCase().trim();
+
+    // 0. Support static Master login
+    if (emailTrimmed === "master@hms.com" || emailTrimmed === "master") {
+      if (password === "Master@123") {
+        setCurrentUserRole("MASTER");
+        localStorage.setItem("hms_hospital_email", "master@hms.com");
+        localStorage.setItem("hms_hospital_name", "Master Administrator");
+        localStorage.setItem("hms_hospital_id", "staff_master_01");
+        setIsLoading(false);
+        return;
+      } else {
+        setError("Invalid password for Master account.");
+        setIsLoading(false);
+        return;
+      }
+    }
 
     // 1. Support static Admin login
     if (emailTrimmed === "admin@hms.com" || emailTrimmed === "admin") {
@@ -226,16 +246,33 @@ export const Login: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <button 
             type="button" 
-            onClick={() => { setEmail("admin@hms.com"); setPassword("Admin@123"); }} 
+            onClick={() => { setEmail("master@hms.com"); setPassword("Master@123"); }} 
+            className="p-3 bg-gradient-to-br from-amber-950/40 to-slate-950/70 hover:from-amber-950/60 text-left rounded-2xl border border-amber-500/30 hover:border-amber-400 transition-all flex flex-col justify-between group active:scale-[0.97] shadow-sm"
+          >
+            <div className="flex items-center justify-between w-full mb-2">
+              <span className="text-[9px] font-black uppercase text-amber-400 tracking-wider flex items-center gap-1">
+                <Crown className="w-3 h-3 text-amber-400" /> Master
+              </span>
+              <Crown className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+            </div>
+            <div>
+              <div className="text-[10px] font-black text-amber-100 truncate">master@hms.com</div>
+              <div className="text-[9px] font-mono font-medium text-amber-300/70">Master@123</div>
+            </div>
+          </button>
+
+          <button 
+            type="button" 
+            onClick={() => { setEmail("report@hms.com"); setPassword("Report@123"); }} 
             className="p-3 bg-slate-950/50 hover:bg-slate-950 text-left rounded-2xl border border-slate-800 hover:border-hospital-500/40 transition-all flex flex-col justify-between group active:scale-[0.97]"
           >
             <div className="flex items-center justify-between w-full mb-2">
-              <span className="text-[9px] font-black uppercase text-hospital-500 tracking-wider">Admin</span>
-              <ShieldCheck className="w-4 h-4 text-slate-600 group-hover:text-hospital-500 transition-colors" />
+              <span className="text-[9px] font-black uppercase text-hospital-500 tracking-wider">Analytics</span>
+              <Fingerprint className="w-4 h-4 text-slate-600 group-hover:text-hospital-500 transition-colors" />
             </div>
             <div>
-              <div className="text-[10px] font-black text-slate-200 truncate">admin@hms.com</div>
-              <div className="text-[9px] font-mono font-medium text-slate-500">Admin@123</div>
+              <div className="text-[10px] font-black text-slate-200 truncate">report@hms.com</div>
+              <div className="text-[9px] font-mono font-medium text-slate-500">Report@123</div>
             </div>
           </button>
           
@@ -286,16 +323,16 @@ export const Login: React.FC = () => {
 
           <button 
             type="button" 
-            onClick={() => { setEmail("report@hms.com"); setPassword("Report@123"); }} 
-            className="p-3 bg-slate-950/50 hover:bg-slate-950 text-left rounded-2xl border border-slate-800 hover:border-hospital-500/40 transition-all flex flex-col justify-between group active:scale-[0.97] sm:col-span-2 lg:col-span-1"
+            onClick={() => { setEmail("sales@hms.com"); setPassword("Sales@123"); }} 
+            className="p-3 bg-slate-950/50 hover:bg-slate-950 text-left rounded-2xl border border-slate-800 hover:border-hospital-500/40 transition-all flex flex-col justify-between group active:scale-[0.97]"
           >
             <div className="flex items-center justify-between w-full mb-2">
-              <span className="text-[9px] font-black uppercase text-hospital-500 tracking-wider">Analytics</span>
-              <Fingerprint className="w-4 h-4 text-slate-600 group-hover:text-hospital-500 transition-colors" />
+              <span className="text-[9px] font-black uppercase text-rose-400 tracking-wider">Sales</span>
+              <Briefcase className="w-4 h-4 text-slate-600 group-hover:text-rose-400 transition-colors" />
             </div>
             <div>
-              <div className="text-[10px] font-black text-slate-200 truncate">report@hms.com</div>
-              <div className="text-[9px] font-mono font-medium text-slate-500">Report@123</div>
+              <div className="text-[10px] font-black text-slate-200 truncate">sales@hms.com</div>
+              <div className="text-[9px] font-mono font-medium text-slate-500">Sales@123</div>
             </div>
           </button>
         </div>

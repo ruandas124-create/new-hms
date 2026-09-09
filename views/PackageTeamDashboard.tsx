@@ -402,8 +402,8 @@ export const PackageTeamDashboard: React.FC = () => {
           </div>
 
           {viewMode === 'table' ? (
-            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden min-h-[500px]">
-              <div className="overflow-x-auto">
+            <div className="bg-white rounded-2xl sm:rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden min-h-[500px]">
+              <div className="overflow-x-auto table-container w-full">
                 <table className="w-full text-left border-collapse min-w-[1000px]">
                   <thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b">
                     <tr>

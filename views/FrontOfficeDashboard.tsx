@@ -646,7 +646,7 @@ export const FrontOfficeDashboard: React.FC = () => {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto table-container w-full">
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b">
               <tr>
@@ -766,13 +766,13 @@ export const FrontOfficeDashboard: React.FC = () => {
       </div>
 
       {showBookingForm && (
-        <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-xl flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/20 flex flex-col md:flex-row max-h-[90vh] md:max-h-[85vh]">
-            <div className="hidden md:flex w-72 bg-slate-900 text-white p-8 flex-col justify-between shrink-0">
-               <h2 className="text-3xl font-black mb-10 leading-tight">{editingId ? 'Edit Appointment' : 'Book Appointment'}</h2>
+        <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-xl flex items-center justify-center p-2 sm:p-4 md:p-6 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-4xl rounded-2xl sm:rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/20 flex flex-col md:flex-row max-h-[94dvh] sm:max-h-[90vh] md:max-h-[85vh]">
+            <div className="hidden md:flex w-72 bg-slate-900 text-white p-6 sm:p-8 flex-col justify-between shrink-0">
+               <h2 className="text-2xl sm:text-3xl font-black mb-10 leading-tight">{editingId ? 'Edit Appointment' : 'Book Appointment'}</h2>
                <button onClick={() => { setShowBookingForm(false); setEditingId(null); }} className="flex items-center gap-2 text-white/50 font-black uppercase text-[10px]"><ArrowLeft className="w-4 h-4" /> Close</button>
             </div>
-            <div className="flex-1 p-6 sm:p-10 bg-white overflow-y-auto relative">
+            <div className="flex-1 p-4 sm:p-6 md:p-10 bg-white overflow-y-auto relative">
                {/* Mobile Close Button */}
                <button 
                  type="button" 
@@ -866,18 +866,18 @@ export const FrontOfficeDashboard: React.FC = () => {
       )}
 
       {showForm && (
-        <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-xl flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-5xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col lg:flex-row h-[90vh]">
-            <div className="hidden lg:flex w-72 bg-slate-900 text-white p-8 flex-col justify-between">
-               <h2 className="text-3xl font-black mb-10 leading-tight">Patient Registration</h2>
+        <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-xl flex items-center justify-center p-2 sm:p-4 md:p-6 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-5xl rounded-2xl sm:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col lg:flex-row max-h-[94dvh] sm:max-h-[90vh] h-auto lg:h-[90vh]">
+            <div className="hidden lg:flex w-72 bg-slate-900 text-white p-6 sm:p-8 flex-col justify-between shrink-0">
+               <h2 className="text-2xl sm:text-3xl font-black mb-10 leading-tight">Patient Registration</h2>
                <button onClick={() => { setShowForm(false); resetForm(); }} className="flex items-center gap-2 text-white/50 font-black uppercase text-[10px]"><ArrowLeft className="w-4 h-4" /> Discard</button>
             </div>
             <div className="flex-1 bg-white flex flex-col overflow-hidden">
-              <header className="p-6 sm:p-8 border-b flex justify-between items-center bg-slate-50/50">
-                 <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Step {step}</h3>
+              <header className="p-4 sm:p-6 md:p-8 border-b flex justify-between items-center bg-slate-50/50">
+                 <h3 className="text-lg sm:text-xl font-black text-slate-800 uppercase tracking-tight">Step {step}</h3>
                  <button onClick={() => setShowForm(false)} className="lg:hidden p-2 text-slate-400"><X className="w-6 h-6" /></button>
               </header>
-              <div className="flex-1 overflow-y-auto p-6 sm:p-10">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
                 <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-12">
                   {step === 1 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-8">

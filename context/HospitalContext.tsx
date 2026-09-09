@@ -1,6 +1,11 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Patient, DoctorAssessment, PackageProposal, Role, StaffUser, Appointment, Condition, SurgeonCode, PainSeverity, Affordability, ConversionReadiness, ProposalOutcome, Gender } from '../types';
+import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import { 
+  Patient, DoctorAssessment, PackageProposal, Role, StaffUser, Appointment, 
+  Condition, SurgeonCode, PainSeverity, Affordability, ConversionReadiness, 
+  ProposalOutcome, Gender, DashboardKey, DashboardPermission,
+  SchedulingTarget, SchedulingPermissionsState, ReportPermissionsState
+} from '../types';
 import { supabase } from '../services/supabaseClient';
 
 interface PatientFilters {
@@ -18,6 +23,16 @@ interface PatientFilters {
 interface HospitalContextType {
   currentUserRole: Role;
   setCurrentUserRole: (role: Role) => void;
+  dashboardPermissions: Record<DashboardKey, boolean>;
+  schedulingPermissions: SchedulingPermissionsState;
+  reportPermissions: ReportPermissionsState;
+  activeDashboard: DashboardKey;
+  setActiveDashboard: (key: DashboardKey) => void;
+  updateDashboardPermission: (dashboard: DashboardKey, status: boolean, grantedBy?: string) => Promise<void>;
+  updateSchedulingPermission: (target: SchedulingTarget, status: boolean, grantedBy?: string) => Promise<void>;
+  updateReportPermission: (reportKey: keyof ReportPermissionsState, status: boolean, grantedBy?: string) => Promise<void>;
+  hasPermission: (role: Role, dashboard: DashboardKey) => boolean;
+  getAccessibleDashboards: () => DashboardKey[];
   patients: Patient[];
   addPatient: (patientData: Omit<Patient, 'registeredAt' | 'hospital_id'>) => Promise<void>; 
   updatePatient: (targetId: string, patient: Patient) => Promise<void>;
@@ -28,7 +43,7 @@ interface HospitalContextType {
   getPatientById: (id: string) => Patient | undefined;
   fetchFilteredPatients: (filters: PatientFilters, page: number, pageSize: number) => Promise<{ data: Patient[], count: number }>;
   appointments: Appointment[];
-  addAppointment: (appointmentData: Omit<Appointment, 'id' | 'createdAt' | 'hospital_id' | 'status'>) => Promise<void>;
+  addAppointment: (appointmentData: Omit<Appointment, 'id' | 'createdAt' | 'hospital_id' | 'status'> & { hospital_id?: string }) => Promise<void>;
   updateAppointment: (appointment: Appointment) => Promise<void>;
   deleteAppointment: (id: string) => Promise<void>;
   staffUsers: StaffUser[];
@@ -45,8 +60,165 @@ interface HospitalContextType {
 
 const HospitalContext = createContext<HospitalContextType | undefined>(undefined);
 const STORAGE_KEY_ROLE = 'hms_hospital_role';
+const STORAGE_KEY_PERMS = 'hms_dashboard_permissions';
+const STORAGE_KEY_SCHED_PERMS = 'hms_scheduling_permissions';
+const STORAGE_KEY_REPORT_PERMS = 'hms_report_permissions';
 const APPOINTMENTS_TABLE = 'himas_appointments';
 const FACILITY_ID = 'himas_facility_01';
+
+export const DEFAULT_PERMISSIONS: Record<DashboardKey, boolean> = {
+  master: true,
+  master_access: true,
+  master_scheduling: true,
+  master_availability: true,
+  master_reports: true,
+  analytics_hub: true,
+  front_office: true,
+  doctor: true,
+  package: true,
+  sales: true,
+};
+
+export const DEFAULT_SCHEDULING_PERMISSIONS: SchedulingPermissionsState = {
+  analytics_hub: true,
+  doctor: true,
+  sales: true,
+};
+
+export const DEFAULT_REPORT_PERMISSIONS: ReportPermissionsState = {
+  doctor_performance: true,
+  period_activity: true,
+  financial_analytics: true,
+  procedure_trends: true,
+};
+
+export const DASHBOARD_TO_SLUG: Record<DashboardKey, string> = {
+  master: 'master',
+  master_access: 'master-access',
+  master_scheduling: 'master-scheduling',
+  master_availability: 'master-availability',
+  master_reports: 'master-reports',
+  analytics_hub: 'analytics-hub',
+  front_office: 'front-office',
+  doctor: 'doctor',
+  package: 'package',
+  sales: 'sales',
+};
+
+export const checkPermission = (
+  role: Role, 
+  dashboard: DashboardKey, 
+  permissions: Record<DashboardKey, boolean>,
+  user?: StaffUser
+): boolean => {
+  if (!role) return false;
+  
+  if (user && user.grantedBy === 'Master Admin' && user.accessStatus === 'Active') {
+    if (dashboard === 'analytics_hub') return !!permissions.analytics_hub;
+  }
+
+  // 1. MASTER: Full complete access to all dashboards
+  if (role === 'MASTER') return true;
+
+  // 2. ADMIN: Access to Analytics Hub and permitted operational dashboards
+  if (role === 'ADMIN') {
+    if (dashboard === 'analytics_hub') return !!permissions.analytics_hub;
+    if (dashboard === 'front_office') return !!permissions.front_office;
+    if (dashboard === 'doctor') return !!permissions.doctor;
+    if (dashboard === 'package') return !!permissions.package;
+    if (dashboard === 'sales') return !!permissions.sales;
+    return false;
+  }
+
+  // 3. ANALYTICS / ANALYTICS_HUB / HOSPITAL
+  if (role === 'ANALYTICS' || role === 'ANALYTICS_HUB' || role === 'HOSPITAL') {
+    if (dashboard === 'analytics_hub') return !!permissions.analytics_hub;
+    if (dashboard === 'front_office') return !!permissions.front_office;
+    if (dashboard === 'doctor') return !!permissions.doctor;
+    if (dashboard === 'package') return !!permissions.package;
+    if (dashboard === 'sales') return !!permissions.sales;
+    return false;
+  }
+
+  // 4. FRONT_OFFICE: Can only access front_office if permitted
+  if (role === 'FRONT_OFFICE') {
+    if (dashboard === 'front_office') return !!permissions.front_office;
+    return false;
+  }
+
+  // 5. DOCTOR: Can only access doctor if permitted
+  if (role === 'DOCTOR') {
+    if (dashboard === 'doctor') return !!permissions.doctor;
+    return false;
+  }
+
+  // 6. PACKAGE_TEAM / PACKAGE: Can only access package if permitted
+  if (role === 'PACKAGE_TEAM' || role === 'PACKAGE') {
+    if (dashboard === 'package') return !!permissions.package;
+    return false;
+  }
+
+  // 7. SALES: Can only access sales if permitted
+  if (role === 'SALES') {
+    if (dashboard === 'sales') return !!permissions.sales;
+    return false;
+  }
+
+  return false;
+};
+
+export const getDefaultDashboardForRole = (role: Role, user?: StaffUser): DashboardKey => {
+  if (user && user.grantedBy === 'Master Admin' && user.accessStatus === 'Active') {
+    return 'analytics_hub';
+  }
+  switch (role) {
+    case 'MASTER': return 'master_access';
+    case 'ADMIN':
+    case 'ANALYTICS':
+    case 'HOSPITAL':
+    case 'ANALYTICS_HUB': return 'analytics_hub';
+    case 'FRONT_OFFICE': return 'front_office';
+    case 'DOCTOR': return 'doctor';
+    case 'PACKAGE_TEAM':
+    case 'PACKAGE': return 'package';
+    case 'SALES': return 'sales';
+    default: return 'front_office';
+  }
+};
+
+const getDashboardFromLocation = (): DashboardKey | null => {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase().trim();
+  if (hash) {
+    if (hash === 'master') return 'master_access';
+    if (hash === 'master-access' || hash === 'master_access') return 'master_access';
+    if (hash === 'master-scheduling' || hash === 'master_scheduling') return 'master_scheduling';
+    if (hash === 'master-availability' || hash === 'master_availability') return 'master_availability';
+    if (hash === 'master-reports' || hash === 'master_reports') return 'master_reports';
+    if (hash === 'admin') return 'analytics_hub';
+    if (hash === 'analytics' || hash === 'analytics-hub' || hash === 'analytics_hub') return 'analytics_hub';
+    if (hash === 'front-office' || hash === 'front_office') return 'front_office';
+    if (hash === 'doctor') return 'doctor';
+    if (hash === 'package') return 'package';
+    if (hash === 'sales') return 'sales';
+  }
+
+  const path = window.location.pathname.replace(/^\//, '').toLowerCase().trim();
+  if (path) {
+    if (path === 'master') return 'master_access';
+    if (path === 'master-access' || path === 'master_access') return 'master_access';
+    if (path === 'master-scheduling' || path === 'master_scheduling') return 'master_scheduling';
+    if (path === 'master-availability' || path === 'master_availability') return 'master_availability';
+    if (path === 'master-reports' || path === 'master_reports') return 'master_reports';
+    if (path === 'admin') return 'analytics_hub';
+    if (path === 'analytics' || path === 'analytics-hub' || path === 'analytics_hub') return 'analytics_hub';
+    if (path === 'front-office' || path === 'front_office') return 'front_office';
+    if (path === 'doctor') return 'doctor';
+    if (path === 'package') return 'package';
+    if (path === 'sales') return 'sales';
+  }
+  return null;
+};
 
 const nullify = (val: any) => {
   if (val === undefined || val === null) return null;
@@ -135,6 +307,55 @@ const mapRowToPatient = (row: any): Patient => {
 
 export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentUserRole, setCurrentUserRoleState] = useState<Role>(null);
+  const [dashboardPermissions, setDashboardPermissions] = useState<Record<DashboardKey, boolean>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(STORAGE_KEY_PERMS);
+      if (saved) {
+        try {
+          return { ...DEFAULT_PERMISSIONS, ...JSON.parse(saved) };
+        } catch {
+          return DEFAULT_PERMISSIONS;
+        }
+      }
+    }
+    return DEFAULT_PERMISSIONS;
+  });
+
+  const [schedulingPermissions, setSchedulingPermissions] = useState<SchedulingPermissionsState>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(STORAGE_KEY_SCHED_PERMS);
+      if (saved) {
+        try {
+          return { ...DEFAULT_SCHEDULING_PERMISSIONS, ...JSON.parse(saved) };
+        } catch {
+          return DEFAULT_SCHEDULING_PERMISSIONS;
+        }
+      }
+    }
+    return DEFAULT_SCHEDULING_PERMISSIONS;
+  });
+
+  const [reportPermissions, setReportPermissions] = useState<ReportPermissionsState>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(STORAGE_KEY_REPORT_PERMS);
+      if (saved) {
+        try {
+          return { ...DEFAULT_REPORT_PERMISSIONS, ...JSON.parse(saved) };
+        } catch {
+          return DEFAULT_REPORT_PERMISSIONS;
+        }
+      }
+    }
+    return DEFAULT_REPORT_PERMISSIONS;
+  });
+
+  const [activeDashboard, setActiveDashboardState] = useState<DashboardKey>(() => {
+    const locDash = getDashboardFromLocation();
+    if (locDash) return locDash;
+    const savedRole = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_ROLE) : null;
+    return getDefaultDashboardForRole(savedRole as Role);
+  });
+
   const [patients, setPatients] = useState<Patient[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
@@ -149,9 +370,133 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
     localStorage.setItem('hms_system_name', name);
   };
 
+  const setActiveDashboard = (key: DashboardKey) => {
+    setActiveDashboardState(key);
+    if (typeof window !== 'undefined') {
+      const slug = DASHBOARD_TO_SLUG[key] || key;
+      if (window.location.hash !== `#/${slug}`) {
+        window.location.hash = `#/${slug}`;
+      }
+    }
+  };
+
+  const hasPermission = (role: Role, dashboard: DashboardKey): boolean => {
+    const user = staffUsers.find(s => s.id === (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') : null));
+    return checkPermission(role, dashboard, dashboardPermissions, user);
+  };
+
+  const getAccessibleDashboards = (): DashboardKey[] => {
+    if (!currentUserRole) return [];
+    if (currentUserRole === 'MASTER') return ['master_access', 'master_scheduling', 'master_availability', 'master_reports'];
+    const all: DashboardKey[] = ['analytics_hub', 'front_office', 'doctor', 'package', 'sales'];
+    const user = staffUsers.find(s => s.id === (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') : null));
+    return all.filter(d => checkPermission(currentUserRole, d, dashboardPermissions, user));
+  };
+
+  const updateDashboardPermission = async (dashboard: DashboardKey, status: boolean, grantedBy: string = 'master') => {
+    const updated = { ...dashboardPermissions, [dashboard]: status };
+    setDashboardPermissions(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_PERMS, JSON.stringify(updated));
+    }
+
+    try {
+      const permId = `perm_${dashboard}`;
+      await supabase.from('dashboard_permissions').upsert({
+        id: permId,
+        user_id: 'global',
+        role: 'ALL',
+        dashboard,
+        permission: `${dashboard}_access`,
+        status,
+        granted_by: grantedBy,
+        updated_at: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Supabase permission sync notice (local state remains active):', e);
+    }
+  };
+
+  const updateSchedulingPermission = async (target: SchedulingTarget, status: boolean, grantedBy: string = 'master') => {
+    const updated = { ...schedulingPermissions, [target]: status };
+    setSchedulingPermissions(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_SCHED_PERMS, JSON.stringify(updated));
+    }
+
+    try {
+      const permId = `perm_sched_${target}`;
+      await supabase.from('dashboard_permissions').upsert({
+        id: permId,
+        user_id: 'global',
+        role: target.toUpperCase(),
+        dashboard: target,
+        permission: 'scheduling_access',
+        status,
+        granted_by: grantedBy,
+        updated_at: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Supabase scheduling permission sync notice:', e);
+    }
+  };
+
+  const updateReportPermission = async (reportKey: keyof ReportPermissionsState, status: boolean, grantedBy: string = 'master') => {
+    const updated = { ...reportPermissions, [reportKey]: status };
+    setReportPermissions(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_REPORT_PERMS, JSON.stringify(updated));
+    }
+
+    try {
+      const permId = `perm_report_${reportKey}`;
+      await supabase.from('dashboard_permissions').upsert({
+        id: permId,
+        user_id: 'global',
+        role: 'ALL',
+        dashboard: 'analytics_hub',
+        permission: `report_${reportKey}_access`,
+        status,
+        granted_by: grantedBy,
+        updated_at: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Supabase report permission sync notice:', e);
+    }
+  };
+
+  // Sync with URL hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const loc = getDashboardFromLocation();
+      if (loc && loc !== activeDashboard) {
+        setActiveDashboardState(loc);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [activeDashboard]);
+
+  // When role changes, if current dashboard is not permitted, default to primary dashboard
+  useEffect(() => {
+    if (currentUserRole && isStaffLoaded) {
+      const user = staffUsers.find(s => s.id === (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') : null));
+      const isCurrentAllowed = checkPermission(currentUserRole, activeDashboard, dashboardPermissions, user);
+      if (!isCurrentAllowed) {
+        const primary = getDefaultDashboardForRole(currentUserRole, user);
+        setActiveDashboardState(primary);
+        const slug = DASHBOARD_TO_SLUG[primary] || primary;
+        window.location.hash = `#/${slug}`;
+      }
+    }
+  }, [currentUserRole, dashboardPermissions, isStaffLoaded, staffUsers]);
+
   useEffect(() => {
     const savedRole = localStorage.getItem(STORAGE_KEY_ROLE);
-    if (savedRole) setCurrentUserRoleState(savedRole as Role);
+    if (savedRole) {
+      setCurrentUserRoleState(savedRole as Role);
+    }
     
     // Initial fetch of data
     refreshData(false);
@@ -164,7 +509,6 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         { event: '*', schema: 'public', table: APPOINTMENTS_TABLE },
         (payload) => {
           console.log('[Realtime] postgres_changes on hms_appointments:', payload);
-          // Sync changes silently in background to avoid breaking user flow / scroll positions
           refreshData(true);
         }
       )
@@ -182,16 +526,41 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       )
       .subscribe();
 
+    const permsChannel = supabase
+      .channel('dashboard_permissions_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'dashboard_permissions' },
+        (payload) => {
+          console.log('[Realtime] postgres_changes on dashboard_permissions:', payload);
+          refreshData(true);
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(appointmentsChannel);
       supabase.removeChannel(staffChannel);
+      supabase.removeChannel(permsChannel);
     };
   }, []);
 
   const setCurrentUserRole = (role: Role) => {
     setCurrentUserRoleState(role);
-    if (role) localStorage.setItem(STORAGE_KEY_ROLE, role);
-    else localStorage.removeItem(STORAGE_KEY_ROLE);
+    if (role) {
+      localStorage.setItem(STORAGE_KEY_ROLE, role);
+      // Auto-route to primary dashboard if not already permitted on active dashboard
+      const user = staffUsers.find(s => s.id === (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') : null));
+      const isAllowed = checkPermission(role, activeDashboard, dashboardPermissions, user);
+      if (!isAllowed) {
+        const primary = getDefaultDashboardForRole(role, user);
+        setActiveDashboardState(primary);
+        const slug = DASHBOARD_TO_SLUG[primary] || primary;
+        window.location.hash = `#/${slug}`;
+      }
+    } else {
+      localStorage.removeItem(STORAGE_KEY_ROLE);
+    }
   };
 
   const syncToSheets = async (patient: any) => {
@@ -249,11 +618,48 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       const [
         { data: apptRows, error: apptError },
-        { data: staffData, error: staffError }
+        { data: staffData, error: staffError },
+        { data: permRows, error: permError }
       ] = await Promise.all([
         fetchAllAppointments(),
-        supabase.from('staff_users').select('*')
+        supabase.from('staff_users').select('*'),
+        supabase.from('dashboard_permissions').select('*')
       ]);
+
+      if (!permError && permRows && permRows.length > 0) {
+        const mappedDash: Record<DashboardKey, boolean> = { ...DEFAULT_PERMISSIONS };
+        const mappedSched: SchedulingPermissionsState = { ...DEFAULT_SCHEDULING_PERMISSIONS };
+        const mappedReport: ReportPermissionsState = { ...DEFAULT_REPORT_PERMISSIONS };
+
+        permRows.forEach((r: any) => {
+          if (r.id?.startsWith('perm_sched_')) {
+            const target = r.dashboard as SchedulingTarget;
+            if (target && mappedSched[target] !== undefined) {
+              mappedSched[target] = r.status !== false;
+            }
+          } else if (r.id?.startsWith('perm_report_')) {
+            const rKey = r.id.replace('perm_report_', '') as keyof ReportPermissionsState;
+            if (rKey && mappedReport[rKey] !== undefined) {
+              mappedReport[rKey] = r.status !== false;
+            }
+          } else {
+            const d = r.dashboard as DashboardKey;
+            if (d && mappedDash[d] !== undefined) {
+              mappedDash[d] = r.status !== false;
+            }
+          }
+        });
+
+        setDashboardPermissions(mappedDash);
+        setSchedulingPermissions(mappedSched);
+        setReportPermissions(mappedReport);
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_KEY_PERMS, JSON.stringify(mappedDash));
+          localStorage.setItem(STORAGE_KEY_SCHED_PERMS, JSON.stringify(mappedSched));
+          localStorage.setItem(STORAGE_KEY_REPORT_PERMS, JSON.stringify(mappedReport));
+        }
+      }
 
       if (apptError) throw apptError;
 
@@ -279,10 +685,11 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         )
         .map((r: any) => ({
           id: r.id || '',
-          hospital_id: r.hospital_id || '',
+          hospital_id: r.doctor_assessment?.hospital_id || r.hospital_id || '',
           name: r.name || '',
-          source: r.source || '',
-          source_doctor_name: r.source_doctor_name || '',
+          source: r.source || r.doctor_assessment?.source || '',
+          sourceDoctorName: r.source_doctor_name || '',
+          referral_person: r.doctor_assessment?.referral_person || (r.source === 'Referral' ? r.source_doctor_name : null) || null,
           condition: (r.condition || Condition.Other) as Condition,
           mobile: r.mobile || '',
           date: r.entry_date || '',
@@ -291,8 +698,13 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           bookingType: r.booking_status === 'Follow Up' ? 'Follow Up' : 'Scheduled',
           visit_type: r.visit_type || '',
           createdAt: r.created_at || new Date().toISOString(),
-          assignedDoctorId: r.doctor_assessment?.assignedDoctorId || undefined,
-          assignedDoctorName: r.doctor_assessment?.assignedDoctorName || undefined
+          assignedDoctorId: r.doctor_assessment?.assignedDoctorId || r.doctor_assessment?.doctor_id || undefined,
+          assignedDoctorName: r.doctor_assessment?.assignedDoctorName || undefined,
+          username: r.doctor_assessment?.username || r.remarks || 'Master Admin',
+          assignment_type: r.doctor_assessment?.assignment_type || (r.doctor_assessment?.assignedDoctorId ? 'doctor' : 'hospital'),
+          doctor_id: r.doctor_assessment?.doctor_id || r.doctor_assessment?.assignedDoctorId || null,
+          patient_id: r.doctor_assessment?.patient_id || null,
+          hospitalName: r.doctor_assessment?.hospitalName || undefined
         }));
       setAppointments(appointmentLeads as Appointment[]);
 
@@ -308,10 +720,22 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
               registrationNumber: meta.registrationNumber || undefined,
               specialization: meta.specialization || undefined,
               username: meta.username || undefined,
-              department: meta.department || undefined
+              department: meta.department || undefined,
+              accessStatus: meta.accessStatus !== undefined ? meta.accessStatus : (u.accessStatus || 'Active'),
+              grantedBy: meta.grantedBy !== undefined ? meta.grantedBy : (u.grantedBy || undefined),
+              hospital_id: meta.hospital_id || u.hospital_id || undefined,
+              hospitalName: meta.hospitalName || u.hospitalName || undefined,
+              address: meta.address || u.address || undefined,
+              city: meta.city || u.city || undefined,
+              state: meta.state || u.state || undefined,
+              pincode: meta.pincode || u.pincode || undefined,
+              fullAddress: meta.fullAddress || u.fullAddress || undefined,
             };
           }
-          return u;
+          return {
+            ...u,
+            accessStatus: u.accessStatus || 'Active',
+          };
         });
         setStaffUsers(mergedStaff);
         setIsStaffLoaded(true);
@@ -559,27 +983,58 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
   const getPatientById = (id: string) => patients.find(p => p.id === id);
   const fetchFilteredPatients = async (filters: PatientFilters, page: number, pageSize: number) => { return { data: patients, count: patients.length }; };
 
-  const addAppointment = async (appointmentData: Omit<Appointment, 'id' | 'createdAt' | 'hospital_id' | 'status'>) => {
+  const addAppointment = async (appointmentData: Omit<Appointment, 'id' | 'createdAt' | 'hospital_id' | 'status'> & { hospital_id?: string }) => {
     setSaveStatus('saving');
     try {
+      const activeRole = currentUserRole || 
+        (typeof window !== 'undefined' ? (localStorage.getItem('hms_hospital_role') || localStorage.getItem('user_role')) : null);
+      const isRoleMasterOrSales = activeRole === 'MASTER' || activeRole === 'SALES';
+
+      const activeUsername = appointmentData.username || 
+        (typeof window !== 'undefined' ? (localStorage.getItem('hms_hospital_name') || localStorage.getItem('username') || localStorage.getItem('hms_hospital_email')) : '') || 
+        (isRoleMasterOrSales ? (activeRole === 'SALES' ? 'Sales Executive' : 'Master Admin') : 'Staff');
+
+      const resolvedAssignmentType = appointmentData.assignment_type || (appointmentData.assignedDoctorId ? 'doctor' : 'hospital');
+      const resolvedDoctorId = appointmentData.assignedDoctorId || appointmentData.doctor_id || null;
+      const resolvedHospitalId = appointmentData.hospital_id || FACILITY_ID;
+      const resolvedHospitalName = appointmentData.hospitalName || null;
+      const resolvedPatientId = appointmentData.patient_id || null;
+
+      // Only Master Admin and Sales Lead can record Source and Referral Person
+      const resolvedSource = isRoleMasterOrSales ? (appointmentData.source || 'Other') : (appointmentData.source || 'Other');
+      const resolvedReferralPerson = isRoleMasterOrSales && appointmentData.source === 'Referral'
+        ? (appointmentData.referral_person?.trim() || null)
+        : null;
+
       const dbRecord = {
         id: `APP-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
         name: appointmentData.name,
         mobile: appointmentData.mobile,
-        source: appointmentData.source,
-        source_doctor_name: nullify(appointmentData.sourceDoctorName),
+        source: resolvedSource,
+        source_doctor_name: resolvedReferralPerson || nullify(appointmentData.sourceDoctorName),
         condition: appointmentData.condition,
         entry_date: nullify(appointmentData.date),
         booking_time: nullify(appointmentData.time),
         is_follow_up: appointmentData.bookingType === 'Follow Up',
         booking_status: appointmentData.bookingType || 'Scheduled',
         visit_type: (appointmentData as any).visit_type || '',
-        hospital_id: FACILITY_ID,
+        hospital_id: resolvedHospitalId,
+        remarks: activeUsername,
         updated_at: new Date().toISOString(),
-        doctor_assessment: appointmentData.assignedDoctorId ? {
-          assignedDoctorId: appointmentData.assignedDoctorId,
-          assignedDoctorName: appointmentData.assignedDoctorName
-        } : null
+        doctor_assessment: {
+          assignedDoctorId: resolvedDoctorId,
+          assignedDoctorName: appointmentData.assignedDoctorName || (resolvedAssignmentType === 'hospital' && !resolvedDoctorId ? null : (appointmentData.assignedDoctorName || null)),
+          username: activeUsername,
+          assignment_type: resolvedAssignmentType,
+          doctor_id: resolvedDoctorId,
+          hospital_id: resolvedHospitalId,
+          hospitalName: resolvedHospitalName,
+          patient_id: resolvedPatientId,
+          appointment_date: appointmentData.date,
+          appointment_time: appointmentData.time,
+          source: resolvedSource,
+          referral_person: resolvedReferralPerson
+        }
       };
       const { error } = await supabase.from(APPOINTMENTS_TABLE).insert(dbRecord);
       if (error) throw error;
@@ -594,22 +1049,59 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
   const updateAppointment = async (appointment: Appointment) => {
     setSaveStatus('saving');
     try {
-      const updateData = {
+      const activeRole = currentUserRole || 
+        (typeof window !== 'undefined' ? (localStorage.getItem('hms_hospital_role') || localStorage.getItem('user_role')) : null);
+      const isRoleMasterOrSales = activeRole === 'MASTER' || activeRole === 'SALES';
+
+      const activeUsername = appointment.username || 
+        (typeof window !== 'undefined' ? (localStorage.getItem('hms_hospital_name') || localStorage.getItem('username') || localStorage.getItem('hms_hospital_email')) : '') || 
+        'Master Admin';
+
+      const resolvedAssignmentType = appointment.assignment_type || (appointment.assignedDoctorId ? 'doctor' : 'hospital');
+      const resolvedDoctorId = appointment.assignedDoctorId || appointment.doctor_id || null;
+      const resolvedHospitalId = appointment.hospital_id || FACILITY_ID;
+      const resolvedHospitalName = appointment.hospitalName || null;
+      const resolvedPatientId = appointment.patient_id || null;
+
+      // Existing record to prevent unauthorized role from overwriting source or referral person
+      const existingAppt = appointments.find(a => a.id === appointment.id);
+
+      const resolvedSource = isRoleMasterOrSales 
+        ? appointment.source 
+        : (existingAppt?.source || 'Other');
+      
+      const resolvedReferralPerson = isRoleMasterOrSales
+        ? (appointment.source === 'Referral' ? (appointment.referral_person?.trim() || null) : null)
+        : (existingAppt?.referral_person || null);
+
+      const updateData: any = {
         name: appointment.name,
         mobile: appointment.mobile,
-        source: appointment.source,
-        source_doctor_name: nullify(appointment.sourceDoctorName),
+        source: resolvedSource,
+        source_doctor_name: resolvedReferralPerson || nullify(appointment.sourceDoctorName),
         condition: appointment.condition,
         entry_date: nullify(appointment.date),
         booking_time: nullify(appointment.time),
         booking_status: appointment.bookingType, 
         is_follow_up: appointment.bookingType === 'Follow Up',
         visit_type: appointment.visit_type || '',
+        hospital_id: resolvedHospitalId,
+        remarks: activeUsername,
         updated_at: new Date().toISOString(),
-        doctor_assessment: appointment.assignedDoctorId ? {
-          assignedDoctorId: appointment.assignedDoctorId,
-          assignedDoctorName: appointment.assignedDoctorName
-        } : null
+        doctor_assessment: {
+          assignedDoctorId: resolvedDoctorId,
+          assignedDoctorName: appointment.assignedDoctorName || (resolvedAssignmentType === 'hospital' && !resolvedDoctorId ? null : (appointment.assignedDoctorName || null)),
+          username: activeUsername,
+          assignment_type: resolvedAssignmentType,
+          doctor_id: resolvedDoctorId,
+          hospital_id: resolvedHospitalId,
+          hospitalName: resolvedHospitalName,
+          patient_id: resolvedPatientId,
+          appointment_date: appointment.date,
+          appointment_time: appointment.time,
+          source: resolvedSource,
+          referral_person: resolvedReferralPerson
+        }
       };
       const { error } = await supabase.from(APPOINTMENTS_TABLE).update(updateData).eq('id', appointment.id);
       if (error) throw error;
@@ -659,6 +1151,15 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       if (staffData.username !== undefined) metadataToSave.username = staffData.username;
       if (staffData.department !== undefined) metadataToSave.department = staffData.department;
       if (staffData.availability !== undefined) metadataToSave.availability = staffData.availability;
+      if (staffData.address !== undefined) metadataToSave.address = staffData.address;
+      if (staffData.state !== undefined) metadataToSave.state = staffData.state;
+      if (staffData.city !== undefined) metadataToSave.city = staffData.city;
+      if (staffData.pincode !== undefined) metadataToSave.pincode = staffData.pincode;
+      if (staffData.fullAddress !== undefined) metadataToSave.fullAddress = staffData.fullAddress;
+      if (staffData.accessStatus !== undefined) metadataToSave.accessStatus = staffData.accessStatus;
+      if (staffData.grantedBy !== undefined) metadataToSave.grantedBy = staffData.grantedBy;
+      if (staffData.hospital_id !== undefined) metadataToSave.hospital_id = staffData.hospital_id;
+      if (staffData.hospitalName !== undefined) metadataToSave.hospitalName = staffData.hospitalName;
       
       if (Object.keys(metadataToSave).length > 0) {
         const recordId = `doctor_metadata_${newStaffId}`;
@@ -692,7 +1193,16 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         staffData.registrationNumber !== undefined ||
         staffData.specialization !== undefined ||
         staffData.username !== undefined ||
-        staffData.department !== undefined
+        staffData.department !== undefined ||
+        staffData.address !== undefined ||
+        staffData.state !== undefined ||
+        staffData.city !== undefined ||
+        staffData.pincode !== undefined ||
+        staffData.fullAddress !== undefined ||
+        staffData.accessStatus !== undefined ||
+        staffData.grantedBy !== undefined ||
+        staffData.hospital_id !== undefined ||
+        staffData.hospitalName !== undefined
       ) {
         const recordId = `doctor_metadata_${id}`;
         const { data: existing } = await supabase
@@ -705,24 +1215,21 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         const updatedAssessment = {
           ...currentAssessment,
         };
-        if (staffData.photoUrl !== undefined) {
-          updatedAssessment.photoUrl = staffData.photoUrl;
-        }
-        if (staffData.availability !== undefined) {
-          updatedAssessment.availability = staffData.availability;
-        }
-        if (staffData.registrationNumber !== undefined) {
-          updatedAssessment.registrationNumber = staffData.registrationNumber;
-        }
-        if (staffData.specialization !== undefined) {
-          updatedAssessment.specialization = staffData.specialization;
-        }
-        if (staffData.username !== undefined) {
-          updatedAssessment.username = staffData.username;
-        }
-        if (staffData.department !== undefined) {
-          updatedAssessment.department = staffData.department;
-        }
+        if (staffData.photoUrl !== undefined) updatedAssessment.photoUrl = staffData.photoUrl;
+        if (staffData.availability !== undefined) updatedAssessment.availability = staffData.availability;
+        if (staffData.registrationNumber !== undefined) updatedAssessment.registrationNumber = staffData.registrationNumber;
+        if (staffData.specialization !== undefined) updatedAssessment.specialization = staffData.specialization;
+        if (staffData.username !== undefined) updatedAssessment.username = staffData.username;
+        if (staffData.department !== undefined) updatedAssessment.department = staffData.department;
+        if (staffData.address !== undefined) updatedAssessment.address = staffData.address;
+        if (staffData.state !== undefined) updatedAssessment.state = staffData.state;
+        if (staffData.city !== undefined) updatedAssessment.city = staffData.city;
+        if (staffData.pincode !== undefined) updatedAssessment.pincode = staffData.pincode;
+        if (staffData.fullAddress !== undefined) updatedAssessment.fullAddress = staffData.fullAddress;
+        if (staffData.accessStatus !== undefined) updatedAssessment.accessStatus = staffData.accessStatus;
+        if (staffData.grantedBy !== undefined) updatedAssessment.grantedBy = staffData.grantedBy;
+        if (staffData.hospital_id !== undefined) updatedAssessment.hospital_id = staffData.hospital_id;
+        if (staffData.hospitalName !== undefined) updatedAssessment.hospitalName = staffData.hospitalName;
 
         if (existing) {
           await supabase
@@ -767,13 +1274,33 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
 
+  const isMasterOrSales = currentUserRole === 'MASTER' || currentUserRole === 'SALES' ||
+    (typeof window !== 'undefined' && ['MASTER', 'SALES'].includes(localStorage.getItem('hms_hospital_role') || localStorage.getItem('user_role') || ''));
+
+  const authorizedAppointments = useMemo(() => {
+    if (isMasterOrSales) {
+      return appointments;
+    }
+    // Restrict Source and Referral Person visibility to Master Admin and Sales Lead only
+    return appointments.map(app => ({
+      ...app,
+      source: '',
+      sourceDoctorName: '',
+      referral_person: null
+    }));
+  }, [appointments, isMasterOrSales]);
+
   return (
     <HospitalContext.Provider value={{
       currentUserRole, setCurrentUserRole,
+      dashboardPermissions, activeDashboard, setActiveDashboard,
+      updateDashboardPermission, hasPermission, getAccessibleDashboards,
+      schedulingPermissions, updateSchedulingPermission,
+      reportPermissions, updateReportPermission,
       patients, addPatient, updatePatient, deletePatient, convertAppointment,
       updateDoctorAssessment, updatePackageProposal,
       getPatientById, fetchFilteredPatients,
-      appointments, addAppointment, updateAppointment, deleteAppointment,
+      appointments: authorizedAppointments, addAppointment, updateAppointment, deleteAppointment,
       staffUsers, registerStaff, updateStaff,
       saveStatus, lastSavedAt, refreshData, isLoading, isStaffLoaded,
       systemName, updateSystemName

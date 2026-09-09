@@ -42,7 +42,7 @@ const formatToDateTime = (dateString: string | undefined | null): string => {
 };
 
 export const DoctorDashboard: React.FC = () => {
-  const { patients, updateDoctorAssessment, staffUsers, updateStaff } = useHospital();
+  const { patients, updateDoctorAssessment, staffUsers, updateStaff, schedulingPermissions } = useHospital();
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -652,7 +652,18 @@ export const DoctorDashboard: React.FC = () => {
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Tentative Surgery Date</label>
-                        <input type="date" value={formState.tentativeSurgeryDate || ''} onChange={e => setFormState(s => ({...s, tentativeSurgeryDate: e.target.value}))} className="w-full p-2 border border-gray-300 rounded-md" />
+                        {schedulingPermissions?.doctor ? (
+                          <input 
+                            type="date" 
+                            value={formState.tentativeSurgeryDate || ''} 
+                            onChange={e => setFormState(s => ({...s, tentativeSurgeryDate: e.target.value}))} 
+                            className="w-full p-2 border border-gray-300 rounded-md" 
+                          />
+                        ) : (
+                          <div className="p-2.5 bg-slate-100 border border-slate-200 rounded-md text-xs text-slate-500 font-bold flex items-center gap-1.5">
+                            <span className="text-amber-600 font-black">Locked:</span> Surgery scheduling disabled by Master Admin
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}

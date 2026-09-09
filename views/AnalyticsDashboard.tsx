@@ -1,13 +1,17 @@
 
 import React, { useState, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
-import { Patient, SurgeonCode, Condition } from '../types';
+import { Patient, SurgeonCode, Condition, DashboardKey } from '../types';
+import { AnalyticsAccessManagement } from '../components/AnalyticsAccessManagement';
+import { DoctorPerformanceReport } from '../components/DoctorPerformanceReport';
+import { PeriodActivityReport } from '../components/PeriodActivityReport';
 import { 
   Users, Banknote, Download, Target, RefreshCw, Layers, Search, 
   Globe, PieChart, ArrowUpRight, CheckCircle,
   X, Phone, Calendar, Tag, Briefcase, Zap, Landmark, BarChart3, TrendingUp, TrendingDown, CalendarDays,
   PieChart as PieChartIcon, LayoutDashboard, Target as TargetIcon, Activity, Ban, FileSpreadsheet,
-  Calculator, Lock, Award
+  Calculator, Lock, Award, User, CheckCircle2, XCircle, ArrowRight, ShieldCheck, AlertCircle, 
+  ExternalLink, Printer, Shield, Crown
 } from 'lucide-react';
 
 const formatDate = (dateString: string | undefined | null): string => {
@@ -201,10 +205,33 @@ const AnalyticsPieChart: React.FC<{
 };
 
 export const AnalyticsDashboard: React.FC = () => {
-  const { patients, appointments, staffUsers, currentUserRole } = useHospital();
+  const { 
+    patients, 
+    appointments, 
+    staffUsers, 
+    currentUserRole, 
+    dashboardPermissions, 
+    reportPermissions,
+    schedulingPermissions,
+    updateDashboardPermission, 
+    setActiveDashboard,
+    refreshData 
+  } = useHospital();
   
-  // Tab state for switching between Main overview and Doctor Performance
-  const [activeHubTab, setActiveHubTab ] = useState<'overview' | 'doctorPerformance'>('overview');
+  // Tab state for switching between Analytics, Reports, and Access Management
+  const [activeHubTab, setActiveHubTab] = useState<'analytics' | 'reports' | 'accessManagement'>('analytics');
+  
+  // Permission update feedback state
+  const [updatingPermissionKey, setUpdatingPermissionKey] = useState<string | null>(null);
+
+  const handleTogglePermission = async (key: 'front_office' | 'doctor' | 'package', grant: boolean) => {
+    setUpdatingPermissionKey(key);
+    try {
+      await updateDashboardPermission(key, grant, currentUserRole || 'analytics_hub');
+    } finally {
+      setUpdatingPermissionKey(null);
+    }
+  };
   
   // Local Doctor Performance filter states
   const [selectedPerformanceDocId, setSelectedPerformanceDocId] = useState<string>('all');
@@ -950,25 +977,35 @@ export const AnalyticsDashboard: React.FC = () => {
         {/* Hub Tab Switcher and Shared Date Filter */}
         <div className="flex flex-col lg:flex-row items-center gap-4 w-full xl:w-auto">
           {/* Tab Selector */}
-          {(currentUserRole === 'ADMIN' || currentUserRole === 'ANALYTICS' || currentUserRole === 'DOCTOR') && (
-            <div className="bg-slate-100 p-1 rounded-2xl flex items-center w-full lg:w-auto">
+          {(currentUserRole === 'MASTER' || currentUserRole === 'ADMIN' || currentUserRole === 'ANALYTICS' || currentUserRole === 'DOCTOR') && (
+            <div className="bg-slate-100 p-1.5 rounded-2xl flex items-center w-full lg:w-auto shadow-inner">
               <button
-                onClick={() => setActiveHubTab('overview')}
-                className={`flex-1 lg:flex-none px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${activeHubTab === 'overview' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+                onClick={() => setActiveHubTab('analytics')}
+                className={`flex-1 lg:flex-none px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${activeHubTab === 'analytics' ? 'bg-white shadow-sm text-slate-900 font-extrabold' : 'text-slate-500 hover:text-slate-800'}`}
               >
-                📊 Main Insights
+                <BarChart3 className="w-3.5 h-3.5 text-indigo-600" />
+                1. Analytics
               </button>
               <button
-                onClick={() => setActiveHubTab('doctorPerformance')}
-                className={`flex-1 lg:flex-none px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${activeHubTab === 'doctorPerformance' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+                onClick={() => setActiveHubTab('reports')}
+                className={`flex-1 lg:flex-none px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${activeHubTab === 'reports' ? 'bg-white shadow-sm text-slate-900 font-extrabold' : 'text-slate-500 hover:text-slate-800'}`}
               >
-                🩺 Doctor Performance
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                2. Reports
+              </button>
+              <button
+                onClick={() => setActiveHubTab('accessManagement')}
+                className={`flex-1 lg:flex-none px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${activeHubTab === 'accessManagement' ? 'bg-white shadow-sm text-slate-900 font-extrabold' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-600" />
+                3. Access Management
               </button>
             </div>
           )}
 
-          {/* Date Filter Bar */}
-          <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-3 rounded-3xl border shadow-sm w-full lg:w-auto">
+          {/* Date Filter Bar (Active in Analytics and Reports) */}
+          {activeHubTab !== 'accessManagement' && (
+            <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-3 rounded-3xl border shadow-sm w-full lg:w-auto">
             <div className="flex items-center gap-3 w-full sm:w-auto">
               <div className="relative flex-1">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-400 uppercase">From</span>
@@ -996,11 +1033,15 @@ export const AnalyticsDashboard: React.FC = () => {
               <Search className="w-3.5 h-3.5" /> Apply Filter
             </button>
           </div>
+          )}
         </div>
       </div>
 
-      {/* KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+      {/* 1. ANALYTICS SECTION */}
+      {activeHubTab === 'analytics' && (
+        <div className="space-y-8 animate-in fade-in duration-300">
+          {/* KPI Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
         {[
           { label: 'Scheduled Appts', val: stats.scheduledCount, icon: Calendar, color: 'slate', detail: 'Pending Arrivals' },
           { label: 'OPD Flow', val: stats.total, icon: Users, color: 'indigo', detail: `${stats.newPatients} New • ${stats.revisits} Revisit` },
@@ -1031,12 +1072,12 @@ export const AnalyticsDashboard: React.FC = () => {
 
       {/* Drill Down Modal */}
       {drillDown && (
-        <div className="fixed inset-0 z-[150] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-7xl rounded-[3rem] shadow-2xl overflow-hidden border border-white/20 flex flex-col max-h-[90vh]">
-            <header className="p-8 border-b flex justify-between items-center bg-slate-50/50 shrink-0">
+        <div className="fixed inset-0 z-[150] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-7xl rounded-2xl sm:rounded-[3rem] shadow-2xl overflow-hidden border border-white/20 flex flex-col max-h-[94dvh] sm:max-h-[90vh]">
+            <header className="p-4 sm:p-8 border-b flex justify-between items-center bg-slate-50/50 shrink-0">
                <div>
                  <div className="flex items-center gap-4">
-                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">{drillDown.label}</h3>
+                    <h3 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight">{drillDown.label}</h3>
                     <button 
                       onClick={handleExportDrillDown}
                       className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all flex items-center gap-2 border border-emerald-100 text-[10px] font-black uppercase tracking-widest"
@@ -1057,8 +1098,8 @@ export const AnalyticsDashboard: React.FC = () => {
             
             <div className="flex-1 overflow-auto p-4 sm:p-8">
                {drillDown.viewMode === 'table' ? (
-                 <div className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
-                   <div className="overflow-x-auto">
+                 <div className="bg-white rounded-2xl sm:rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
+                   <div className="overflow-x-auto table-container w-full">
                      <table className="w-full text-left border-collapse min-w-[1200px]">
                        <thead className="bg-slate-50 text-slate-500 text-[9px] font-black uppercase tracking-widest border-b">
                          <tr>
@@ -1166,76 +1207,10 @@ export const AnalyticsDashboard: React.FC = () => {
                >
                  Close Report
                </button>
-            </footer>
+             </footer>
           </div>
         </div>
       )}
-
-      {/* Performance Data Table Section */}
-      <div className="space-y-8 animate-in slide-in-from-bottom-6 duration-700">
-        <div className="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm flex flex-col">
-            <div className="p-8 border-b flex justify-between items-center bg-slate-50/30">
-              <h4 className="text-sm font-black text-slate-900 uppercase">Period Activity Report</h4>
-              <button onClick={handleExportDaily} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all" title="Export CSV">
-                <Download className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="overflow-x-auto flex-1">
-              <table className="w-full text-left">
-                <thead className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b">
-                  <tr>
-                    <th className="px-6 py-4">Date</th>
-                    <th className="px-6 py-4">Arrivals</th>
-                    <th className="px-6 py-4 text-teal-600">New</th>
-                    <th className="px-6 py-4 text-orange-600">Rev.</th>
-                    <th className="px-6 py-4">Leads</th>
-                    <th className="px-6 py-4 text-emerald-600">Conv.</th>
-                    <th className="px-6 py-4 text-right">Opp. (Revenue)</th>
-                    <th className="px-6 py-4 text-right">Actual Revenue</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {(() => {
-                    const allDates = new Set([
-                      ...stats.arrivedDataset.map(p => (p.entry_date || p.registeredAt.split('T')[0]) as string),
-                      ...stats.completedDataset.map(p => (p.completed_surgery || p.packageProposal?.outcomeDate?.split('T')[0]) as string)
-                    ]);
-                    return Array.from(allDates)
-                      .filter(Boolean)
-                      .sort((a: string, b: string) => b.localeCompare(a))
-                      .slice(0, 10)
-                      .map((date: string, i: number) => {
-                        const flowDay = stats.arrivedDataset.filter(p => (p.entry_date || p.registeredAt.split('T')[0]) === date);
-                        const completedDay = stats.completedDataset.filter(p => (p.completed_surgery || p.packageProposal?.outcomeDate?.split('T')[0]) === date);
-                        const actualRev = completedDay.reduce((sum, p) => sum + parseAmount(p.packageProposal?.packageAmount), 0);
-                        const combinedOppRev = flowDay.reduce((sum, p) => sum + parseAmount(p.packageProposal?.packageAmount), 0);
-                        
-                        // Strict visit_type counts for the table row
-                        const dayNew = flowDay.filter(p => (p.visit_type || '').trim().toLowerCase() === 'new').length;
-                        const dayRevisits = flowDay.filter(p => (p.visit_type || '').trim().toLowerCase() === 'revisit').length;
-                        const dayArrivals = dayNew + dayRevisits;
-
-                        return (
-                          <tr key={i} className="hover:bg-slate-50 transition-colors group">
-                            <td className="px-6 py-4 text-[11px] font-black text-slate-900">{formatDate(date)}</td>
-                            <td className="px-6 py-4 text-xs font-bold text-slate-600">{dayArrivals}</td>
-                            <td className="px-6 py-4 text-xs font-bold text-teal-600">{dayNew}</td>
-                            <td className="px-6 py-4 text-xs font-bold text-orange-600">{dayRevisits}</td>
-                            <td className="px-6 py-4 text-xs font-bold text-indigo-500">{flowDay.filter(p => p.doctorAssessment?.quickCode === SurgeonCode.S1).length}</td>
-                            <td className="px-6 py-4 text-xs font-bold text-emerald-600">{completedDay.length}</td>
-                            <td className="px-6 py-4 text-right text-xs font-black text-slate-900">
-                               ₹{combinedOppRev.toLocaleString()}
-                            </td>
-                            <td className="px-6 py-4 text-right text-xs font-black text-slate-900">₹{actualRev.toLocaleString()}</td>
-                          </tr>
-                        );
-                      });
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          </div>
-      </div>
 
       {/* Source Analytics Section */}
       <div className="space-y-8 animate-in slide-in-from-bottom-6 duration-700">
@@ -1317,7 +1292,13 @@ export const AnalyticsDashboard: React.FC = () => {
                </div>
             </div>
             <div className="p-8 space-y-4 flex-1">
-              {(() => {
+              {!reportPermissions?.procedure_trends ? (
+                <div className="flex flex-col items-center justify-center h-full py-8 text-center space-y-2">
+                  <Lock className="w-8 h-8 text-amber-500" />
+                  <span className="text-xs font-bold text-slate-700">Procedure Trends Report Locked</span>
+                  <p className="text-[10px] text-slate-400 max-w-xs">Access to procedure trends is turned OFF by Master Admin.</p>
+                </div>
+              ) : (() => {
                 const assessedDataset = stats.arrivedDataset.filter(p => p.doctorAssessment?.surgeryProcedure);
                 const totalAssessed = assessedDataset.length;
                 const procedureCounts = assessedDataset.reduce((acc, p) => {
@@ -1344,7 +1325,7 @@ export const AnalyticsDashboard: React.FC = () => {
                     );
                   });
               })()}
-              {stats.arrivedDataset.filter(p => p.doctorAssessment?.surgeryProcedure).length === 0 && (
+              {reportPermissions?.procedure_trends && stats.arrivedDataset.filter(p => p.doctorAssessment?.surgeryProcedure).length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full py-10 opacity-30">
                   <BarChart3 className="w-12 h-12 mb-2" />
                   <span className="text-[10px] font-black uppercase tracking-widest">No Procedures Found</span>
@@ -1370,20 +1351,28 @@ export const AnalyticsDashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-           <AnalyticsPieChart 
-             data={stats.decisionPatternMix} 
-             title="Decision Pattern" 
-             icon={<Activity className="w-5 h-5" />} 
-             onSegmentClick={(label) => handleCounselingClick('DP', label)}
-           />
-           <AnalyticsPieChart 
-             data={stats.proposalStageMix} 
-             title="Proposal Stage" 
-             icon={<LayoutDashboard className="w-5 h-5" />} 
-             onSegmentClick={(label) => handleCounselingClick('PS', label)}
-           />
-        </div>
+        {!reportPermissions?.financial_analytics ? (
+          <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 text-center space-y-2">
+            <Lock className="w-8 h-8 text-amber-500 mx-auto" />
+            <span className="text-xs font-bold text-slate-700">Financial Analytics & Counseling Analysis Locked</span>
+            <p className="text-[10px] text-slate-400 max-w-sm mx-auto">Access to financial analytics, counseling stages, and revenue metrics is turned OFF by Master Admin.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+             <AnalyticsPieChart 
+               data={stats.decisionPatternMix} 
+               title="Decision Pattern" 
+               icon={<Activity className="w-5 h-5" />} 
+               onSegmentClick={(label) => handleCounselingClick('DP', label)}
+             />
+             <AnalyticsPieChart 
+               data={stats.proposalStageMix} 
+               title="Proposal Stage" 
+               icon={<LayoutDashboard className="w-5 h-5" />} 
+               onSegmentClick={(label) => handleCounselingClick('PS', label)}
+             />
+          </div>
+        )}
       </div>
 
       {/* Digital vs Traditional Flow Section */}
@@ -1582,6 +1571,7 @@ export const AnalyticsDashboard: React.FC = () => {
       </div>
 
       {/* Marketing Budget & Cost Analytics Section */}
+      {reportPermissions?.financial_analytics ? (
       <div className="pb-20 space-y-8 animate-in slide-in-from-bottom-6 duration-700">
         <div className="flex items-center justify-between border-b border-slate-200 pb-4">
           <div>
@@ -1700,15 +1690,84 @@ export const AnalyticsDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+      ) : (
+        <div className="pb-12">
+          <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 text-center space-y-2">
+            <Lock className="w-8 h-8 text-amber-500 mx-auto" />
+            <span className="text-xs font-bold text-slate-700">Financial Analytics & Marketing ROI Locked</span>
+            <p className="text-[10px] text-slate-400 max-w-sm mx-auto">Master Admin has turned OFF access to the Financial Analytics / Conversion Report.</p>
+          </div>
+        </div>
+      )}
+      </div>
+      )}
+
+      {/* 2. REPORTS TAB */}
+      {activeHubTab === 'reports' && (
+        <div className="space-y-8 animate-in fade-in duration-300">
+          {!reportPermissions?.doctor_performance && !reportPermissions?.period_activity && (
+            <div className="bg-white rounded-3xl border border-rose-200 p-12 text-center shadow-sm space-y-4">
+              <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto">
+                <Lock className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-black text-slate-900 uppercase">Report Access Restricted</h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Master Admin has turned off access to both the Doctor Performance Report and Period Activity Report. 
+                Please contact the Master Administrator to request report permissions.
+              </p>
+            </div>
+          )}
+
+          {reportPermissions?.doctor_performance ? (
+            <DoctorPerformanceReport
+              doctorPerformanceStats={doctorPerformanceStats}
+              selectedDocId={selectedPerformanceDocId}
+              onSelectDocId={setSelectedPerformanceDocId}
+              timeframe={performanceTimeframe}
+              onSelectTimeframe={setPerformanceTimeframe}
+              onExportCsv={handleExportPerformanceExcel}
+              onPrint={handleExportPerformancePDF}
+            />
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 flex items-center justify-between text-xs font-bold text-slate-500">
+              <span className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-amber-500" /> Doctor Performance Report is currently turned OFF by Master Admin.
+              </span>
+              <span className="text-[10px] uppercase font-black px-2.5 py-1 bg-slate-100 rounded-full text-slate-600">Access Restricted</span>
+            </div>
+          )}
+
+          {reportPermissions?.period_activity ? (
+            <PeriodActivityReport
+              stats={stats}
+              formatDate={formatDate}
+              parseAmount={parseAmount}
+              onExportDaily={handleExportDaily}
+            />
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 flex items-center justify-between text-xs font-bold text-slate-500">
+              <span className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-amber-500" /> Period Activity Report is currently turned OFF by Master Admin.
+              </span>
+              <span className="text-[10px] uppercase font-black px-2.5 py-1 bg-slate-100 rounded-full text-slate-600">Access Restricted</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. ACCESS MANAGEMENT TAB */}
+      {activeHubTab === 'accessManagement' && (
+        <AnalyticsAccessManagement />
+      )}
 
       {/* Future Target Planner Modal */}
       {targetPlannerModal.show && (
-        <div className="fixed inset-0 z-[150] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden border border-white/20 flex flex-col max-h-[90vh]">
-            <header className="p-8 border-b flex justify-between items-center bg-slate-50/50 shrink-0">
+        <div className="fixed inset-0 z-[150] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-4xl rounded-2xl sm:rounded-[3rem] shadow-2xl overflow-hidden border border-white/20 flex flex-col max-h-[94dvh] sm:max-h-[90vh]">
+            <header className="p-4 sm:p-8 border-b flex justify-between items-center bg-slate-50/50 shrink-0">
                <div>
-                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-                    <Target className="w-7 h-7 text-hospital-600" />
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
+                    <Target className="w-6 h-6 sm:w-7 sm:h-7 text-hospital-600" />
                     Future Target Planner
                   </h3>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Forecasting & Resource Planning</p>
@@ -1721,7 +1780,7 @@ export const AnalyticsDashboard: React.FC = () => {
                </button>
             </header>
 
-            <div className="flex-1 overflow-auto p-8 space-y-10">
+            <div className="flex-1 overflow-auto p-4 sm:p-8 space-y-8 sm:space-y-10">
                {/* Inputs */}
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
                   <div className="space-y-2">

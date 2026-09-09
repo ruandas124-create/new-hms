@@ -1,5 +1,56 @@
 
-export type Role = 'ADMIN' | 'FRONT_OFFICE' | 'DOCTOR' | 'DEACTIVATED_DOCTOR' | 'PACKAGE_TEAM' | 'ANALYTICS' | null;
+export type Role = 
+  | 'MASTER' 
+  | 'ADMIN' 
+  | 'ANALYTICS' 
+  | 'ANALYTICS_HUB' 
+  | 'HOSPITAL'
+  | 'FRONT_OFFICE' 
+  | 'DOCTOR' 
+  | 'DEACTIVATED_DOCTOR' 
+  | 'PACKAGE_TEAM' 
+  | 'PACKAGE' 
+  | 'SALES'
+  | null;
+
+export type DashboardKey = 'master' | 'master_access' | 'master_scheduling' | 'master_availability' | 'master_reports' | 'analytics_hub' | 'front_office' | 'doctor' | 'package' | 'sales';
+
+export interface DashboardPermission {
+  id: string;
+  user_id?: string;
+  role?: string;
+  dashboard: DashboardKey;
+  permission: string;
+  status: boolean;
+  granted_by?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DashboardPermissionsState {
+  analytics_hub_access: boolean;
+  front_office_access: boolean;
+  doctor_access: boolean;
+  package_access: boolean;
+  sales_access: boolean;
+}
+
+export type SchedulingTarget = 'analytics_hub' | 'doctor' | 'sales';
+
+export interface SchedulingPermissionsState {
+  analytics_hub: boolean;
+  doctor: boolean;
+  sales: boolean;
+}
+
+export interface ReportPermissionsState {
+  doctor_performance: boolean;
+  period_activity: boolean;
+  financial_analytics: boolean;
+  procedure_trends: boolean;
+}
+
+export type ReportPermissionKey = keyof ReportPermissionsState;
 
 export enum Gender {
   Male = 'Male',
@@ -128,16 +179,22 @@ export interface Appointment {
   name: string;
   source: string;
   sourceDoctorName?: string;
+  referral_person?: string | null;
   condition: Condition;
   mobile: string;
   date: string; 
   time: string; 
-  status: 'Scheduled' | 'Arrived' | 'Cancelled' | 'Follow Up';
+  status: 'Scheduled' | 'Arrived' | 'Cancelled' | 'Follow Up' | 'Confirmed' | 'Completed' | 'No Show' | string;
   bookingType: 'Follow Up' | 'Scheduled';
   visit_type?: string; // Persisted 'New' or 'Revisit'
   createdAt: string;
   assignedDoctorId?: string; // Added doctor availability sync
   assignedDoctorName?: string; // Added doctor availability sync
+  username?: string; // Username of staff/agent creating or managing schedule
+  assignment_type?: 'doctor' | 'hospital';
+  doctor_id?: string | null;
+  patient_id?: string | null;
+  hospitalName?: string;
 }
 
 export interface DaySchedule {
@@ -166,6 +223,15 @@ export interface StaffUser {
   specialization?: string;
   username?: string;
   department?: string;
+  address?: string;
+  state?: string;
+  city?: string;
+  pincode?: string;
+  fullAddress?: string;
+  accessStatus?: 'Active' | 'Revoked';
+  grantedBy?: string;
+  hospital_id?: string;
+  hospitalName?: string;
   availability?: {
     availableDays: string[]; // e.g. ["Monday", "Tuesday"]
     startTime: string; // e.g. "09:00"

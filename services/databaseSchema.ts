@@ -1,5 +1,4 @@
-
--- =================================================================
+export const DATABASE_SCHEMA_SQL = `-- =================================================================
 -- HMS HOSPITAL MANAGEMENT DATABASE SCHEMA
 -- Version: 3.3 (Clean Setup & Migration Support)
 -- =================================================================
@@ -114,7 +113,7 @@ CREATE TABLE IF NOT EXISTS public.dashboard_permissions (
     id TEXT PRIMARY KEY,
     user_id TEXT DEFAULT 'global',
     role TEXT DEFAULT 'ALL',
-    dashboard TEXT NOT NULL, -- 'admin', 'analytics_hub', 'front_office', 'doctor', 'package'
+    dashboard TEXT NOT NULL,
     permission TEXT DEFAULT 'access',
     status BOOLEAN DEFAULT true,
     granted_by TEXT DEFAULT 'system',
@@ -139,5 +138,4 @@ VALUES
   ('perm_doctor', 'global', 'ANALYTICS_HUB', 'doctor', 'doctor_access', true, 'analytics_hub'),
   ('perm_package', 'global', 'ANALYTICS_HUB', 'package', 'package_access', true, 'analytics_hub')
 ON CONFLICT (id) DO NOTHING;
-
-
+`;
