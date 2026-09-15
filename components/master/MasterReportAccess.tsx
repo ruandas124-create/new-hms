@@ -23,6 +23,14 @@ export const MasterReportAccess: React.FC = () => {
   const [updatingKey, setUpdatingKey] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Specified report cards to hide from the visible card grid
+  const HIDDEN_REPORT_CARD_KEYS: ReportPermissionKey[] = [
+    'doctor_performance',
+    'period_activity',
+    'financial_analytics',
+    'procedure_trends'
+  ];
+
   const reports: ReportItem[] = [
     {
       key: 'doctor_performance',
@@ -66,6 +74,8 @@ export const MasterReportAccess: React.FC = () => {
     }
   ];
 
+  const visibleReportCards = reports.filter(rep => !HIDDEN_REPORT_CARD_KEYS.includes(rep.key));
+
   const handleToggle = async (key: ReportPermissionKey) => {
     const current = !!reportPermissions[key];
     const nextState = !current;
@@ -93,7 +103,7 @@ export const MasterReportAccess: React.FC = () => {
 
       {/* 1. Header Information */}
       <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm p-4 sm:p-6 md:p-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-6 mb-6">
+        <div className={`flex flex-col md:flex-row md:items-center justify-between gap-4 ${visibleReportCards.length > 0 ? 'border-b border-slate-100 pb-6 mb-6' : ''}`}>
           <div>
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-hospital-600 mb-1">
               <FileText className="w-4 h-4" /> 4. Report Access Management
@@ -112,103 +122,105 @@ export const MasterReportAccess: React.FC = () => {
           </div>
         </div>
 
-        {/* Reports Grid with Independent Toggles */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-          {reports.map((rep) => {
-            const isGranted = !!reportPermissions[rep.key];
-            const isUpdating = updatingKey === rep.key;
-            const Icon = rep.icon;
+        {/* Reports Grid with Independent Toggles (hidden when all specified cards are removed) */}
+        {visibleReportCards.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-6 pt-6 border-t border-slate-100">
+            {visibleReportCards.map((rep) => {
+              const isGranted = !!reportPermissions[rep.key];
+              const isUpdating = updatingKey === rep.key;
+              const Icon = rep.icon;
 
-            return (
-              <div
-                key={rep.key}
-                id={`report-card-${rep.key}`}
-                className={`bg-white rounded-2xl border transition-all p-6 flex flex-col justify-between space-y-5 ${
-                  isGranted 
-                    ? 'border-emerald-200 shadow-sm hover:shadow-md' 
-                    : 'border-slate-200 bg-slate-50/40 opacity-90'
-                }`}
-              >
-                <div className="space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div className={`p-3 rounded-2xl ${
-                      isGranted ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400'
-                    } transition-colors`}>
-                      <Icon className="w-6 h-6" />
+              return (
+                <div
+                  key={rep.key}
+                  id={`report-card-${rep.key}`}
+                  className={`bg-white rounded-2xl border transition-all p-6 flex flex-col justify-between space-y-5 ${
+                    isGranted 
+                      ? 'border-emerald-200 shadow-sm hover:shadow-md' 
+                      : 'border-slate-200 bg-slate-50/40 opacity-90'
+                  }`}
+                >
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div className={`p-3 rounded-2xl ${
+                        isGranted ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400'
+                      } transition-colors`}>
+                        <Icon className="w-6 h-6" />
+                      </div>
+
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
+                        isGranted 
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                          : 'bg-rose-50 text-rose-700 border border-rose-200'
+                      }`}>
+                        {isGranted ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                        {isGranted ? 'ACCESS ON' : 'ACCESS OFF'}
+                      </span>
                     </div>
 
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
-                      isGranted 
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                        : 'bg-rose-50 text-rose-700 border border-rose-200'
-                    }`}>
-                      {isGranted ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                      {isGranted ? 'ACCESS ON' : 'ACCESS OFF'}
-                    </span>
-                  </div>
+                    <div>
+                      <h3 className="font-extrabold text-slate-900 text-base">{rep.title}</h3>
+                      <p className="text-xs font-semibold text-slate-500">{rep.subtitle}</p>
+                      <p className="text-xs text-slate-400 mt-2 leading-relaxed">{rep.description}</p>
+                    </div>
 
-                  <div>
-                    <h3 className="font-extrabold text-slate-900 text-base">{rep.title}</h3>
-                    <p className="text-xs font-semibold text-slate-500">{rep.subtitle}</p>
-                    <p className="text-xs text-slate-400 mt-2 leading-relaxed">{rep.description}</p>
-                  </div>
+                    {/* Metrics Included Tags */}
+                    <div className="space-y-1.5 pt-2">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block">
+                        Exposed Metrics & Analytics
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {rep.metricsIncluded.map((m, idx) => (
+                          <span key={idx} className="px-2 py-0.5 bg-slate-100 rounded-md text-[10px] font-bold text-slate-600">
+                            {m}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
 
-                  {/* Metrics Included Tags */}
-                  <div className="space-y-1.5 pt-2">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block">
-                      Exposed Metrics & Analytics
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {rep.metricsIncluded.map((m, idx) => (
-                        <span key={idx} className="px-2 py-0.5 bg-slate-100 rounded-md text-[10px] font-bold text-slate-600">
-                          {m}
-                        </span>
-                      ))}
+                    <div className="pt-2 text-[10px] text-slate-400 font-bold uppercase">
+                      Audience: <span className="text-slate-700">{rep.audience}</span>
                     </div>
                   </div>
 
-                  <div className="pt-2 text-[10px] text-slate-400 font-bold uppercase">
-                    Audience: <span className="text-slate-700">{rep.audience}</span>
-                  </div>
-                </div>
+                  {/* Switch Toggle */}
+                  <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                      Report State: <span className={isGranted ? 'text-emerald-600' : 'text-rose-600'}>{isGranted ? 'Visible (ON)' : 'Restricted (OFF)'}</span>
+                    </span>
 
-                {/* Switch Toggle */}
-                <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
-                    Report State: <span className={isGranted ? 'text-emerald-600' : 'text-rose-600'}>{isGranted ? 'Visible (ON)' : 'Restricted (OFF)'}</span>
-                  </span>
-
-                  <button
-                    id={`toggle-report-${rep.key}`}
-                    type="button"
-                    disabled={isUpdating}
-                    onClick={() => handleToggle(rep.key)}
-                    className={`relative inline-flex h-8 w-16 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-hospital-500 focus:ring-offset-2 ${
-                      isGranted ? 'bg-emerald-600' : 'bg-slate-300'
-                    } ${isUpdating ? 'opacity-50 cursor-wait' : ''}`}
-                    aria-label={`Toggle ${rep.title}`}
-                  >
-                    <span className="sr-only">Toggle {rep.title}</span>
-                    <span
-                      aria-hidden="true"
-                      className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out flex items-center justify-center ${
-                        isGranted ? 'translate-x-8' : 'translate-x-0'
-                      }`}
+                    <button
+                      id={`toggle-report-${rep.key}`}
+                      type="button"
+                      disabled={isUpdating}
+                      onClick={() => handleToggle(rep.key)}
+                      className={`relative inline-flex h-8 w-16 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-hospital-500 focus:ring-offset-2 ${
+                        isGranted ? 'bg-emerald-600' : 'bg-slate-300'
+                      } ${isUpdating ? 'opacity-50 cursor-wait' : ''}`}
+                      aria-label={`Toggle ${rep.title}`}
                     >
-                      {isUpdating ? (
-                        <Loader2 className="w-3.5 h-3.5 text-slate-500 animate-spin" />
-                      ) : isGranted ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      ) : (
-                        <XCircle className="w-3.5 h-3.5 text-slate-400" />
-                      )}
-                    </span>
-                  </button>
+                      <span className="sr-only">Toggle {rep.title}</span>
+                      <span
+                        aria-hidden="true"
+                        className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out flex items-center justify-center ${
+                          isGranted ? 'translate-x-8' : 'translate-x-0'
+                        }`}
+                      >
+                        {isUpdating ? (
+                          <Loader2 className="w-3.5 h-3.5 text-slate-500 animate-spin" />
+                        ) : isGranted ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <XCircle className="w-3.5 h-3.5 text-slate-400" />
+                        )}
+                      </span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* 2. Audit Summary Table */}

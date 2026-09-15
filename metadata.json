@@ -1,6 +1,6 @@
 {
   "name": "HMS Hospital Management",
-  "description": "A role-based hospital patient management system featuring real-time data synchronization between Front Office, Doctors, and Package Teams with integrated AI-assisted counseling strategies.",
+  "description": "A role-based hospital patient management system featuring Master Admin governance, Sales Leads Directory with hospital/doctor scheduling, Front Office, Doctors, and Package Teams with real-time synchronization.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

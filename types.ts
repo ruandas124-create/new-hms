@@ -232,6 +232,7 @@ export interface StaffUser {
   grantedBy?: string;
   hospital_id?: string;
   hospitalName?: string;
+  tenantId?: string;
   availability?: {
     availableDays: string[]; // e.g. ["Monday", "Tuesday"]
     startTime: string; // e.g. "09:00"
@@ -240,6 +241,14 @@ export interface StaffUser {
     daySchedules?: DaySchedule[];
     blockedDates?: BlockedDate[];
   };
+}
+
+export interface AnalyticsAccountHierarchy {
+  account: StaffUser;
+  frontOffice: StaffUser | null;
+  doctors: StaffUser[];
+  patientCount: number;
+  appointmentCount: number;
 }
 
 export interface DashboardStats {

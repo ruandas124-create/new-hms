@@ -804,7 +804,42 @@ export const AnalyticsDashboard: React.FC = () => {
     });
   }, [doctorPerformanceStats.filteredDoctors, performanceTimeframe]);
 
-  // 3. Export to Excel (CSV)
+  // 3. New Patient Flow Trend Data for chart (top-level hook)
+  const patientFlowGraphData = useMemo(() => {
+    const groupKey = graphGranularity === 'monthly' 
+      ? (p: Patient) => (p.entry_date || p.registeredAt).substring(0, 7) 
+      : (p: Patient) => (p.entry_date || p.registeredAt.split('T')[0]);
+    
+    const uniqueKeys = Array.from(new Set(stats.arrivedDataset.map(groupKey))).sort((a: any, b: any) => a.localeCompare(b)) as string[];
+    const visibleKeys = uniqueKeys.slice(graphGranularity === 'monthly' ? -12 : -15);
+    const maxTotal = Math.max(...visibleKeys.map(k => stats.arrivedDataset.filter(p => groupKey(p) === k && (p.visit_type || '').toLowerCase() === 'new').length), 1);
+
+    return visibleKeys.map((key, i) => {
+      const dayPatients = stats.arrivedDataset.filter(p => groupKey(p) === key && (p.visit_type || '').toLowerCase() === 'new');
+      const onlineVol = dayPatients.filter(p => {
+        const ds = getSourceDisplay(p.source);
+        return ONLINE_SOURCES.includes(p.source) || ONLINE_SOURCES.includes(ds);
+      }).length;
+      const offlineVol = dayPatients.length - onlineVol;
+
+      const label = graphGranularity === 'monthly' 
+        ? formatMonth(key) 
+        : formatDate(key).split(' ')[0] + ' ' + formatDate(key).split(' ')[1];
+
+      return {
+        key,
+        index: i,
+        label,
+        total: dayPatients.length,
+        onlineVol,
+        offlineVol,
+        onlinePercent: (onlineVol / maxTotal) * 100,
+        offlinePercent: (offlineVol / maxTotal) * 100
+      };
+    });
+  }, [stats.arrivedDataset, graphGranularity]);
+
+  // 4. Export to Excel (CSV)
   const handleExportPerformanceExcel = () => {
     const headers = [
       'Doctor Name', 'Registration Number', 'Specialization', 'Status',
@@ -1509,50 +1544,32 @@ export const AnalyticsDashboard: React.FC = () => {
               </div>
               
               <div className="flex-1 flex flex-col justify-end gap-2 min-h-[300px]">
-                 {useMemo(() => {
-                    const groupKey = graphGranularity === 'monthly' ? (p: Patient) => (p.entry_date || p.registeredAt).substring(0, 7) : (p: Patient) => (p.entry_date || p.registeredAt.split('T')[0]);
-                    
-                    const uniqueKeys = Array.from(new Set(stats.arrivedDataset.map(groupKey))).sort((a: any, b: any) => a.localeCompare(b)) as string[];
-                    const visibleKeys = uniqueKeys.slice(graphGranularity === 'monthly' ? -12 : -15);
-                    
-                    return visibleKeys.map((key, i) => {
-                      const dayPatients = stats.arrivedDataset.filter(p => groupKey(p) === key && (p.visit_type || '').toLowerCase() === 'new');
-                      const onlineVol = dayPatients.filter(p => {
-                          const ds = getSourceDisplay(p.source);
-                          return ONLINE_SOURCES.includes(p.source) || ONLINE_SOURCES.includes(ds);
-                      }).length;
-                      const offlineVol = dayPatients.length - onlineVol;
-                      
-                      const maxTotal = Math.max(...visibleKeys.map(k => stats.arrivedDataset.filter(p => groupKey(p) === k && (p.visit_type || '').toLowerCase() === 'new').length), 1);
-                      
-                      return (
-                        <div key={i} className="flex items-center gap-4 group">
-                          <span className="w-20 text-[8px] font-black text-slate-400 uppercase text-right leading-none">
-                            {graphGranularity === 'monthly' ? formatMonth(key) : formatDate(key).split(' ')[0] + ' ' + formatDate(key).split(' ')[1]}
-                          </span>
-                          <div className="flex-1 h-7 flex items-center bg-slate-50/50 rounded-lg px-2 gap-0.5 overflow-hidden">
-                             {onlineVol > 0 && (
-                               <div 
-                                 className="h-3.5 bg-indigo-600 rounded-full transition-all duration-1000 flex items-center justify-center min-w-[20px] hover:h-4" 
-                                 style={{ width: `${(onlineVol / maxTotal) * 100}%` }}
-                               >
-                                 <span className="text-[7px] text-white font-black">{onlineVol}</span>
-                               </div>
-                             )}
-                             {offlineVol > 0 && (
-                               <div 
-                                 className="h-3.5 bg-slate-300 rounded-full transition-all duration-1000 flex items-center justify-center min-w-[20px] hover:h-4" 
-                                 style={{ width: `${(offlineVol / maxTotal) * 100}%` }}
-                               >
-                                 <span className="text-[7px] text-slate-600 font-black">{offlineVol}</span>
-                               </div>
-                             )}
+                 {patientFlowGraphData.map((item) => (
+                   <div key={item.key} className="flex items-center gap-4 group">
+                     <span className="w-20 text-[8px] font-black text-slate-400 uppercase text-right leading-none">
+                       {item.label}
+                     </span>
+                     <div className="flex-1 h-7 flex items-center bg-slate-50/50 rounded-lg px-2 gap-0.5 overflow-hidden">
+                        {item.onlineVol > 0 && (
+                          <div 
+                            className="h-3.5 bg-indigo-600 rounded-full transition-all duration-1000 flex items-center justify-center min-w-[20px] hover:h-4" 
+                            style={{ width: `${item.onlinePercent}%` }}
+                          >
+                            <span className="text-[7px] text-white font-black">{item.onlineVol}</span>
                           </div>
-                          <span className="w-10 text-left text-[10px] font-black text-slate-900">{dayPatients.length}</span>
-                        </div>
-                      );
-                    });
-                 }, [stats.arrivedDataset, graphGranularity])}
+                        )}
+                        {item.offlineVol > 0 && (
+                          <div 
+                            className="h-3.5 bg-slate-300 rounded-full transition-all duration-1000 flex items-center justify-center min-w-[20px] hover:h-4" 
+                            style={{ width: `${item.offlinePercent}%` }}
+                          >
+                            <span className="text-[7px] text-slate-600 font-black">{item.offlineVol}</span>
+                          </div>
+                        )}
+                     </div>
+                     <span className="w-10 text-left text-[10px] font-black text-slate-900">{item.total}</span>
+                   </div>
+                 ))}
               </div>
               <div className="mt-8 pt-6 border-t border-slate-50 flex items-center justify-center gap-10">
                   <div className="flex items-center gap-2">

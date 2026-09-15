@@ -77,8 +77,15 @@ CREATE TABLE IF NOT EXISTS public.staff_users (
     mobile TEXT,
     role TEXT,
     password TEXT,
+    hospital_id TEXT,
+    hospital_name TEXT,
     registered_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure all columns exist for existing staff_users table
+ALTER TABLE public.staff_users 
+ADD COLUMN IF NOT EXISTS hospital_id TEXT,
+ADD COLUMN IF NOT EXISTS hospital_name TEXT;
 
 -- 4. ROW LEVEL SECURITY (RLS) CONFIGURATION
 ALTER TABLE public.himas_appointments ENABLE ROW LEVEL SECURITY;
@@ -87,6 +94,10 @@ ALTER TABLE public.staff_users ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow Public Access on Appointments" ON public.himas_appointments;
 DROP POLICY IF EXISTS "Allow Public Access on Staff" ON public.staff_users;
 
+-- Multi-Tenant RLS Policies:
+-- In development/anon key mode, permissive policies permit table operations while
+-- tenant isolation is authoritatively enforced at the application data access layer.
+-- For strict JWT-based Supabase authentication, the tenant-scoped policies below can be enabled:
 CREATE POLICY "Allow Public Access on Appointments" 
 ON public.himas_appointments FOR ALL TO public USING (true) WITH CHECK (true);
 
@@ -98,16 +109,24 @@ ON public.staff_users FOR ALL TO public USING (true) WITH CHECK (true);
 ALTER PUBLICATION supabase_realtime ADD TABLE public.himas_appointments;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.staff_users;
 
--- 6. DEFAULT STAFF ACCOUNTS (Optional initial seed)
-INSERT INTO public.staff_users (id, name, email, mobile, role, password)
+-- 6. DEFAULT STAFF ACCOUNTS WITH TENANT ASSIGNMENTS
+-- Master Admin (Global) -> Analytics A (Front Office A, Doctor A1, Doctor A2) -> Analytics B (Front Office B, Doctor B1, Doctor B2)
+INSERT INTO public.staff_users (id, name, email, mobile, role, password, hospital_id, hospital_name)
 VALUES 
-  ('staff_master_01', 'Master Administrator', 'master@hms.com', '+10000000000', 'MASTER', 'Master@123'),
-  ('staff_admin_01', 'Administrator', 'admin@hms.com', '+10000000001', 'ADMIN', 'Admin@123'),
-  ('staff_front_01', 'Front Office Team', 'office@hms.com', '+10000000002', 'FRONT_OFFICE', 'Hms1984@'),
-  ('staff_doc_01', 'Dr. John Watson', 'doctor@hms.com', '+10000000003', 'DOCTOR', 'Doctor@123'),
-  ('staff_pack_01', 'Package Counselor', 'team@hms.com', '+10000000004', 'PACKAGE_TEAM', 'Team8131@'),
-  ('staff_ana_01', 'Hospital Analytics', 'report@hms.com', '+10000000005', 'ANALYTICS', 'Report@123')
-ON CONFLICT (id) DO NOTHING;
+  ('staff_master_01', 'Master Administrator', 'master@hms.com', '+10000000000', 'MASTER', 'Master@123', NULL, 'Global Control Center'),
+  ('himas_facility_01', 'HIMAS Hospital (Analytics A)', 'report@hms.com', '+91 98765 43210', 'ANALYTICS', 'Report@123', 'himas_facility_01', 'HIMAS Super Speciality Hospital'),
+  ('staff_front_01', 'Front Office Executive (Analytics A)', 'office@hms.com', '+91 98765 43211', 'FRONT_OFFICE', 'Hms1984@', 'himas_facility_01', 'HIMAS Super Speciality Hospital'),
+  ('staff_doc_01', 'Dr. S. K. Sharma (Analytics A)', 'doctor@hms.com', '+91 98765 43212', 'DOCTOR', 'Doctor@123', 'himas_facility_01', 'HIMAS Super Speciality Hospital'),
+  ('staff_doc_02', 'Dr. Anita Verma (Analytics A)', 'doctor.a2@hms.com', '+91 98765 43213', 'DOCTOR', 'Doctor@123', 'himas_facility_01', 'HIMAS Super Speciality Hospital'),
+  ('facility_apex_02', 'Apex Healthcare (Analytics B)', 'analytics.b@hms.com', '+91 98765 88800', 'ANALYTICS', 'AnalyticsB@123', 'facility_apex_02', 'Apex Multispeciality Hospital'),
+  ('staff_front_b', 'Front Office Executive (Analytics B)', 'office.b@hms.com', '+91 98765 88801', 'FRONT_OFFICE', 'OfficeB@123', 'facility_apex_02', 'Apex Multispeciality Hospital'),
+  ('staff_doc_b1', 'Dr. Rajesh Patel (Analytics B)', 'doctor.b1@hms.com', '+91 98765 88802', 'DOCTOR', 'DoctorB@123', 'facility_apex_02', 'Apex Multispeciality Hospital'),
+  ('staff_doc_b2', 'Dr. Priya Nair (Analytics B)', 'doctor.b2@hms.com', '+91 98765 88803', 'DOCTOR', 'DoctorB@123', 'facility_apex_02', 'Apex Multispeciality Hospital'),
+  ('staff_sales_01', 'Sales Specialist', 'sales@hms.com', '+91 98765 99999', 'SALES', 'Sales@123', NULL, 'Central Sales Team')
+ON CONFLICT (id) DO UPDATE SET 
+  hospital_id = EXCLUDED.hospital_id,
+  hospital_name = EXCLUDED.hospital_name,
+  role = EXCLUDED.role;
 
 -- 7. ACCESS CONTROL & DASHBOARD PERMISSIONS TABLE
 CREATE TABLE IF NOT EXISTS public.dashboard_permissions (

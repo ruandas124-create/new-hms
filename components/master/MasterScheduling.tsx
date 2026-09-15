@@ -6,7 +6,7 @@ import {
   Plus, AlertCircle, RefreshCw, BarChart3, Activity, Target, Check, 
   ChevronRight, Phone, Stethoscope, FileText, UserCheck, Shield,
   Building2, ArrowLeft, X, CheckCircle, ChevronDown, Sparkles, Lock,
-  Eye, Pencil, Trash2
+  Eye, Pencil, Trash2, MapPin, Tag, CreditCard, Info
 } from 'lucide-react';
 
 const STATUS_OPTIONS: { label: string; dotClass: string }[] = [
@@ -267,6 +267,35 @@ export const MasterScheduling: React.FC = () => {
   const hospitalsWithAccess = useMemo(() => {
     return staffUsers.filter(u => u.role === 'HOSPITAL' && u.accessStatus !== 'Revoked');
   }, [staffUsers]);
+
+  // Matching Patient for View Details modal
+  const viewModalPatient = useMemo(() => {
+    if (!viewModalApp) return null;
+    return patients.find(p => 
+      (viewModalApp.patient_id && p.id === viewModalApp.patient_id) ||
+      (p.mobile && p.mobile === viewModalApp.mobile) ||
+      (p.name && p.name.toLowerCase() === viewModalApp.name.toLowerCase())
+    ) || null;
+  }, [viewModalApp, patients]);
+
+  // Matching Doctor for View Details modal
+  const viewModalDoctor = useMemo(() => {
+    if (!viewModalApp) return null;
+    return doctorsWithAccess.find(d => 
+      (viewModalApp.doctor_id && d.id === viewModalApp.doctor_id) || 
+      (viewModalApp.assignedDoctorId && d.id === viewModalApp.assignedDoctorId) ||
+      (viewModalApp.assignedDoctorName && d.name.toLowerCase() === viewModalApp.assignedDoctorName.toLowerCase())
+    ) || null;
+  }, [viewModalApp, doctorsWithAccess]);
+
+  // Matching Hospital for View Details modal
+  const viewModalHospital = useMemo(() => {
+    if (!viewModalApp) return null;
+    return hospitalsWithAccess.find(h => 
+      (viewModalApp.hospital_id && h.id === viewModalApp.hospital_id) || 
+      (viewModalApp.hospitalName && h.name.toLowerCase() === viewModalApp.hospitalName.toLowerCase())
+    ) || null;
+  }, [viewModalApp, hospitalsWithAccess]);
 
   // Filtered doctor list for search
   const filteredDoctorsWithAccess = useMemo(() => {
@@ -807,15 +836,13 @@ export const MasterScheduling: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto table-container w-full">
-            <table className="w-full text-left text-xs min-w-[1000px]">
+            <table className="w-full text-left text-xs min-w-[960px]">
               <thead>
                 <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-400">
                   <th className="pb-3 pl-2">Patient Details</th>
                   <th className="pb-3">Slot & Date</th>
-                  <th className="pb-3">Assigned To (Doctor / Facility)</th>
-                  <th className="pb-3">Source</th>
-                  <th className="pb-3">Provenance (Scheduled By)</th>
-                  <th className="pb-3">Status</th>
+                  <th className="pb-3">Assigned Doctor / Hospital</th>
+                  <th className="pb-3">Other Relevant Appointment Details</th>
                   <th className="pb-3 pr-4 text-right">Action</th>
                 </tr>
               </thead>
@@ -826,29 +853,37 @@ export const MasterScheduling: React.FC = () => {
 
                   return (
                     <tr key={app.id} className="hover:bg-slate-50/70 transition-colors">
+                      {/* 1. Patient Details */}
                       <td className="py-3.5 pl-2">
                         <div className="font-extrabold text-slate-900 text-sm">{app.name}</div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
-                          <span className="flex items-center gap-1"><Phone className="w-3 h-3 text-slate-400" /> {app.mobile}</span>
-                          {app.visit_type && (
-                            <span className="px-1.5 py-0.2 bg-slate-100 rounded text-[9px] font-black uppercase text-slate-600">
-                              {app.visit_type}
-                            </span>
-                          )}
-                          <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-700 rounded text-[9px] font-bold">
+                        <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className="flex items-center gap-1 font-semibold text-slate-600">
+                            <Phone className="w-3 h-3 text-slate-400" /> {app.mobile}
+                          </span>
+                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-md text-[10px] font-bold">
                             {app.condition}
                           </span>
+                          {app.patient_id && (
+                            <span className="text-[10px] font-mono text-slate-400">
+                              UHID: {app.patient_id}
+                            </span>
+                          )}
                         </div>
                       </td>
 
+                      {/* 2. Slot & Date */}
                       <td className="py-3.5">
-                        <div className="font-bold text-slate-800">{app.date}</div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-hospital-600" /> {app.time}
+                        <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{app.date}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-600 flex items-center gap-1 mt-0.5 font-semibold">
+                          <Clock className="w-3 h-3 text-hospital-600 shrink-0" />
+                          <span>{app.time}</span>
                         </div>
                       </td>
 
-                      {/* Doctor / Hospital Assignment Column */}
+                      {/* 3. Assigned Doctor / Hospital */}
                       <td className="py-3.5">
                         {isHospitalOnly ? (
                           <div className="space-y-1">
@@ -857,7 +892,7 @@ export const MasterScheduling: React.FC = () => {
                               <span>{app.hospitalName || 'Assigned Facility'}</span>
                             </div>
                             <span className="inline-flex items-center gap-1 text-[9px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md font-black uppercase tracking-wider">
-                              Hospital Only
+                              Hospital Facility
                             </span>
                           </div>
                         ) : (
@@ -876,52 +911,44 @@ export const MasterScheduling: React.FC = () => {
                         )}
                       </td>
 
-                      {/* Source Column (Master Admin Only) */}
+                      {/* 4. Other Relevant Appointment Details */}
                       <td className="py-3.5">
-                        {app.source ? (
-                          <div className="space-y-0.5">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                              {app.source}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                              app.status === 'Arrived' || app.status === 'Completed'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                                : app.status === 'Confirmed'
+                                ? 'bg-teal-50 text-teal-700 border border-teal-200'
+                                : app.status === 'Cancelled'
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : app.status === 'No Show'
+                                ? 'bg-slate-100 text-slate-600 border border-slate-300'
+                                : app.status === 'Follow Up'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                            }`}>
+                              {app.status}
                             </span>
-                            {app.source === 'Referral' && app.referral_person && (
-                              <div className="text-[10px] text-slate-500 font-medium">
-                                Ref: <span className="font-bold text-slate-800">{app.referral_person}</span>
-                              </div>
+                            {app.visit_type && (
+                              <span className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-black uppercase text-slate-600">
+                                {app.visit_type}
+                              </span>
+                            )}
+                            {app.source && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold bg-slate-50 text-slate-600 border border-slate-200">
+                                {app.source === 'Referral' && app.referral_person ? `Ref: ${app.referral_person}` : app.source}
+                              </span>
                             )}
                           </div>
-                        ) : (
-                          <span className="text-slate-300 text-[11px]">—</span>
-                        )}
-                      </td>
-
-                      {/* Scheduled By Provenance Banner */}
-                      <td className="py-3.5">
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-900">
-                          <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
-                          <span className="text-[11px] font-bold">
-                            Scheduled by: <span className="font-black text-indigo-700">{creator}</span>
-                          </span>
+                          <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
+                            <UserCheck className="w-3 h-3 text-indigo-500 shrink-0" />
+                            <span>Scheduled by: <strong className="text-slate-800 font-bold">{creator}</strong></span>
+                          </div>
                         </div>
                       </td>
 
-                      <td className="py-3.5">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
-                          app.status === 'Arrived' || app.status === 'Completed'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                            : app.status === 'Confirmed'
-                            ? 'bg-teal-50 text-teal-700 border border-teal-200'
-                            : app.status === 'Cancelled'
-                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                            : app.status === 'No Show'
-                            ? 'bg-slate-100 text-slate-600 border border-slate-300'
-                            : app.status === 'Follow Up'
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : 'bg-blue-50 text-blue-700 border border-blue-200'
-                        }`}>
-                          {app.status}
-                        </span>
-                      </td>
-
+                      {/* 5. Action Dropdown */}
                       <td className="py-3.5 pr-4 text-right whitespace-nowrap">
                         <div className="relative inline-block text-left">
                           <button
@@ -1452,7 +1479,7 @@ export const MasterScheduling: React.FC = () => {
           </div>
 
           <div className="p-1 space-y-0.5">
-            {/* View */}
+            {/* View Details */}
             <button
               type="button"
               onClick={() => {
@@ -1462,8 +1489,8 @@ export const MasterScheduling: React.FC = () => {
               }}
               className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-hospital-700 rounded-xl flex items-center gap-2.5 transition-colors"
             >
-              <Eye className="w-4 h-4 text-slate-400" />
-              <span>View</span>
+              <Eye className="w-4 h-4 text-hospital-600" />
+              <span className="font-bold">View Details</span>
             </button>
 
             {/* Edit */}
@@ -1565,144 +1592,339 @@ export const MasterScheduling: React.FC = () => {
       {/* View Appointment Details Modal */}
       {viewModalApp && (
         <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+          <div className="bg-white w-full max-w-2xl rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-4 sm:py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-hospital-50 border border-hospital-100 text-hospital-600 flex items-center justify-center">
-                  <Calendar className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-2xl bg-hospital-100 border border-hospital-200 text-hospital-700 flex items-center justify-center shrink-0">
+                  <FileText className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-base font-black text-slate-900">Appointment Details</h3>
-                  <p className="text-[11px] text-slate-400 font-mono">ID: {viewModalApp.id}</p>
+                  <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono mt-0.5">
+                    <span>ID: {viewModalApp.id}</span>
+                    {viewModalApp.createdAt && (
+                      <>
+                        <span>•</span>
+                        <span>Logged: {new Date(viewModalApp.createdAt).toLocaleDateString()}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setViewModalApp(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+                className="w-8 h-8 rounded-full bg-slate-200/70 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-4 text-xs">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Status</span>
-                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
-                  viewModalApp.status === 'Arrived' || viewModalApp.status === 'Completed'
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                    : viewModalApp.status === 'Confirmed'
-                    ? 'bg-teal-50 text-teal-700 border border-teal-200'
-                    : viewModalApp.status === 'Cancelled'
-                    ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                    : viewModalApp.status === 'No Show'
-                    ? 'bg-slate-100 text-slate-600 border border-slate-300'
-                    : viewModalApp.status === 'Follow Up'
-                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                    : 'bg-blue-50 text-blue-700 border border-blue-200'
-                }`}>
-                  {viewModalApp.status}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/40">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Patient Name</span>
-                  <div className="font-extrabold text-slate-900 text-sm">{viewModalApp.name}</div>
-                  <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
-                    <Phone className="w-3 h-3 text-slate-400" /> {viewModalApp.mobile}
-                  </div>
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5 text-xs">
+              {/* Quick Status Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Status:</span>
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                    viewModalApp.status === 'Arrived' || viewModalApp.status === 'Completed'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                      : viewModalApp.status === 'Confirmed'
+                      ? 'bg-teal-50 text-teal-700 border border-teal-200'
+                      : viewModalApp.status === 'Cancelled'
+                      ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                      : viewModalApp.status === 'No Show'
+                      ? 'bg-slate-100 text-slate-600 border border-slate-300'
+                      : viewModalApp.status === 'Follow Up'
+                      ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                      : 'bg-blue-50 text-blue-700 border border-blue-200'
+                  }`}>
+                    {viewModalApp.status}
+                  </span>
                 </div>
-
-                <div className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/40">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Slot & Time</span>
-                  <div className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-hospital-600" /> {viewModalApp.date}
-                  </div>
-                  <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
-                    <Clock className="w-3 h-3 text-hospital-600" /> {viewModalApp.time}
-                  </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[10px] font-bold text-slate-700">
+                    Visit: {viewModalApp.visit_type || 'OPD'}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-100 text-[10px] font-bold text-indigo-700">
+                    {viewModalApp.assignment_type === 'doctor' ? 'Doctor Direct Assignment' : 'Hospital Facility Queue'}
+                  </span>
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/40">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Assignment</span>
-                <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                  <Stethoscope className="w-4 h-4 text-emerald-600" />
-                  <span>{viewModalApp.assignedDoctorName || 'No Specific Doctor Assigned'}</span>
+              {/* 1. Patient Information */}
+              <div className="rounded-2xl border border-slate-200/80 p-4 bg-white shadow-xs">
+                <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                  <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-slate-500" /> Patient Details
+                  </span>
+                  {viewModalPatient ? (
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                      Matched in EHR (UHID: {viewModalPatient.id})
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                      Intake Lead
+                    </span>
+                  )}
                 </div>
-                {viewModalApp.hospitalName && (
-                  <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-1 font-medium">
-                    <Building2 className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>{viewModalApp.hospitalName}</span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Full Name</span>
+                    <div className="text-sm font-extrabold text-slate-900 mt-0.5">{viewModalApp.name}</div>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Mobile Number</span>
+                    <a 
+                      href={`tel:${viewModalApp.mobile}`}
+                      className="text-xs font-bold text-hospital-600 hover:text-hospital-700 flex items-center gap-1 mt-1 hover:underline"
+                    >
+                      <Phone className="w-3.5 h-3.5" /> {viewModalApp.mobile}
+                    </a>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Clinical Condition</span>
+                    <div className="inline-flex items-center gap-1.5 mt-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-xs">
+                      <Activity className="w-3.5 h-3.5 text-emerald-600" />
+                      {viewModalApp.condition}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Visit Classification</span>
+                    <div className="text-xs font-bold text-slate-800 mt-1">
+                      {viewModalApp.visit_type || viewModalApp.bookingType || 'Outpatient Consultation'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional EHR Patient Demographics if linked */}
+                {viewModalPatient && (
+                  <div className="mt-3.5 pt-3 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-[11px] bg-slate-50/70 p-3 rounded-xl">
+                    <div>
+                      <span className="text-slate-400 font-medium block text-[9px] uppercase">Age / Gender</span>
+                      <strong className="text-slate-700 font-bold">
+                        {viewModalPatient.age ? `${viewModalPatient.age} yrs` : '—'} / {viewModalPatient.gender || '—'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-medium block text-[9px] uppercase">Insurance</span>
+                      <strong className="text-slate-700 font-bold">
+                        {viewModalPatient.hasInsurance === 'Yes' ? (viewModalPatient.insuranceName || 'Insured') : 'Self-Pay'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-medium block text-[9px] uppercase">Registered</span>
+                      <strong className="text-slate-700 font-bold truncate block">
+                        {viewModalPatient.registeredAt || '—'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-medium block text-[9px] uppercase">Occupation</span>
+                      <strong className="text-slate-700 font-bold truncate block">
+                        {viewModalPatient.occupation || '—'}
+                      </strong>
+                    </div>
                   </div>
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl border border-slate-100 bg-slate-50/40">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Condition</span>
-                  <span className="inline-block px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-bold text-[11px]">
-                    {viewModalApp.condition}
+              {/* 2. Slot & Date Schedule */}
+              <div className="rounded-2xl border border-slate-200/80 p-4 bg-white shadow-xs">
+                <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                  <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-slate-500" /> Slot & Date
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-400">
+                    Slot Type: {viewModalApp.bookingType || 'Standard'}
                   </span>
                 </div>
-
-                <div className="p-3 rounded-xl border border-slate-100 bg-slate-50/40">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Visit Type</span>
-                  <span className="font-bold text-slate-800">
-                    {viewModalApp.visit_type || viewModalApp.bookingType || 'OPD'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl border border-slate-100 bg-slate-50/40">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Source</span>
-                  <span className="font-bold text-slate-800">
-                    {viewModalApp.source || 'Direct / Walk-in'}
-                  </span>
-                  {viewModalApp.referral_person && (
-                    <div className="text-[10px] text-slate-500 mt-0.5">
-                      Ref: <span className="font-bold text-slate-700">{viewModalApp.referral_person}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Scheduled Date</span>
+                    <div className="text-xs font-black text-slate-800 flex items-center gap-1.5 mt-1">
+                      <Calendar className="w-3.5 h-3.5 text-hospital-600" />
+                      {viewModalApp.date}
                     </div>
-                  )}
-                </div>
-
-                <div className="p-3 rounded-xl border border-slate-100 bg-slate-50/40">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Scheduled By</span>
-                  <span className="font-bold text-indigo-700 flex items-center gap-1">
-                    <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
-                    {viewModalApp.username || 'Master Admin'}
-                  </span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Time Slot</span>
+                    <div className="text-xs font-black text-slate-800 flex items-center gap-1.5 mt-1">
+                      <Clock className="w-3.5 h-3.5 text-hospital-600" />
+                      {viewModalApp.time}
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Created Timestamp</span>
+                    <div className="text-[11px] font-semibold text-slate-700 mt-1 truncate">
+                      {viewModalApp.createdAt ? new Date(viewModalApp.createdAt).toLocaleString() : 'System Scheduled'}
+                    </div>
+                  </div>
                 </div>
               </div>
+
+              {/* 3. Assigned Doctor & Hospital */}
+              <div className="rounded-2xl border border-slate-200/80 p-4 bg-white shadow-xs">
+                <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                  <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+                    <Stethoscope className="w-3.5 h-3.5 text-slate-500" /> Assigned Doctor / Hospital
+                  </span>
+                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md">
+                    {viewModalApp.assignment_type === 'hospital' ? 'Hospital Queue' : 'Direct Doctor'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="p-3 rounded-xl bg-slate-50/80 border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Doctor</span>
+                    <div className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5 mt-1">
+                      <Stethoscope className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{viewModalApp.assignedDoctorName || viewModalDoctor?.name || 'No Specific Doctor Assigned'}</span>
+                    </div>
+                    {viewModalDoctor?.specialization && (
+                      <div className="text-[11px] text-emerald-700 font-medium mt-1">
+                        Specialization: {viewModalDoctor.specialization}
+                      </div>
+                    )}
+                    {viewModalApp.doctor_id && (
+                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                        Doctor ID: {viewModalApp.doctor_id}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-50/80 border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Hospital / Facility</span>
+                    <div className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5 mt-1">
+                      <Building2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <span>{viewModalApp.hospitalName || viewModalHospital?.name || 'Primary Facility'}</span>
+                    </div>
+                    {viewModalHospital?.city && (
+                      <div className="text-[11px] text-slate-500 font-medium mt-1 flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-slate-400" /> {viewModalHospital.city}
+                      </div>
+                    )}
+                    {viewModalApp.hospital_id && (
+                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                        Facility ID: {viewModalApp.hospital_id}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Other Relevant Details: Source & Provenance */}
+              <div className="rounded-2xl border border-slate-200/80 p-4 bg-white shadow-xs">
+                <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                  <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+                    <UserCheck className="w-3.5 h-3.5 text-slate-500" /> Source & Provenance
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Acquisition Channel</span>
+                    <div className="text-xs font-bold text-slate-800 mt-1">
+                      {viewModalApp.source || 'Direct / Walk-in'}
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Referral Partner / Doctor</span>
+                    <div className="text-xs font-bold text-slate-800 mt-1">
+                      {viewModalApp.referral_person || viewModalApp.sourceDoctorName || 'None'}
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Scheduled By</span>
+                    <div className="text-xs font-bold text-indigo-700 flex items-center gap-1 mt-1">
+                      <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+                      {viewModalApp.username || 'Master Admin'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. Clinical Intake & Counseling Evaluation (if present) */}
+              {viewModalPatient?.doctorAssessment || viewModalPatient?.packageProposal ? (
+                <div className="rounded-2xl border border-slate-200/80 p-4 bg-emerald-50/30 shadow-xs">
+                  <div className="flex items-center justify-between mb-3 border-b border-emerald-100 pb-2">
+                    <span className="text-[11px] font-black uppercase text-emerald-800 tracking-wider flex items-center gap-1.5">
+                      <Activity className="w-3.5 h-3.5 text-emerald-600" /> Clinical Assessment & Counseling Notes
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    {viewModalPatient?.doctorAssessment && (
+                      <div className="p-3 bg-white rounded-xl border border-emerald-100 space-y-1">
+                        <span className="text-[10px] font-bold text-emerald-700 uppercase block">Doctor Assessment</span>
+                        <div className="text-[11px] text-slate-700">
+                          <strong>Quick Code:</strong> {viewModalPatient.doctorAssessment.quickCode || '—'}
+                        </div>
+                        {viewModalPatient.doctorAssessment.notes && (
+                          <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg mt-1 italic">
+                            "{viewModalPatient.doctorAssessment.notes}"
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {viewModalPatient?.packageProposal && (
+                      <div className="p-3 bg-white rounded-xl border border-emerald-100 space-y-1">
+                        <span className="text-[10px] font-bold text-emerald-700 uppercase block">Package Counseling</span>
+                        <div className="text-[11px] text-slate-700">
+                          <strong>Proposed Amount:</strong> {viewModalPatient.packageProposal.packageAmount ? `₹${viewModalPatient.packageProposal.packageAmount}` : '—'}
+                        </div>
+                        {viewModalPatient.packageProposal.counselingStrategy && (
+                          <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg mt-1 italic">
+                            "{viewModalPatient.packageProposal.counselingStrategy}"
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-dashed border-slate-200 text-slate-500 text-[11px] flex items-center gap-2">
+                  <Info className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span>
+                    Clinical diagnosis notes and package counseling strategy will be documented during the patient's OPD intake session.
+                  </span>
+                </div>
+              )}
             </div>
 
-            <div className="p-4 border-t border-slate-100 bg-slate-50/60 flex flex-wrap items-center justify-end gap-2">
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex flex-wrap items-center justify-between gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  const target = viewModalApp;
-                  setViewModalApp(null);
-                  handleOpenPatientModal(target);
-                }}
-                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors"
+                onClick={() => setViewModalApp(null)}
+                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl font-bold text-xs transition-colors"
               >
-                <User className="w-3.5 h-3.5 text-slate-500" />
-                <span>View Patient Record</span>
+                Close
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const target = viewModalApp;
-                  setViewModalApp(null);
-                  handleOpenEditModal(target);
-                }}
-                className="px-4 py-2 bg-hospital-600 hover:bg-hospital-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm"
-              >
-                <Pencil className="w-3.5 h-3.5 text-white" />
-                <span>Edit Appointment</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = viewModalApp;
+                    setViewModalApp(null);
+                    handleOpenPatientModal(target);
+                  }}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors"
+                >
+                  <User className="w-3.5 h-3.5 text-slate-500" />
+                  <span>View Patient Record</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = viewModalApp;
+                    setViewModalApp(null);
+                    handleOpenEditModal(target);
+                  }}
+                  className="px-4 py-2 bg-hospital-600 hover:bg-hospital-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm"
+                >
+                  <Pencil className="w-3.5 h-3.5 text-white" />
+                  <span>Edit Appointment</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
