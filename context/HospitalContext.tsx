@@ -1015,7 +1015,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: APPOINTMENTS_TABLE },
-        (payload) => {
+        (payload: any) => {
           console.log('[Realtime] postgres_changes on hms_appointments:', payload);
           refreshData(true);
         }
@@ -1027,7 +1027,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'staff_users' },
-        (payload) => {
+        (payload: any) => {
           console.log('[Realtime] postgres_changes on staff_users:', payload);
           refreshData(true);
         }
@@ -1039,7 +1039,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'dashboard_permissions' },
-        (payload) => {
+        (payload: any) => {
           console.log('[Realtime] postgres_changes on dashboard_permissions:', payload);
           refreshData(true);
         }
@@ -1183,7 +1183,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           r.package_proposal !== null) &&
           !(r.id && r.id.startsWith('doctor_metadata_'))
         )
-        .map(row => mapRowToPatient(row));
+        .map((row: any) => mapRowToPatient(row));
       
       setAllPatients(consolidatedPatients);
       

@@ -251,6 +251,8 @@ export interface AnalyticsAccountHierarchy {
   appointmentCount: number;
 }
 
+export const HOSPITAL_LOGO_URL = "https://kgibprahnkpifyzjfzsf.supabase.co/storage/v1/object/public/img/Untitled_design__3_-removebg-preview.png";
+
 export interface DashboardStats {
   totalPatients: number;
   pendingDoctor: number;
