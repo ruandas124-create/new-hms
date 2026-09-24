@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { useHospital } from "../context/HospitalContext";
-import { supabase } from "../services/supabaseClient";
-import { Role } from "../types";
+import { Role, HOSPITAL_LOGO_URL } from "../types";
 import { 
   Building2, Mail, Lock, Loader2, Stethoscope, 
   Users, Briefcase, ChevronRight, ShieldCheck, 
@@ -73,7 +72,7 @@ export const Login: React.FC = () => {
       }
     }
 
-    // 2. Check dynamic database accounts from staffUsers list
+    // 2. Check dynamic accounts from staffUsers list
     const foundStaff = staffUsers?.find(
       (s) => s.email?.toLowerCase().trim() === emailTrimmed
     );
@@ -99,40 +98,25 @@ export const Login: React.FC = () => {
       }
     }
 
-    // 3. Static demo fallback checks
+    // 3. Static role accounts
     const targetRole = roleMap[emailTrimmed];
-    if (!targetRole) {
-      setError("This email is not recognized as a staff account.");
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: emailTrimmed,
-        password,
-      });
-
-      if (authError) {
-        if (password === demoPasswords[emailTrimmed]) {
-          setCurrentUserRole(targetRole);
-          localStorage.setItem("hms_hospital_email", emailTrimmed);
-          localStorage.setItem("hms_hospital_name", emailTrimmed.split("@")[0].toUpperCase());
-          localStorage.setItem("hms_hospital_id", "static_" + targetRole.toLowerCase());
-          return;
-        }
-        throw authError;
+    if (targetRole) {
+      if (password === demoPasswords[emailTrimmed]) {
+        setCurrentUserRole(targetRole);
+        localStorage.setItem("hms_hospital_email", emailTrimmed);
+        localStorage.setItem("hms_hospital_name", emailTrimmed.split("@")[0].toUpperCase());
+        localStorage.setItem("hms_hospital_id", "static_" + targetRole.toLowerCase());
+        setIsLoading(false);
+        return;
+      } else {
+        setError("Invalid password for this account.");
+        setIsLoading(false);
+        return;
       }
-
-      setCurrentUserRole(targetRole);
-      localStorage.setItem("hms_hospital_email", emailTrimmed);
-      localStorage.setItem("hms_hospital_name", emailTrimmed.split("@")[0].toUpperCase());
-      localStorage.setItem("hms_hospital_id", "static_" + targetRole.toLowerCase());
-    } catch (err: any) {
-      setError("Login failed. Check internet or use the demo password.");
-    } finally {
-      setIsLoading(false);
     }
+
+    setError("This email is not recognized as an authorized staff account.");
+    setIsLoading(false);
   };
 
   return (
@@ -149,12 +133,16 @@ export const Login: React.FC = () => {
         <div className="flex flex-col items-center justify-center gap-4">
            <div className="relative">
              <div className="absolute inset-0 bg-hospital-500/20 blur-2xl rounded-full scale-150"></div>
-             <div className="bg-slate-900 p-5 rounded-[2rem] shadow-2xl border border-white/5 relative z-10">
-               <Building2 className="w-12 h-12 text-hospital-500" />
+             <div className="bg-slate-900/90 p-4 px-6 rounded-[2.5rem] shadow-2xl border border-white/10 relative z-10 flex items-center justify-center">
+               <img 
+                 src={HOSPITAL_LOGO_URL} 
+                 alt={systemName || "HMS"} 
+                 className="h-20 w-auto object-contain max-w-[220px] filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]" 
+               />
              </div>
            </div>
            <div className="text-center">
-             <h1 className="text-5xl font-black text-white tracking-tighter uppercase mb-1">{systemName || "HMS"}</h1>
+             <h1 className="text-4xl md:text-5xl font-black text-white tracking-tighter uppercase mb-1">{systemName || "HMS"}</h1>
              <div className="flex items-center justify-center gap-2">
                <div className="h-px w-8 bg-hospital-600/30"></div>
                <p className="text-hospital-500 font-bold text-[10px] uppercase tracking-[0.4em]">Hospital Management</p>

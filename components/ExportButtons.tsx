@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Download, Printer, Calendar as CalendarIcon, X, FileSpreadsheet } from 'lucide-react';
-import { Patient, PackageProposal, SurgeonCode } from '../types';
+import { Patient, PackageProposal, SurgeonCode, HOSPITAL_LOGO_URL } from '../types';
 
 const formatDate = (dateString: string | undefined | null): string => {
   if (!dateString) return '';
@@ -151,7 +151,7 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({ patients, role, se
               <p>DATE: ${today}</p>
             </div>
             <div class="logo-box">
-              <h2 class="logo-text">HMS</h2>
+              <img src="${HOSPITAL_LOGO_URL}" alt="Hospital Logo" style="height: 48px; max-width: 180px; object-fit: contain; margin-bottom: 4px;" />
               <p class="logo-subtext">HOSPITAL MANAGEMENT</p>
             </div>
           </div>
