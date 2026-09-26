@@ -10,13 +10,10 @@ import {
 } from 'lucide-react';
 
 const STATUS_OPTIONS: { label: string; dotClass: string }[] = [
-  { label: 'Scheduled', dotClass: 'bg-blue-500' },
-  { label: 'Confirmed', dotClass: 'bg-teal-500' },
-  { label: 'Completed', dotClass: 'bg-emerald-500' },
-  { label: 'Cancelled', dotClass: 'bg-rose-500' },
-  { label: 'No Show', dotClass: 'bg-slate-400' },
-  { label: 'Arrived', dotClass: 'bg-emerald-600' },
-  { label: 'Follow Up', dotClass: 'bg-amber-500' },
+  { label: 'New Leads', dotClass: 'bg-indigo-500' },
+  { label: 'Schedule', dotClass: 'bg-blue-500' },
+  { label: 'Follow-up', dotClass: 'bg-amber-500' },
+  { label: 'Junk', dotClass: 'bg-slate-400' },
 ];
 
 const isDoctorAvailableOnDate = (doctor: any, dateString: string | undefined): boolean => {
@@ -106,6 +103,70 @@ const getAvailableSlotsForDoctorAndDate = (doctor: any, dateString: string | und
   return slotsList.length > 0 ? slotsList : defaultSlots;
 };
 
+const formatDisplayTime = (timeStr?: string): string => {
+  if (!timeStr) return '--:--';
+  const parts = timeStr.trim().split(':');
+  if (parts.length < 2) return timeStr;
+  let hours = parseInt(parts[0], 10);
+  const minutes = parts[1];
+  if (isNaN(hours)) return timeStr;
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  if (hours === 0) hours = 12;
+  return `${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+};
+
+const formatDisplayDate = (dateStr?: string): { dayStr: string; dateFormatted: string } => {
+  if (!dateStr) return { dayStr: '', dateFormatted: '--' };
+  try {
+    const d = new Date(dateStr + 'T00:00:00');
+    if (isNaN(d.getTime())) return { dayStr: '', dateFormatted: dateStr };
+    const dayStr = d.toLocaleDateString('en-US', { weekday: 'short' });
+    const dateFormatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return { dayStr, dateFormatted };
+  } catch {
+    return { dayStr: '', dateFormatted: dateStr };
+  }
+};
+
+const getInitials = (name?: string): string => {
+  if (!name) return 'PT';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'PT';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
+const getStatusStyle = (status?: string) => {
+  switch (status) {
+    case 'New Leads':
+      return {
+        badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200/80',
+        dotClass: 'bg-indigo-500'
+      };
+    case 'Schedule':
+      return {
+        badgeClass: 'bg-blue-50 text-blue-700 border-blue-200/80',
+        dotClass: 'bg-blue-500'
+      };
+    case 'Follow-up':
+      return {
+        badgeClass: 'bg-amber-50 text-amber-700 border-amber-200/80',
+        dotClass: 'bg-amber-500'
+      };
+    case 'Junk':
+      return {
+        badgeClass: 'bg-slate-100 text-slate-600 border-slate-200/80',
+        dotClass: 'bg-slate-400'
+      };
+    default:
+      return {
+        badgeClass: 'bg-blue-50 text-blue-700 border-blue-200/80',
+        dotClass: 'bg-blue-500'
+      };
+  }
+};
+
 export const MasterScheduling: React.FC = () => {
   const { 
     appointments, 
@@ -176,6 +237,14 @@ export const MasterScheduling: React.FC = () => {
     appointment: Appointment;
     patient?: any;
   } | null>(null);
+
+  // Notes Modal State
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [noteTargetApp, setNoteTargetApp] = useState<Appointment | null>(null);
+  const [newNoteContent, setNewNoteContent] = useState('');
+  const [isLoadingNotes, setIsLoadingNotes] = useState(false);
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [targetNotes, setTargetNotes] = useState<import('../../types').LeadNote[]>([]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -674,6 +743,53 @@ export const MasterScheduling: React.FC = () => {
     }
   };
 
+  // Note Modal Handlers
+  const openNoteModal = async (app: Appointment) => {
+    setNoteTargetApp(app);
+    setNewNoteContent('');
+    setTargetNotes([]);
+    setShowNoteModal(true);
+    
+    setIsLoadingNotes(true);
+    try {
+      const { fetchNotesForLead } = await import('../../services/noteService');
+      const notes = await fetchNotesForLead(app.patient_id || app.id);
+      setTargetNotes(notes);
+    } catch (err) {
+      console.error('Error loading notes:', err);
+    } finally {
+      setIsLoadingNotes(false);
+    }
+  };
+
+  const handleSaveNote = async () => {
+    if (!noteTargetApp || !newNoteContent.trim()) return;
+    setIsSavingNote(true);
+    try {
+      const { addNoteForLead } = await import('../../services/noteService');
+      const activeRole = typeof window !== 'undefined' ? (localStorage.getItem('hms_hospital_role') || localStorage.getItem('user_role')) : null;
+      const username = staffUsers.find(u => u.role === activeRole)?.name || 'Master Admin';
+      const staffId = staffUsers.find(u => u.role === activeRole)?.id || 'staff_master_01';
+      
+      const newNote = await addNoteForLead({
+        leadId: noteTargetApp.patient_id || noteTargetApp.id,
+        note: newNoteContent,
+        hospitalId: noteTargetApp.hospital_id,
+        createdBy: staffId,
+        createdByName: username
+      });
+      setTargetNotes([newNote, ...targetNotes]);
+      setNewNoteContent('');
+      setToastMessage('Note added successfully');
+      setTimeout(() => setToastMessage(null), 2500);
+    } catch (err) {
+      console.error('Error saving note:', err);
+      alert('Failed to save note. Please try again.');
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       {/* Toast Alert */}
@@ -765,212 +881,320 @@ export const MasterScheduling: React.FC = () => {
       </div>
 
       {/* 2. Live Scheduling Console & Appointments Table */}
-      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm p-4 sm:p-6 md:p-8 space-y-6">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-sm p-4 sm:p-6 md:p-8 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div>
-            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-              Hospital Appointments Roster
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Live schedule feed with explicit provenance (<span className="font-black text-slate-800">"Scheduled by: &lt;username&gt;"</span>).
+            <div className="flex items-center gap-2.5">
+              <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                Hospital Appointments Roster
+              </h3>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                {filteredAppointments.length} {filteredAppointments.length === 1 ? 'Appointment' : 'Appointments'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Live schedule feed and patient appointments registry with clinician assignment and provenance.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto">
-            <div className="relative w-full sm:w-auto flex-1 sm:flex-initial min-w-[180px]">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Search patient, hospital, doctor..."
-                className="pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-hospital-500"
-              />
-            </div>
+          {/* Reset Filters shortcut */}
+          {(searchTerm || selectedDoctorFilter !== 'all' || selectedHospitalFilter !== 'all' || selectedStatusFilter !== 'all') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm('');
+                setSelectedDoctorFilter('all');
+                setSelectedHospitalFilter('all');
+                setSelectedStatusFilter('all');
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-rose-600 bg-slate-100 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-xl transition-all self-start sm:self-auto"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Reset Filters</span>
+            </button>
+          )}
+        </div>
 
-            {/* Filter by Doctor */}
+        {/* Filter Toolbar */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Search Input */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Search patient, hospital, doctor..."
+              className="w-full pl-9 pr-8 py-2.5 bg-slate-50/90 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-hospital-500 rounded-xl text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-hospital-500/20 transition-all"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Filter by Doctor */}
+          <div className="relative">
             <select
               value={selectedDoctorFilter}
               onChange={e => setSelectedDoctorFilter(e.target.value)}
-              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none w-full sm:w-auto flex-1 sm:flex-initial"
+              className={`w-full appearance-none pl-3.5 pr-8 py-2.5 border rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-hospital-500/20 transition-all ${
+                selectedDoctorFilter !== 'all'
+                  ? 'bg-hospital-50/60 border-hospital-300 text-hospital-900 font-bold'
+                  : 'bg-slate-50/90 hover:bg-slate-50 focus:bg-white border-slate-200 text-slate-700'
+              }`}
             >
               <option value="all">All Doctors</option>
               {doctorsWithAccess.map(doc => (
                 <option key={doc.id} value={doc.id}>{doc.name}</option>
               ))}
             </select>
+            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
 
-            {/* Filter by Hospital */}
+          {/* Filter by Hospital */}
+          <div className="relative">
             <select
               value={selectedHospitalFilter}
               onChange={e => setSelectedHospitalFilter(e.target.value)}
-              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none w-full sm:w-auto flex-1 sm:flex-initial"
+              className={`w-full appearance-none pl-3.5 pr-8 py-2.5 border rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-hospital-500/20 transition-all ${
+                selectedHospitalFilter !== 'all'
+                  ? 'bg-hospital-50/60 border-hospital-300 text-hospital-900 font-bold'
+                  : 'bg-slate-50/90 hover:bg-slate-50 focus:bg-white border-slate-200 text-slate-700'
+              }`}
             >
               <option value="all">All Hospitals</option>
               {hospitalsWithAccess.map(h => (
                 <option key={h.id} value={h.id}>{h.name}</option>
               ))}
             </select>
+            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
 
-            {/* Filter by Status */}
+          {/* Filter by Status */}
+          <div className="relative">
             <select
               value={selectedStatusFilter}
               onChange={e => setSelectedStatusFilter(e.target.value)}
-              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none w-full sm:w-auto flex-1 sm:flex-initial"
+              className={`w-full appearance-none pl-3.5 pr-8 py-2.5 border rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-hospital-500/20 transition-all ${
+                selectedStatusFilter !== 'all'
+                  ? 'bg-hospital-50/60 border-hospital-300 text-hospital-900 font-bold'
+                  : 'bg-slate-50/90 hover:bg-slate-50 focus:bg-white border-slate-200 text-slate-700'
+              }`}
             >
               <option value="all">All Statuses</option>
-              <option value="Scheduled">Scheduled</option>
-              <option value="Arrived">Arrived</option>
-              <option value="Follow Up">Follow Up</option>
-              <option value="Cancelled">Cancelled</option>
+              {STATUS_OPTIONS.map(st => (
+                <option key={st.label} value={st.label}>{st.label}</option>
+              ))}
             </select>
+            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         </div>
 
         {/* Appointments List Table */}
         {filteredAppointments.length === 0 ? (
-          <div className="p-12 text-center rounded-2xl bg-slate-50/60 border border-slate-100">
-            <Calendar className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-            <p className="text-xs font-black uppercase tracking-wider text-slate-500">No Appointments Match Criteria</p>
-            <p className="text-[11px] text-slate-400 mt-1">Adjust search filters or use "Book Master Appointment" to schedule one.</p>
+          <div className="p-10 text-center rounded-2xl bg-slate-50/70 border border-slate-200/80 space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto border border-slate-200/60">
+              <Calendar className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-700">No Appointments Match Criteria</p>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                No scheduled records found matching your filters. Try clearing your search or status criteria.
+              </p>
+            </div>
+            {(searchTerm || selectedDoctorFilter !== 'all' || selectedHospitalFilter !== 'all' || selectedStatusFilter !== 'all') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedDoctorFilter('all');
+                  setSelectedHospitalFilter('all');
+                  setSelectedStatusFilter('all');
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-bold rounded-xl shadow-2xs transition-all"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                <span>Reset All Filters</span>
+              </button>
+            )}
           </div>
         ) : (
-          <div className="overflow-x-auto table-container w-full">
-            <table className="w-full text-left text-xs min-w-[960px]">
-              <thead>
-                <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                  <th className="pb-3 pl-2">Patient Details</th>
-                  <th className="pb-3">Slot & Date</th>
-                  <th className="pb-3">Assigned Doctor / Hospital</th>
-                  <th className="pb-3">Other Relevant Appointment Details</th>
-                  <th className="pb-3 pr-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium">
-                {filteredAppointments.map(app => {
-                  const creator = app.username || 'Master Admin';
-                  const isHospitalOnly = app.assignment_type === 'hospital' && !app.assignedDoctorName && !app.doctor_id;
+          <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs bg-white">
+            <div className="overflow-x-auto table-container w-full">
+              <table className="w-full text-left border-collapse min-w-[960px]">
+                <thead>
+                  <tr className="bg-slate-50/90 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    <th scope="col" className="py-3.5 pl-5 pr-4">Patient Name</th>
+                    <th scope="col" className="py-3.5 px-4">Disease</th>
+                    <th scope="col" className="py-3.5 px-4">Date & Slot</th>
+                    <th scope="col" className="py-3.5 px-4">Source</th>
+                    <th scope="col" className="py-3.5 px-4">Doctor / Facility</th>
+                    <th scope="col" className="py-3.5 px-4">Status</th>
+                    <th scope="col" className="py-3.5 px-4">Scheduled By</th>
+                    <th scope="col" className="py-3.5 px-4">Date Created</th>
+                    <th scope="col" className="py-3.5 pl-4 pr-5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-xs">
+                  {filteredAppointments.map(app => {
+                    const creator = app.username || 'Master Admin';
+                    const isHospitalOnly = app.assignment_type === 'hospital' && !app.assignedDoctorName && !app.doctor_id;
+                    const dateInfo = formatDisplayDate(app.date);
+                    const formattedTime = formatDisplayTime(app.time);
+                    const statusStyle = getStatusStyle(app.status);
 
-                  return (
-                    <tr key={app.id} className="hover:bg-slate-50/70 transition-colors">
-                      {/* 1. Patient Details */}
-                      <td className="py-3.5 pl-2">
-                        <div className="font-extrabold text-slate-900 text-sm">{app.name}</div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5 flex-wrap">
-                          <span className="flex items-center gap-1 font-semibold text-slate-600">
-                            <Phone className="w-3 h-3 text-slate-400" /> {app.mobile}
-                          </span>
-                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-md text-[10px] font-bold">
-                            {app.condition}
-                          </span>
-                          {app.patient_id && (
-                            <span className="text-[10px] font-mono text-slate-400">
-                              UHID: {app.patient_id}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* 2. Slot & Date */}
-                      <td className="py-3.5">
-                        <div className="font-bold text-slate-800 flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>{app.date}</span>
-                        </div>
-                        <div className="text-[11px] text-slate-600 flex items-center gap-1 mt-0.5 font-semibold">
-                          <Clock className="w-3 h-3 text-hospital-600 shrink-0" />
-                          <span>{app.time}</span>
-                        </div>
-                      </td>
-
-                      {/* 3. Assigned Doctor / Hospital */}
-                      <td className="py-3.5">
-                        {isHospitalOnly ? (
-                          <div className="space-y-1">
-                            <div className="font-bold text-slate-800 flex items-center gap-1.5">
-                              <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                              <span>{app.hospitalName || 'Assigned Facility'}</span>
+                    return (
+                      <tr key={app.id} className="hover:bg-slate-50/60 transition-colors">
+                        {/* 1. Patient Name */}
+                        <td className="py-4 pl-5 pr-4 align-middle">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center font-black text-xs shrink-0 shadow-2xs">
+                              {getInitials(app.name)}
                             </div>
-                            <span className="inline-flex items-center gap-1 text-[9px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md font-black uppercase tracking-wider">
-                              Hospital Facility
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="space-y-0.5">
-                            <div className="font-bold text-slate-800 flex items-center gap-1.5">
-                              <Stethoscope className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                              <span>{app.assignedDoctorName || 'Assigned Doctor'}</span>
-                            </div>
-                            {app.hospitalName && (
-                              <div className="text-[11px] text-slate-500 flex items-center gap-1 font-medium">
-                                <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
-                                <span>{app.hospitalName}</span>
+                            <div className="space-y-1 min-w-0">
+                              <div className="font-bold text-slate-900 text-sm leading-none flex items-center gap-2">
+                                <span className="truncate">{app.name}</span>
                               </div>
-                            )}
+                              <div className="flex items-center gap-2 text-xs text-slate-500">
+                                <span className="inline-flex items-center gap-1 font-semibold text-slate-600">
+                                  <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                                  {app.mobile}
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                        )}
-                      </td>
+                        </td>
 
-                      {/* 4. Other Relevant Appointment Details */}
-                      <td className="py-3.5">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                              app.status === 'Arrived' || app.status === 'Completed'
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                                : app.status === 'Confirmed'
-                                ? 'bg-teal-50 text-teal-700 border border-teal-200'
-                                : app.status === 'Cancelled'
-                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                : app.status === 'No Show'
-                                ? 'bg-slate-100 text-slate-600 border border-slate-300'
-                                : app.status === 'Follow Up'
-                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                : 'bg-blue-50 text-blue-700 border border-blue-200'
-                            }`}>
-                              {app.status}
+                        {/* 2. Disease */}
+                        <td className="py-4 px-4 align-middle whitespace-nowrap">
+                          {app.condition ? (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/70">
+                              {app.condition}
                             </span>
-                            {app.visit_type && (
-                              <span className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] font-black uppercase text-slate-600">
-                                {app.visit_type}
-                              </span>
-                            )}
-                            {app.source && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold bg-slate-50 text-slate-600 border border-slate-200">
-                                {app.source === 'Referral' && app.referral_person ? `Ref: ${app.referral_person}` : app.source}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
-                            <UserCheck className="w-3 h-3 text-indigo-500 shrink-0" />
-                            <span>Scheduled by: <strong className="text-slate-800 font-bold">{creator}</strong></span>
-                          </div>
-                        </div>
-                      </td>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">Not specified</span>
+                          )}
+                        </td>
 
-                      {/* 5. Action Dropdown */}
-                      <td className="py-3.5 pr-4 text-right whitespace-nowrap">
-                        <div className="relative inline-block text-left">
-                          <button
-                            type="button"
-                            data-actions-btn={app.id}
-                            onClick={(e) => toggleDropdown(e, app)}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border shadow-xs ${
-                              activeDropdownApp?.id === app.id
-                                ? 'bg-hospital-50 text-hospital-700 border-hospital-300 ring-2 ring-hospital-500/20'
-                                : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
-                            }`}
-                          >
-                            <span>Actions</span>
-                            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${activeDropdownApp?.id === app.id ? 'rotate-180 text-hospital-600' : 'text-slate-400'}`} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        {/* 3. Date & Slot */}
+                        <td className="py-4 px-4 align-middle whitespace-nowrap">
+                          <div className="space-y-1">
+                            <div className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span>{dateInfo.dateFormatted}</span>
+                            </div>
+                            <div className="text-[11px] text-hospital-600 flex items-center gap-1.5 font-bold">
+                              <Clock className="w-3 h-3 text-hospital-500 shrink-0" />
+                              <span>{formattedTime}</span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 4. Source */}
+                        <td className="py-4 px-4 align-middle whitespace-nowrap">
+                          {app.source ? (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-50 text-slate-600 border border-slate-200/80">
+                              {app.source === 'Referral' && app.referral_person ? `Ref: ${app.referral_person}` : app.source}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">Direct</span>
+                          )}
+                        </td>
+
+                        {/* 5. Doctor / Facility */}
+                        <td className="py-4 px-4 align-middle">
+                          {isHospitalOnly ? (
+                            <div className="space-y-1">
+                              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900">
+                                <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                <span className="truncate max-w-[160px]">{app.hospitalName || 'Assigned Facility'}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900">
+                                <Stethoscope className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span className="truncate max-w-[160px]">{app.assignedDoctorName || 'Assigned Doctor'}</span>
+                              </div>
+                              {app.hospitalName && (
+                                <div className="inline-flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                                  <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span className="truncate max-w-[160px]">{app.hospitalName}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* 6. Status */}
+                        <td className="py-4 px-4 align-middle">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase border shadow-2xs ${statusStyle.badgeClass}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusStyle.dotClass}`} />
+                            {app.status || 'Schedule'}
+                          </span>
+                        </td>
+
+                        {/* 7. Scheduled By */}
+                        <td className="py-4 px-4 align-middle whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                            <UserCheck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>{creator}</span>
+                          </div>
+                        </td>
+
+                        {/* 8. Date Created */}
+                        <td className="py-4 px-4 align-middle whitespace-nowrap">
+                          <div className="text-xs font-semibold text-slate-600">
+                            {formatDisplayDate(app.createdAt.split('T')[0]).dateFormatted}
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            {new Date(app.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </td>
+
+                        {/* 9. Action Dropdown */}
+                        <td className="py-4 pl-4 pr-5 text-right align-middle whitespace-nowrap">
+                          <div className="relative inline-block text-left">
+                            <button
+                              type="button"
+                              data-actions-btn={app.id}
+                              onClick={(e) => toggleDropdown(e, app)}
+                              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border shadow-2xs ${
+                                activeDropdownApp?.id === app.id
+                                  ? 'bg-hospital-50 text-hospital-700 border-hospital-300 ring-2 ring-hospital-500/20'
+                                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
+                              }`}
+                            >
+                              <span>Actions</span>
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${activeDropdownApp?.id === app.id ? 'rotate-180 text-hospital-600' : 'text-slate-400'}`} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Table Footer */}
+            <div className="px-5 py-3 bg-slate-50/60 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+              <span>
+                Showing <strong className="text-slate-800 font-bold">{filteredAppointments.length}</strong> of{' '}
+                <strong className="text-slate-800 font-bold">{appointments.length}</strong> total records
+              </span>
+              {filteredAppointments.length < appointments.length && (
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Filters applied ({appointments.length - filteredAppointments.length} filtered out)
+                </span>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -1505,6 +1729,20 @@ export const MasterScheduling: React.FC = () => {
             >
               <Pencil className="w-4 h-4 text-slate-400" />
               <span>Edit</span>
+            </button>
+
+            {/* Add Note */}
+            <button
+              type="button"
+              onClick={() => {
+                openNoteModal(activeDropdownApp);
+                setActiveDropdownApp(null);
+                setStatusSubmenuOpen(false);
+              }}
+              className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-hospital-700 rounded-xl flex items-center gap-2.5 transition-colors"
+            >
+              <FileText className="w-4 h-4 text-slate-400" />
+              <span>Add Note</span>
             </button>
 
             {/* Update Status */}
@@ -2319,6 +2557,97 @@ export const MasterScheduling: React.FC = () => {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Note Modal */}
+      {showNoteModal && noteTargetApp && (
+        <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-xl rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Notes</h3>
+                  <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    {noteTargetApp.name} • {noteTargetApp.mobile}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNoteModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-200/70 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4 bg-slate-50/30">
+              {/* Add New Note */}
+              <div className="space-y-2.5">
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  Add New Note
+                </label>
+                <textarea
+                  value={newNoteContent}
+                  onChange={(e) => setNewNoteContent(e.target.value)}
+                  placeholder="Type note content here..."
+                  rows={3}
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white resize-none"
+                />
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSaveNote}
+                    disabled={!newNoteContent.trim() || isSavingNote}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-colors shadow-2xs"
+                  >
+                    {isSavingNote ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Plus className="w-3.5 h-3.5" />
+                    )}
+                    <span>Save Note</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Previous Notes */}
+              <div className="pt-3 border-t border-slate-100 space-y-3">
+                <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-500">Previous Notes</h4>
+                
+                {isLoadingNotes ? (
+                  <div className="flex items-center justify-center p-6 text-slate-400">
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                  </div>
+                ) : targetNotes.length === 0 ? (
+                  <div className="text-center p-6 bg-slate-50 border border-slate-100 rounded-xl text-slate-400 text-xs font-semibold italic">
+                    No previous notes found for this lead.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {targetNotes.map(note => (
+                      <div key={note.id} className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs relative">
+                        <p className="text-xs text-slate-700 whitespace-pre-wrap font-medium">{note.note}</p>
+                        <div className="mt-2.5 pt-2 border-t border-slate-50 flex items-center justify-between text-[10px] text-slate-400 font-semibold">
+                          <span className="flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            {note.created_by_name}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {note.created_date} • {note.created_time}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

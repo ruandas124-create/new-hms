@@ -128,62 +128,7 @@ export const MasterAccessManagement = () => {
         </div>
       </div>
 
-      {/* Sales Team Governance & Separate Permissions Section */}
-      <div className="bg-gradient-to-br from-slate-900 via-rose-950/70 to-slate-900 p-5 sm:p-6 rounded-2xl border border-rose-900/30 text-white shadow-md relative overflow-hidden">
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5">
-          <div className="space-y-1.5 max-w-xl">
-            <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/30 text-rose-300 text-[10px] font-black uppercase tracking-wider">
-              <Target className="w-3.5 h-3.5" /> Sales Team Authority & Governance
-            </div>
-            <h3 className="text-lg font-black text-white tracking-tight">
-              Sales Access & Scheduling Permissions
-            </h3>
-            <p className="text-slate-300 text-xs leading-relaxed">
-              Sales permissions are maintained separately from clinical and hospital roles. The Sales team coordinates patient inquiries, manages the Leads Directory, and schedules consultations with appropriate hospitals or doctors.
-            </p>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full lg:w-auto shrink-0">
-            {/* Sales Dashboard Access Toggle */}
-            <div className="bg-slate-950/70 p-3.5 rounded-xl border border-rose-800/40 flex items-center justify-between gap-4">
-              <div>
-                <div className="text-xs font-bold text-slate-200">Sales Dashboard Access</div>
-                <div className="text-[10px] text-slate-400">Permit access to Sales portal</div>
-              </div>
-              <button
-                onClick={() => updateDashboardPermission('sales', !dashboardPermissions.sales)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 active:scale-95 ${
-                  dashboardPermissions.sales 
-                    ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30' 
-                    : 'bg-rose-500/20 border border-rose-500/40 text-rose-300 hover:bg-rose-500/30'
-                }`}
-              >
-                {dashboardPermissions.sales ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Lock className="w-3.5 h-3.5 text-rose-400" />}
-                {dashboardPermissions.sales ? 'Active' : 'Locked'}
-              </button>
-            </div>
-
-            {/* Sales Scheduling Permission Toggle */}
-            <div className="bg-slate-950/70 p-3.5 rounded-xl border border-rose-800/40 flex items-center justify-between gap-4">
-              <div>
-                <div className="text-xs font-bold text-slate-200">Scheduling Authority</div>
-                <div className="text-[10px] text-slate-400">Allow booking with hospital/doctor</div>
-              </div>
-              <button
-                onClick={() => updateSchedulingPermission('sales', !schedulingPermissions.sales)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 active:scale-95 ${
-                  schedulingPermissions.sales 
-                    ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30' 
-                    : 'bg-rose-500/20 border border-rose-500/40 text-rose-300 hover:bg-rose-500/30'
-                }`}
-              >
-                {schedulingPermissions.sales ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Lock className="w-3.5 h-3.5 text-rose-400" />}
-                {schedulingPermissions.sales ? 'Enabled' : 'Disabled'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {formType && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-sm">

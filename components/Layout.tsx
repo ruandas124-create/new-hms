@@ -207,10 +207,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           transition-all duration-300 ease-in-out shadow-2xl lg:shadow-none
           lg:relative lg:translate-x-0
           ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-          ${isCollapsed ? 'w-[280px] max-w-[85vw] lg:w-20' : 'w-[280px] max-w-[85vw] lg:w-64'}
+          ${isCollapsed 
+            ? 'w-[280px] max-w-[85vw] lg:w-0 lg:min-w-0 lg:max-w-0 lg:overflow-hidden lg:opacity-0 lg:pointer-events-none lg:border-none' 
+            : 'w-[280px] max-w-[85vw] lg:w-64 lg:min-w-[16rem] lg:opacity-100'
+          }
         `}
       >
-        <div className={`p-4 lg:p-6 flex flex-col h-full ${isCollapsed ? 'items-center' : ''}`}>
+        <div className="p-4 lg:p-6 flex flex-col h-full w-[280px] lg:w-64 min-w-[16rem] shrink-0">
           {/* Mobile Close Button */}
           <div className="lg:hidden absolute top-4 right-4">
             <button 
@@ -224,61 +227,47 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           {/* Desktop Collapse Toggle */}
           <div className="hidden lg:flex justify-end mb-4 w-full">
             <button
-              onClick={() => setIsDesktopSidebarCollapsed(prev => !prev)}
-              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800/80 rounded-lg transition-colors"
-              title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              id="sidebar-collapse-btn"
+              onClick={() => setIsDesktopSidebarCollapsed(true)}
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800/80 rounded-lg transition-colors cursor-pointer"
+              title="Collapse Sidebar"
+              aria-label="Collapse Sidebar"
             >
-              {isCollapsed ? <Menu className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+              <Menu className="w-5 h-5" />
             </button>
           </div>
 
           {/* Logo Section */}
-          <div className={`mb-8 ${isCollapsed ? 'px-0 text-center mt-2' : 'px-2 mt-2'}`}>
+          <div className="mb-8 px-2 mt-2">
             <img 
               src={LOGO_URL_DARK} 
               alt="HMS Hospital" 
-              className={`${isCollapsed ? 'h-8 w-auto mx-auto object-contain hidden' : 'h-10 lg:h-12 w-auto'}`}
+              className="h-10 lg:h-12 w-auto"
             />
-            {isCollapsed && (
-              <div className="h-10 w-10 bg-hospital-600 rounded-xl flex items-center justify-center font-black text-xl text-white mx-auto shadow-lg shadow-hospital-900/50">
-                H
-              </div>
-            )}
-            {!isCollapsed && (
-              <div className="text-[0.6rem] text-slate-400 mt-2 uppercase tracking-widest font-semibold truncate">
-                21st Century Surgical Hospital
-              </div>
-            )}
+            <div className="text-[0.6rem] text-slate-400 mt-2 uppercase tracking-widest font-semibold truncate">
+              21st Century Surgical Hospital
+            </div>
           </div>
 
           {/* User Session Info */}
           <div className="mb-6 w-full">
-            {!isCollapsed && <div className="text-[10px] uppercase text-slate-500 font-bold tracking-wider mb-2 px-1">Current Session</div>}
-            <div className={`flex items-center gap-3 p-3 bg-slate-800/50 rounded-xl border border-slate-700/50 ${isCollapsed ? 'justify-center' : ''}`}>
+            <div className="text-[10px] uppercase text-slate-500 font-bold tracking-wider mb-2 px-1">Current Session</div>
+            <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-xl border border-slate-700/50">
               <div className="shrink-0 group relative">
                 {getRoleIcon()}
-                {isCollapsed && (
-                  <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-800 text-white text-xs font-bold rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">
-                    {getRoleLabel()}
-                  </div>
-                )}
               </div>
-              {!isCollapsed && (
-                <div className="min-w-0 flex-1">
-                  <div className="font-bold text-slate-200 text-sm truncate">{getRoleLabel()}</div>
-                  <div className="mt-0.5"><CloudStatus /></div>
-                </div>
-              )}
+              <div className="min-w-0 flex-1">
+                <div className="font-bold text-slate-200 text-sm truncate">{getRoleLabel()}</div>
+                <div className="mt-0.5"><CloudStatus /></div>
+              </div>
             </div>
           </div>
 
           {/* Navigation */}
           <nav className="flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden scrollbar-hide w-full pb-20">
-            {!isCollapsed && (
-              <div className="text-[10px] font-black uppercase text-slate-500 tracking-wider mb-3 px-1 mt-2">
-                Dashboards & Access
-              </div>
-            )}
+            <div className="text-[10px] font-black uppercase text-slate-500 tracking-wider mb-3 px-1 mt-2">
+              Dashboards & Access
+            </div>
             
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -290,7 +279,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     setActiveDashboard(item.key);
                     setIsMobileSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center ${isCollapsed ? 'justify-center p-3' : 'justify-between px-3.5 py-2.5'} rounded-xl text-xs font-bold transition-all group relative ${
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all group relative ${
                     isActive
                       ? 'bg-hospital-600 text-white shadow-lg shadow-hospital-900/30'
                       : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
@@ -298,15 +287,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 >
                   <div className="flex items-center gap-3 truncate min-w-0">
                     <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : item.colorClass}`} />
-                    {!isCollapsed && <span className="truncate">{item.label}</span>}
+                    <span className="truncate">{item.label}</span>
                   </div>
-                  {!isCollapsed && isActive && (
+                  {isActive && (
                     <span className="w-1.5 h-1.5 rounded-full bg-white shrink-0 animate-pulse ml-2" />
-                  )}
-                  {isCollapsed && (
-                    <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-800 text-white text-xs font-bold rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">
-                      {item.label}
-                    </div>
                   )}
                 </button>
               );
@@ -315,20 +299,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             <div className="pt-4 border-t border-slate-800/80 mt-4 space-y-1.5 w-full">
               <button 
                 onClick={() => { refreshData(); setIsMobileSidebarOpen(false); }} 
-                className={`w-full flex items-center ${isCollapsed ? 'justify-center p-3' : 'px-3.5 py-2.5 gap-3'} text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800/80 rounded-xl transition-colors group relative`}
+                className="w-full flex items-center px-3.5 py-2.5 gap-3 text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800/80 rounded-xl transition-colors group relative"
               >
                 <RefreshCw className="w-5 h-5 shrink-0" /> 
-                {!isCollapsed && <span>Sync Data</span>}
-                {isCollapsed && (
-                  <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-800 text-white text-xs font-bold rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">
-                    Sync Data
-                  </div>
-                )}
+                <span>Sync Data</span>
               </button>
             </div>
             
             {/* Notification Card for Package Team */}
-            {!isCollapsed && currentUserRole === 'PACKAGE_TEAM' && pendingWork.length > 0 && (
+            {currentUserRole === 'PACKAGE_TEAM' && pendingWork.length > 0 && (
               <div className="mt-8 animate-in slide-in-from-left-4 duration-500 w-full">
                 <div className="px-1 mb-3 flex items-center justify-between">
                    <span className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500 flex items-center gap-1.5">
@@ -375,22 +354,17 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           <div className="pt-4 border-t border-slate-800/80 w-full space-y-2 shrink-0">
             <button 
               onClick={handleLogout} 
-              className={`w-full flex items-center ${isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-3'} text-sm font-bold text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 rounded-xl transition-colors group relative`}
+              className="w-full flex items-center px-4 py-3 gap-3 text-sm font-bold text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 rounded-xl transition-colors group relative"
             >
               <LogOut className="w-5 h-5 shrink-0" /> 
-              {!isCollapsed && <span>Logout</span>}
-              {isCollapsed && (
-                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-800 text-white text-xs font-bold rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">
-                  Logout
-                </div>
-              )}
+              <span>Logout</span>
             </button>
           </div>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-x-hidden overflow-y-auto h-[100dvh] relative flex flex-col pt-16 lg:pt-0 w-full min-w-0 max-w-full box-border">
+      <main className="flex-1 overflow-x-hidden overflow-y-auto h-[100dvh] relative flex flex-col pt-16 lg:pt-0 w-full min-w-0 max-w-full box-border transition-all duration-300 ease-in-out">
         {/* Error Banner */}
         {saveStatus === 'error' && (
           <div className="bg-rose-500 text-white text-xs font-bold text-center py-2.5 px-4 shadow-md flex items-center justify-center gap-2 shrink-0 z-40 relative">
@@ -401,6 +375,22 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         )}
 
         <div className="p-3 sm:p-5 md:p-6 lg:p-8 max-w-[1600px] mx-auto w-full flex-1 min-w-0 box-border">
+          {/* Desktop Expand Toggle (Visible when sidebar is completely collapsed) */}
+          {isCollapsed && (
+            <div className="hidden lg:flex items-center gap-3 mb-4 sticky top-2 z-30">
+              <button
+                id="sidebar-expand-btn"
+                onClick={() => setIsDesktopSidebarCollapsed(false)}
+                className="p-2 px-3 bg-slate-900/95 hover:bg-slate-900 text-white rounded-xl shadow-lg border border-slate-700/80 backdrop-blur-sm transition-all flex items-center gap-2 cursor-pointer group focus:outline-none focus:ring-2 focus:ring-hospital-500"
+                title="Expand Navigation Menu"
+                aria-label="Expand Navigation Menu"
+              >
+                <Menu className="w-4 h-4 text-slate-300 group-hover:text-white transition-colors" />
+                <span className="text-xs font-bold text-slate-200 group-hover:text-white">Expand Menu</span>
+              </button>
+            </div>
+          )}
+
           {children}
         </div>
       </main>

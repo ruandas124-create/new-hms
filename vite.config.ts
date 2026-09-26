@@ -11,10 +11,26 @@ export default defineConfig(({ mode }) => {
     server: {
       host: '0.0.0.0',
       port: 3000,
+      proxy: {
+        '/supabase-proxy': {
+          target: 'https://mcfudvdwuvldkegwgtiz.supabase.co',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/supabase-proxy/, ''),
+          secure: true,
+        },
+      },
     },
     preview: {
       host: '0.0.0.0',
       port: 3000,
+      proxy: {
+        '/supabase-proxy': {
+          target: 'https://mcfudvdwuvldkegwgtiz.supabase.co',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/supabase-proxy/, ''),
+          secure: true,
+        },
+      },
     },
     define: {
       // Define on process.env to satisfy strict Gemini SDK requirements and project logic

@@ -173,6 +173,19 @@ export interface Patient {
   packageProposal?: PackageProposal;
 }
 
+export type LeadStatus = 'New Leads' | 'Schedule' | 'Follow-up' | 'Junk';
+
+export interface LeadNote {
+  id: string;
+  lead_id: string;
+  note: string;
+  created_at: string;
+  created_date?: string;
+  created_time?: string;
+  created_by?: string;
+  created_by_name: string;
+}
+
 export interface Appointment {
   id: string;
   hospital_id: string;
@@ -184,7 +197,7 @@ export interface Appointment {
   mobile: string;
   date: string; 
   time: string; 
-  status: 'Scheduled' | 'Arrived' | 'Cancelled' | 'Follow Up' | 'Confirmed' | 'Completed' | 'No Show' | string;
+  status: LeadStatus | 'Scheduled' | 'Arrived' | 'Cancelled' | 'Follow Up' | 'Confirmed' | 'Completed' | 'No Show' | string;
   bookingType: 'Follow Up' | 'Scheduled';
   visit_type?: string; // Persisted 'New' or 'Revisit'
   createdAt: string;
