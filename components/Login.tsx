@@ -4,7 +4,7 @@ import { Role, HOSPITAL_LOGO_URL } from "../types";
 import { 
   Building2, Mail, Lock, Loader2, Stethoscope, 
   Users, Briefcase, ChevronRight, ShieldCheck, 
-  Sparkles, Fingerprint, Crown 
+  Sparkles, Fingerprint, Crown, Eye, EyeOff, Target, BarChart3
 } from 'lucide-react';
 
 export const Login: React.FC = () => {
@@ -12,6 +12,7 @@ export const Login: React.FC = () => {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -120,216 +121,216 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Decorative Elements */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-hospital-600/10 blur-[120px] rounded-full animate-pulse"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/5 blur-[150px] rounded-full"></div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full opacity-10 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-px h-64 bg-gradient-to-b from-transparent via-hospital-500 to-transparent"></div>
-        <div className="absolute top-1/2 right-1/3 w-px h-96 bg-gradient-to-b from-transparent via-blue-400 to-transparent"></div>
-      </div>
+    <div className="min-h-[100dvh] bg-slate-950 flex flex-col items-center justify-center p-3 sm:p-6 md:p-8 relative overflow-hidden text-slate-100">
+      {/* Background Subtle Ambient Glow */}
+      <div className="absolute top-[-10%] left-[-10%] w-[45%] h-[45%] bg-hospital-600/15 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[150px] rounded-full pointer-events-none" />
 
-      <div className="mb-10 text-center relative z-10 animate-in fade-in slide-in-from-top-4 duration-700">
-        <div className="flex flex-col items-center justify-center gap-4">
-           <div className="relative">
-             <div className="absolute inset-0 bg-hospital-500/20 blur-2xl rounded-full scale-150"></div>
-             <div className="bg-slate-900/90 p-4 px-6 rounded-[2.5rem] shadow-2xl border border-white/10 relative z-10 flex items-center justify-center">
-               <img 
-                 src={HOSPITAL_LOGO_URL} 
-                 alt={systemName || "HMS"} 
-                 className="h-20 w-auto object-contain max-w-[220px] filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]" 
-               />
-             </div>
-           </div>
-           <div className="text-center">
-             <h1 className="text-4xl md:text-5xl font-black text-white tracking-tighter uppercase mb-1">{systemName || "HMS"}</h1>
-             <div className="flex items-center justify-center gap-2">
-               <div className="h-px w-8 bg-hospital-600/30"></div>
-               <p className="text-hospital-500 font-bold text-[10px] uppercase tracking-[0.4em]">Hospital Management</p>
-               <div className="h-px w-8 bg-hospital-600/30"></div>
-             </div>
-           </div>
-        </div>
-      </div>
-
-      <div className="bg-white p-1 md:p-1.5 rounded-[3rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.5)] w-full max-w-lg relative z-10 animate-in fade-in zoom-in-95 duration-500">
-        <div className="bg-white rounded-[2.8rem] p-8 md:p-12 border border-slate-100 flex flex-col relative overflow-hidden">
-          
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Staff Login</h2>
-              <p className="text-slate-400 text-xs font-medium mt-1 uppercase tracking-widest">Authorized Access Only</p>
-            </div>
-            <div className="bg-slate-50 p-3 rounded-2xl">
-              <ShieldCheck className="w-6 h-6 text-slate-400" />
-            </div>
+      {/* Hospital Brand Header */}
+      <div className="mb-6 sm:mb-8 text-center relative z-10 w-full max-w-md animate-in fade-in duration-500">
+        <div className="flex flex-col items-center justify-center gap-3">
+          <div className="bg-white/95 p-3 px-5 rounded-2xl shadow-xl border border-white/20 flex items-center justify-center">
+            <img 
+              src={HOSPITAL_LOGO_URL} 
+              alt={systemName || "HMS"} 
+              className="h-12 sm:h-14 w-auto object-contain max-w-[200px]"
+              onError={(e) => {
+                (e.currentTarget as HTMLElement).style.display = 'none';
+              }} 
+            />
           </div>
-          
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div className="space-y-2">
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Secure Email</label>
-              <div className="relative group">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-hospital-600 transition-colors">
-                  <Mail className="w-5 h-5" />
-                </div>
-                <input
-                  type="email"
-                  className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-hospital-500/50 focus:outline-none transition-all font-bold text-slate-700 placeholder-slate-300"
-                  placeholder="name@hms.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Password</label>
-               <div className="relative group">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-hospital-600 transition-colors">
-                  <Lock className="w-5 h-5" />
-                </div>
-                <input
-                  type="password"
-                  className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-hospital-500/50 focus:outline-none transition-all font-bold text-slate-700 placeholder-slate-300"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-
-            {error && (
-              <div className="p-4 bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-wider rounded-2xl border border-red-100 animate-in slide-in-from-top-2">
-                <div className="flex items-center gap-2">
-                  <Fingerprint className="w-4 h-4" />
-                  {error}
-                </div>
-              </div>
-            )}
-
-            <button 
-              type="submit" 
-              disabled={isLoading}
-              className="w-full bg-slate-900 hover:bg-hospital-700 text-white font-black py-5 rounded-2xl shadow-xl shadow-slate-200 active:scale-[0.98] transition-all flex items-center justify-center gap-3 uppercase text-xs tracking-[0.2em]"
-            >
-              {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <>Sign In to System <ChevronRight className="w-4 h-4" /></>
-              )}
-            </button>
-          </form>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              {systemName || "HMS Hospital Management"}
+            </h1>
+            <p className="text-hospital-400 font-bold text-[11px] uppercase tracking-widest mt-1">
+              Clinical & Surgical Operations
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Demo Credentials Panel */}
-      <div className="mt-6 w-full max-w-lg bg-slate-900 border border-slate-800 rounded-[2.5rem] p-5 sm:p-6 text-center animate-in fade-in duration-700 delay-100 relative z-10 shadow-xl">
-        <div className="flex items-center justify-center gap-2 mb-4">
-          <Sparkles className="w-3.5 h-3.5 text-hospital-500" />
-          <h3 className="text-[10px] font-black text-white uppercase tracking-[0.3em]">Quick One-Tap Demo Access</h3>
+      {/* Main Login Card */}
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-6 sm:p-8 text-slate-800 relative z-10 animate-in fade-in zoom-in-95 duration-300">
+        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+          <div>
+            <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Staff Sign In</h2>
+            <p className="text-slate-500 text-xs font-medium mt-0.5">Enter authorized credentials to continue</p>
+          </div>
+          <div className="w-10 h-10 rounded-2xl bg-hospital-50 border border-hospital-100 flex items-center justify-center text-hospital-600 shrink-0">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700">
+              Staff Email Address <span className="text-rose-500">*</span>
+            </label>
+            <div className="relative group">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-hospital-600 transition-colors pointer-events-none">
+                <Mail className="w-4 h-4" />
+              </div>
+              <input
+                type="email"
+                required
+                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-hospital-500 focus:ring-2 focus:ring-hospital-500/20 focus:outline-none transition-all text-sm font-semibold text-slate-800 placeholder-slate-400"
+                placeholder="staff@hms.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700">
+              Account Password <span className="text-rose-500">*</span>
+            </label>
+            <div className="relative group">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-hospital-600 transition-colors pointer-events-none">
+                <Lock className="w-4 h-4" />
+              </div>
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-hospital-500 focus:ring-2 focus:ring-hospital-500/20 focus:outline-none transition-all text-sm font-semibold text-slate-800 placeholder-slate-400"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(prev => !prev)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="p-3 bg-rose-50 text-rose-700 text-xs font-bold rounded-xl border border-rose-200 flex items-center gap-2 animate-in fade-in duration-200">
+              <Fingerprint className="w-4 h-4 shrink-0 text-rose-600" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <button 
+            type="submit" 
+            disabled={isLoading}
+            className="w-full mt-2 bg-hospital-600 hover:bg-hospital-700 active:scale-[0.98] text-white font-bold py-3 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-wider disabled:opacity-50 cursor-pointer min-h-[44px]"
+          >
+            {isLoading ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" /> Signing In...
+              </span>
+            ) : (
+              <>Sign In to HMS <ChevronRight className="w-4 h-4" /></>
+            )}
+          </button>
+        </form>
+      </div>
+
+      {/* Quick Demo Access Credentials Card */}
+      <div className="mt-5 w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-5 relative z-10 shadow-lg text-slate-200">
+        <div className="flex items-center justify-between mb-3 px-1">
+          <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Quick Role Access
+          </span>
+          <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Demo Accounts</span>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-2 text-left">
+          {/* Master */}
           <button 
             type="button" 
             onClick={() => { setEmail("master@hms.com"); setPassword("Master@123"); }} 
-            className="p-3 bg-gradient-to-br from-amber-950/40 to-slate-950/70 hover:from-amber-950/60 text-left rounded-2xl border border-amber-500/30 hover:border-amber-400 transition-all flex flex-col justify-between group active:scale-[0.97] shadow-sm"
+            className="p-2.5 bg-slate-950/80 hover:bg-slate-950 rounded-xl border border-amber-500/30 hover:border-amber-400 transition-all group flex flex-col justify-between cursor-pointer"
           >
-            <div className="flex items-center justify-between w-full mb-2">
-              <span className="text-[9px] font-black uppercase text-amber-400 tracking-wider flex items-center gap-1">
+            <div className="flex items-center justify-between w-full mb-1">
+              <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider flex items-center gap-1">
                 <Crown className="w-3 h-3 text-amber-400" /> Master
               </span>
-              <Crown className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
             </div>
-            <div>
-              <div className="text-[10px] font-black text-amber-100 truncate">master@hms.com</div>
-              <div className="text-[9px] font-mono font-medium text-amber-300/70">Master@123</div>
-            </div>
+            <div className="text-[11px] font-bold text-slate-200 truncate">master@hms.com</div>
           </button>
 
-          <button 
-            type="button" 
-            onClick={() => { setEmail("report@hms.com"); setPassword("Report@123"); }} 
-            className="p-3 bg-slate-950/50 hover:bg-slate-950 text-left rounded-2xl border border-slate-800 hover:border-hospital-500/40 transition-all flex flex-col justify-between group active:scale-[0.97]"
-          >
-            <div className="flex items-center justify-between w-full mb-2">
-              <span className="text-[9px] font-black uppercase text-hospital-500 tracking-wider">Analytics</span>
-              <Fingerprint className="w-4 h-4 text-slate-600 group-hover:text-hospital-500 transition-colors" />
-            </div>
-            <div>
-              <div className="text-[10px] font-black text-slate-200 truncate">report@hms.com</div>
-              <div className="text-[9px] font-mono font-medium text-slate-500">Report@123</div>
-            </div>
-          </button>
-          
+          {/* Front Office */}
           <button 
             type="button" 
             onClick={() => { setEmail("office@hms.com"); setPassword("Hms1984@"); }} 
-            className="p-3 bg-slate-950/50 hover:bg-slate-950 text-left rounded-2xl border border-slate-800 hover:border-hospital-500/40 transition-all flex flex-col justify-between group active:scale-[0.97]"
+            className="p-2.5 bg-slate-950/80 hover:bg-slate-950 rounded-xl border border-slate-800 hover:border-hospital-500/50 transition-all group flex flex-col justify-between cursor-pointer"
           >
-            <div className="flex items-center justify-between w-full mb-2">
-              <span className="text-[9px] font-black uppercase text-hospital-500 tracking-wider">Front Office</span>
-              <Users className="w-4 h-4 text-slate-600 group-hover:text-hospital-500 transition-colors" />
+            <div className="flex items-center justify-between w-full mb-1">
+              <span className="text-[10px] font-black text-blue-400 uppercase tracking-wider flex items-center gap-1">
+                <Users className="w-3 h-3 text-blue-400" /> Front Office
+              </span>
             </div>
-            <div>
-              <div className="text-[10px] font-black text-slate-200 truncate">office@hms.com</div>
-              <div className="text-[9px] font-mono font-medium text-slate-500">Hms1984@</div>
-            </div>
+            <div className="text-[11px] font-bold text-slate-200 truncate">office@hms.com</div>
           </button>
 
+          {/* Doctor */}
           <button 
             type="button" 
             onClick={() => { setEmail("doctor@hms.com"); setPassword("Doctor@123"); }} 
-            className="p-3 bg-slate-950/50 hover:bg-slate-950 text-left rounded-2xl border border-slate-800 hover:border-hospital-500/40 transition-all flex flex-col justify-between group active:scale-[0.97]"
+            className="p-2.5 bg-slate-950/80 hover:bg-slate-950 rounded-xl border border-slate-800 hover:border-hospital-500/50 transition-all group flex flex-col justify-between cursor-pointer"
           >
-            <div className="flex items-center justify-between w-full mb-2">
-              <span className="text-[9px] font-black uppercase text-hospital-500 tracking-wider">Doctor</span>
-              <Stethoscope className="w-4 h-4 text-slate-600 group-hover:text-hospital-500 transition-colors" />
+            <div className="flex items-center justify-between w-full mb-1">
+              <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                <Stethoscope className="w-3 h-3 text-emerald-400" /> Doctor
+              </span>
             </div>
-            <div>
-              <div className="text-[10px] font-black text-slate-200 truncate">doctor@hms.com</div>
-              <div className="text-[9px] font-mono font-medium text-slate-500">Doctor@123</div>
-            </div>
+            <div className="text-[11px] font-bold text-slate-200 truncate">doctor@hms.com</div>
           </button>
 
+          {/* Package Team */}
           <button 
             type="button" 
             onClick={() => { setEmail("team@hms.com"); setPassword("Team8131@"); }} 
-            className="p-3 bg-slate-950/50 hover:bg-slate-950 text-left rounded-2xl border border-slate-800 hover:border-hospital-500/40 transition-all flex flex-col justify-between group active:scale-[0.97]"
+            className="p-2.5 bg-slate-950/80 hover:bg-slate-950 rounded-xl border border-slate-800 hover:border-hospital-500/50 transition-all group flex flex-col justify-between cursor-pointer"
           >
-            <div className="flex items-center justify-between w-full mb-2">
-              <span className="text-[9px] font-black uppercase text-hospital-500 tracking-wider">Package</span>
-              <Building2 className="w-4 h-4 text-slate-600 group-hover:text-hospital-500 transition-colors" />
+            <div className="flex items-center justify-between w-full mb-1">
+              <span className="text-[10px] font-black text-purple-400 uppercase tracking-wider flex items-center gap-1">
+                <Briefcase className="w-3 h-3 text-purple-400" /> Package
+              </span>
             </div>
-            <div>
-              <div className="text-[10px] font-black text-slate-200 truncate">team@hms.com</div>
-              <div className="text-[9px] font-mono font-medium text-slate-500">Team8131@</div>
-            </div>
+            <div className="text-[11px] font-bold text-slate-200 truncate">team@hms.com</div>
           </button>
 
+          {/* Analytics Hub */}
+          <button 
+            type="button" 
+            onClick={() => { setEmail("report@hms.com"); setPassword("Report@123"); }} 
+            className="p-2.5 bg-slate-950/80 hover:bg-slate-950 rounded-xl border border-slate-800 hover:border-hospital-500/50 transition-all group flex flex-col justify-between cursor-pointer"
+          >
+            <div className="flex items-center justify-between w-full mb-1">
+              <span className="text-[10px] font-black text-indigo-400 uppercase tracking-wider flex items-center gap-1">
+                <BarChart3 className="w-3 h-3 text-indigo-400" /> Analytics
+              </span>
+            </div>
+            <div className="text-[11px] font-bold text-slate-200 truncate">report@hms.com</div>
+          </button>
+
+          {/* Sales Leads */}
           <button 
             type="button" 
             onClick={() => { setEmail("sales@hms.com"); setPassword("Sales@123"); }} 
-            className="p-3 bg-slate-950/50 hover:bg-slate-950 text-left rounded-2xl border border-slate-800 hover:border-hospital-500/40 transition-all flex flex-col justify-between group active:scale-[0.97]"
+            className="p-2.5 bg-slate-950/80 hover:bg-slate-950 rounded-xl border border-slate-800 hover:border-rose-500/50 transition-all group flex flex-col justify-between cursor-pointer"
           >
-            <div className="flex items-center justify-between w-full mb-2">
-              <span className="text-[9px] font-black uppercase text-rose-400 tracking-wider">Sales</span>
-              <Briefcase className="w-4 h-4 text-slate-600 group-hover:text-rose-400 transition-colors" />
+            <div className="flex items-center justify-between w-full mb-1">
+              <span className="text-[10px] font-black text-rose-400 uppercase tracking-wider flex items-center gap-1">
+                <Target className="w-3 h-3 text-rose-400" /> Sales
+              </span>
             </div>
-            <div>
-              <div className="text-[10px] font-black text-slate-200 truncate">sales@hms.com</div>
-              <div className="text-[9px] font-mono font-medium text-slate-500">Sales@123</div>
-            </div>
+            <div className="text-[11px] font-bold text-slate-200 truncate">sales@hms.com</div>
           </button>
         </div>
       </div>
       
-      <div className="mt-10 text-slate-500 text-[10px] font-bold uppercase tracking-[0.5em] flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500">
-        <Sparkles className="w-3 h-3 text-hospital-500" />
-        Encrypted & Secure Session
-        <Sparkles className="w-3 h-3 text-hospital-500" />
+      <div className="mt-5 text-slate-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
+        <ShieldCheck className="w-3.5 h-3.5 text-hospital-500" />
+        Role-Based Secure Healthcare Session
       </div>
     </div>
   );

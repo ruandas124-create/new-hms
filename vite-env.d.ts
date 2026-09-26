@@ -5,6 +5,11 @@ interface ImportMetaEnv {
   readonly VITE_APPSCRIPT_URL: string;
   readonly SENDGRID_API_KEY: string;
   readonly API_KEY: string;
+  readonly VITE_SUPABASE_URL: string;
+  readonly VITE_SUPABASE_ANON_KEY: string;
+  readonly SUPABASE_URL: string;
+  readonly SUPABASE_ANON_KEY: string;
+  readonly NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: string;
   [key: string]: string | undefined;
 }
 
@@ -17,6 +22,11 @@ declare namespace NodeJS {
     API_KEY: string;
     VITE_APPSCRIPT_URL: string;
     SENDGRID_API_KEY: string;
+    VITE_SUPABASE_URL: string;
+    VITE_SUPABASE_ANON_KEY: string;
+    SUPABASE_URL: string;
+    SUPABASE_ANON_KEY: string;
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: string;
     [key: string]: string | undefined;
   }
 }

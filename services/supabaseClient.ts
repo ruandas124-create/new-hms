@@ -6,16 +6,16 @@ import { createClient } from '@supabase/supabase-js';
  * This is CRITICAL for Vite's `define` plugin to perform literal string replacement.
  */
 export const supabaseUrl = 
-  (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_URL) || 
+  (typeof process !== 'undefined' && (process.env?.VITE_SUPABASE_URL || process.env?.SUPABASE_URL)) || 
   // @ts-ignore
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) || 
-  "https://mcfudvdwuvldkegwgtiz.supabase.co";
+  (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_SUPABASE_URL || import.meta.env?.SUPABASE_URL)) || 
+  "https://aeghhbrvlefahqdbnudc.supabase.co";
 
 export const supabaseAnonKey = 
-  (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_ANON_KEY) || 
+  (typeof process !== 'undefined' && (process.env?.VITE_SUPABASE_ANON_KEY || process.env?.SUPABASE_ANON_KEY || process.env?.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)) || 
   // @ts-ignore
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY) || 
-  "sb_publishable_7oLgId9S_lriwXxrETiHuQ_WbecTVK5";
+  (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_SUPABASE_ANON_KEY || import.meta.env?.SUPABASE_ANON_KEY || import.meta.env?.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)) || 
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZ2hoYnJ2bGVmYWhxZGJudWRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzOTQxODksImV4cCI6MjEwNTk3MDE4OX0.DkqfaTBaysYn0I0MLnKx9wM8Cd3qVUPXT8txlfxuzz0";
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('CRITICAL: Supabase credentials could not be resolved.');

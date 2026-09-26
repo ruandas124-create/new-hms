@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       proxy: {
         '/supabase-proxy': {
-          target: 'https://mcfudvdwuvldkegwgtiz.supabase.co',
+          target: env.VITE_SUPABASE_URL || env.SUPABASE_URL || 'https://aeghhbrvlefahqdbnudc.supabase.co',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/supabase-proxy/, ''),
           secure: true,
@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       proxy: {
         '/supabase-proxy': {
-          target: 'https://mcfudvdwuvldkegwgtiz.supabase.co',
+          target: env.VITE_SUPABASE_URL || env.SUPABASE_URL || 'https://aeghhbrvlefahqdbnudc.supabase.co',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/supabase-proxy/, ''),
           secure: true,
@@ -37,6 +37,11 @@ export default defineConfig(({ mode }) => {
       'process.env.API_KEY': JSON.stringify(env.API_KEY || env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY),
       'process.env.VITE_APPSCRIPT_URL': JSON.stringify(env.VITE_APPSCRIPT_URL || ""),
       'process.env.SENDGRID_API_KEY': JSON.stringify(env.SENDGRID_API_KEY || ""),
+      'process.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL || env.SUPABASE_URL || "https://aeghhbrvlefahqdbnudc.supabase.co"),
+      'process.env.SUPABASE_URL': JSON.stringify(env.SUPABASE_URL || env.VITE_SUPABASE_URL || "https://aeghhbrvlefahqdbnudc.supabase.co"),
+      'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || ""),
+      'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || ""),
+      'process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY': JSON.stringify(env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || ""),
       // Maintain import.meta.env for standard Vite compatibility
       'import.meta.env.API_KEY': JSON.stringify(env.API_KEY || env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY),
     }

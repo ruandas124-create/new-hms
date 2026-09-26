@@ -528,65 +528,168 @@ export const FrontOfficeDashboard: React.FC = () => {
   const displayData = activeTab === 'REGISTRATION' ? filteredPatients : activeTab === 'APPOINTMENTS' ? filteredAppointments : combinedHistoryData;
   const filterInputClasses = "h-10 w-full bg-slate-50 border border-slate-100 rounded-xl px-3 text-[10px] font-bold focus:ring-2 focus:ring-hospital-500 outline-none transition-all appearance-none";
 
+  const todayIso = new Date().toISOString().split('T')[0];
+  const todayRegCount = patients.filter(p => p.entry_date === todayIso).length;
+  const arrivedCount = patients.filter(p => p.status === 'Arrived').length;
+  const todayApptCount = appointments.filter(a => a.date === todayIso).length;
+  const totalCount = patients.length;
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 tracking-tight">Front Office</h2>
-          <p className="text-gray-500 text-sm">Patient Registration & Management</p>
+          <h2 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">Front Office Operations</h2>
+          <p className="text-slate-500 text-xs sm:text-sm font-medium mt-0.5">Patient Intake, Scheduling & Clinical Registry</p>
         </div>
         <ExportButtons patients={activeTab === 'GLOBAL_SEARCH' ? (combinedHistoryData as any) : patients} role="front_office" selectedPatient={null} />
       </div>
 
-      <div className="flex bg-white p-1 rounded-xl border w-full sm:w-fit shadow-sm overflow-x-auto scrollbar-hide">
+      {/* KPI Overview Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Today's OPD</span>
+            <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1 font-mono tabular-nums">{todayRegCount}</div>
+            <span className="text-[10px] text-slate-400 font-medium">Logged Today</span>
+          </div>
+          <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+            <User className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Arrived / Consultation</span>
+            <div className="text-xl sm:text-2xl font-black text-emerald-600 mt-1 font-mono tabular-nums">{arrivedCount}</div>
+            <span className="text-[10px] text-slate-400 font-medium">In Clinical Queue</span>
+          </div>
+          <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <Clock className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Today's Appts</span>
+            <div className="text-xl sm:text-2xl font-black text-blue-600 mt-1 font-mono tabular-nums">{todayApptCount}</div>
+            <span className="text-[10px] text-slate-400 font-medium">Booked for Today</span>
+          </div>
+          <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <CalendarCheck className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Total Directory</span>
+            <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1 font-mono tabular-nums">{totalCount}</div>
+            <span className="text-[10px] text-slate-400 font-medium">Registered Files</span>
+          </div>
+          <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+            <FileText className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation Segmented Tab Switcher */}
+      <div className="flex bg-slate-100/90 p-1 rounded-2xl w-full sm:w-fit shadow-xs overflow-x-auto scrollbar-none gap-1">
         {['REGISTRATION', 'APPOINTMENTS', 'GLOBAL_SEARCH'].map((tab) => (
-          <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex-1 sm:flex-initial px-4 lg:px-6 py-2.5 rounded-lg font-bold text-xs transition-all flex items-center justify-center gap-2 whitespace-nowrap ${activeTab === tab ? 'bg-hospital-600 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}>
-            {tab === 'REGISTRATION' && <User className="w-4 h-4" />}
-            {tab === 'APPOINTMENTS' && <CalendarCheck className="w-4 h-4" />}
-            {tab === 'GLOBAL_SEARCH' && <Search className="w-4 h-4" />}
-            {tab === 'REGISTRATION' ? 'OPD History' : tab === 'APPOINTMENTS' ? 'Scheduled Appointments' : 'Global Search'}
+          <button 
+            key={tab} 
+            onClick={() => setActiveTab(tab as any)} 
+            className={`flex-1 sm:flex-initial px-4 sm:px-5 py-2 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === tab 
+                ? 'bg-white text-hospital-700 shadow-sm' 
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+            }`}
+          >
+            {tab === 'REGISTRATION' && <User className="w-4 h-4 text-hospital-600" />}
+            {tab === 'APPOINTMENTS' && <CalendarCheck className="w-4 h-4 text-emerald-600" />}
+            {tab === 'GLOBAL_SEARCH' && <Search className="w-4 h-4 text-indigo-600" />}
+            {tab === 'REGISTRATION' ? 'OPD Registry' : tab === 'APPOINTMENTS' ? 'Scheduled Roster' : 'Global Search & Audit'}
           </button>
         ))}
       </div>
 
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-50 flex flex-col gap-4">
-        <div className="flex flex-col lg:flex-row gap-4 justify-between items-center">
-          <div className="flex flex-1 flex-col sm:flex-row gap-4 items-center w-full">
-            <div className="relative w-full lg:max-w-96">
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input type="text" placeholder="Search..." className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-2 focus:ring-hospital-500 outline-none font-medium text-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+      {/* Search and Filters Card */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-xs border border-slate-200/80 flex flex-col gap-4">
+        <div className="flex flex-col lg:flex-row gap-4 justify-between items-stretch lg:items-center">
+          <div className="flex flex-1 flex-col sm:flex-row gap-3 items-stretch sm:items-center w-full">
+            <div className="relative w-full lg:max-w-xs">
+              <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+              <input 
+                type="text" 
+                placeholder="Search patient, mobile, file ID..." 
+                className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-hospital-500/20 focus:border-hospital-500 outline-none font-semibold text-xs text-slate-800 transition-all" 
+                value={searchTerm} 
+                onChange={e => setSearchTerm(e.target.value)} 
+              />
             </div>
+
             {activeTab === 'REGISTRATION' && (
-                <div className="flex items-center gap-2 w-full sm:w-auto animate-in fade-in duration-300 flex-wrap">
-                    <span className="text-[9px] font-black uppercase text-slate-400">From</span>
-                    <input type="date" className="w-32 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold font-mono" value={opdStartDate} onChange={e => setOpdStartDate(e.target.value)} />
-                    <span className="text-[9px] font-black uppercase text-slate-400">To</span>
-                    <input type="date" className="w-32 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold font-mono" value={opdEndDate} onChange={e => setOpdEndDate(e.target.value)} />
-                    <span className="text-[9px] font-black uppercase text-slate-400 ml-2">Doctor</span>
-                    <select 
-                      className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold outline-none"
-                      value={opdDoctorFilter} 
-                      onChange={e => setOpdDoctorFilter(e.target.value)}
-                    >
-                      <option value="ALL">All Doctors</option>
-                      {staffUsers?.filter(u => u.role === 'DOCTOR').map(doc => (
-                        <option key={doc.id} value={doc.id}>{doc.name}</option>
-                      ))}
-                    </select>
-                </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto animate-in fade-in duration-200 flex-wrap">
+                <span className="text-[10px] font-bold uppercase text-slate-400">From</span>
+                <input 
+                  type="date" 
+                  className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500" 
+                  value={opdStartDate} 
+                  onChange={e => setOpdStartDate(e.target.value)} 
+                />
+                <span className="text-[10px] font-bold uppercase text-slate-400">To</span>
+                <input 
+                  type="date" 
+                  className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500" 
+                  value={opdEndDate} 
+                  onChange={e => setOpdEndDate(e.target.value)} 
+                />
+                <span className="text-[10px] font-bold uppercase text-slate-400 ml-1">Doctor</span>
+                <select 
+                  className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500"
+                  value={opdDoctorFilter} 
+                  onChange={e => setOpdDoctorFilter(e.target.value)}
+                >
+                  <option value="ALL">All Doctors</option>
+                  {staffUsers?.filter(u => u.role === 'DOCTOR').map(doc => (
+                    <option key={doc.id} value={doc.id}>{doc.name}</option>
+                  ))}
+                </select>
+              </div>
             )}
+
             {activeTab === 'APPOINTMENTS' && (
-                <div className="flex items-center gap-2 w-full sm:w-auto animate-in fade-in duration-300">
-                    <span className="text-[9px] font-black uppercase text-slate-400">From</span>
-                    <input type="date" className="w-32 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold" value={apptStartDate} onChange={e => setApptStartDate(e.target.value)} />
-                    <span className="text-[9px] font-black uppercase text-slate-400">To</span>
-                    <input type="date" className="w-32 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold" value={apptEndDate} onChange={e => setApptEndDate(e.target.value)} />
-                </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto animate-in fade-in duration-200 flex-wrap">
+                <span className="text-[10px] font-bold uppercase text-slate-400">From</span>
+                <input 
+                  type="date" 
+                  className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500" 
+                  value={apptStartDate} 
+                  onChange={e => setApptStartDate(e.target.value)} 
+                />
+                <span className="text-[10px] font-bold uppercase text-slate-400">To</span>
+                <input 
+                  type="date" 
+                  className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500" 
+                  value={apptEndDate} 
+                  onChange={e => setApptEndDate(e.target.value)} 
+                />
+              </div>
             )}
           </div>
-          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-            <button onClick={() => { resetBookingForm(); setShowBookingForm(true); }} className="w-full bg-white border-2 border-hospital-600 text-hospital-600 px-6 py-3 rounded-xl hover:bg-hospital-50 flex items-center justify-center gap-2 font-bold transition-all"><CalendarCheck className="w-5 h-5" /> Book Appointment</button>
-            <button onClick={() => { resetForm(); setShowForm(true); }} className="w-full bg-hospital-600 text-white px-6 py-3 rounded-xl hover:bg-hospital-700 flex items-center justify-center gap-2 font-bold shadow-lg shadow-hospital-100 transition-all"><PlusCircle className="w-5 h-5" /> Register Patient</button>
+
+          <div className="flex flex-col sm:flex-row gap-2.5 w-full lg:w-auto shrink-0">
+            <button 
+              onClick={() => { resetBookingForm(); setShowBookingForm(true); }} 
+              className="w-full sm:w-auto bg-white border border-hospital-600 hover:bg-hospital-50 text-hospital-700 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 font-bold text-xs transition-all shadow-xs active:scale-95 cursor-pointer"
+            >
+              <CalendarCheck className="w-4 h-4 text-hospital-600" /> Book Appointment
+            </button>
+            <button 
+              onClick={() => { resetForm(); setShowForm(true); }} 
+              className="w-full sm:w-auto bg-hospital-600 hover:bg-hospital-700 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 font-bold text-xs shadow-sm transition-all active:scale-95 cursor-pointer"
+            >
+              <PlusCircle className="w-4 h-4" /> Register Patient
+            </button>
           </div>
         </div>
 
