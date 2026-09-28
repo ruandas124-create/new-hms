@@ -3,8 +3,7 @@ import { useHospital } from '../context/HospitalContext';
 import { 
   LogOut, Activity, User, Briefcase, FileText, Menu, X, Cloud, 
   Check, Loader2, AlertCircle, RefreshCw, BarChart3, AlertTriangle, 
-  Clock, Calendar, Shield, Crown, ChevronRight, ChevronLeft, Lock, Target,
-  ShieldCheck
+  Clock, Calendar, Shield, Crown, ChevronRight, ChevronLeft, Lock, Target, Key
 } from 'lucide-react';
 import { SurgeonCode, DashboardKey, HOSPITAL_LOGO_URL } from '../types';
 
@@ -109,7 +108,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     if (currentUserRole === 'HOSPITAL' || currentUserRole === 'ANALYTICS' || currentUserRole === 'ANALYTICS_HUB') {
       return [
         { key: 'analytics_hub' as DashboardKey, label: 'Analytics Hub', icon: BarChart3, colorClass: 'text-indigo-400' },
-        { key: 'analytics_give_access' as DashboardKey, label: 'Give Access', icon: ShieldCheck, colorClass: 'text-amber-400' }
+        { key: 'analytics_give_access' as DashboardKey, label: 'Give Access', icon: Key, colorClass: 'text-emerald-400' }
       ];
     }
 

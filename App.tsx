@@ -5,6 +5,7 @@ import { Layout } from './components/Layout';
 import { Login } from './components/Login';
 import { MasterDashboard } from './views/MasterDashboard';
 import { AnalyticsDashboard } from './views/AnalyticsDashboard';
+import { GiveAccessView } from './views/GiveAccessView';
 import { FrontOfficeDashboard } from './views/FrontOfficeDashboard';
 import { DoctorDashboard } from './views/DoctorDashboard';
 import { PackageTeamDashboard } from './views/PackageTeamDashboard';
@@ -88,8 +89,9 @@ const MainApp: React.FC = () => {
       case 'master_reports':
         return <MasterDashboard />;
       case 'analytics_hub':
-      case 'analytics_give_access':
         return <AnalyticsDashboard />;
+      case 'analytics_give_access':
+        return <GiveAccessView />;
       case 'front_office':
         return <FrontOfficeDashboard />;
       case 'doctor':
