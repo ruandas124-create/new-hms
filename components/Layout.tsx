@@ -105,7 +105,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       ];
     }
 
-    if (currentUserRole === 'ADMIN' || currentUserRole === 'ANALYTICS' || currentUserRole === 'ANALYTICS_HUB') {
+    if (currentUserRole === 'HOSPITAL' || currentUserRole === 'ANALYTICS' || currentUserRole === 'ANALYTICS_HUB') {
+      return [
+        { key: 'analytics_hub' as DashboardKey, label: 'Analytics Hub', icon: BarChart3, colorClass: 'text-indigo-400' }
+      ];
+    }
+
+    if (currentUserRole === 'ADMIN') {
       return allDashboards.filter(d => {
         if (d.key === 'analytics_hub') return true;
         if (d.key === 'front_office') return dashboardPermissions.front_office;

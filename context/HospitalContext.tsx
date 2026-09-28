@@ -165,10 +165,6 @@ export const checkPermission = (
   // 3. ANALYTICS / ANALYTICS_HUB / HOSPITAL
   if (role === 'ANALYTICS' || role === 'ANALYTICS_HUB' || role === 'HOSPITAL') {
     if (dashboard === 'analytics_hub') return !!permissions.analytics_hub;
-    if (dashboard === 'front_office') return !!permissions.front_office;
-    if (dashboard === 'doctor') return !!permissions.doctor;
-    if (dashboard === 'package') return !!permissions.package;
-    if (dashboard === 'sales') return !!permissions.sales;
     return false;
   }
 

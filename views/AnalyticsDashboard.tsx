@@ -210,6 +210,8 @@ export const AnalyticsDashboard: React.FC = () => {
     appointments, 
     staffUsers, 
     currentUserRole, 
+    currentTenantId,
+    currentUserStaff,
     dashboardPermissions, 
     reportPermissions,
     schedulingPermissions,
@@ -223,6 +225,22 @@ export const AnalyticsDashboard: React.FC = () => {
   
   // Permission update feedback state
   const [updatingPermissionKey, setUpdatingPermissionKey] = useState<string | null>(null);
+
+  const isHospitalAccount = currentUserRole === 'HOSPITAL' || currentUserRole === 'ANALYTICS' || currentUserRole === 'ANALYTICS_HUB';
+  
+  const tenantHospitalId = currentTenantId || currentUserStaff?.hospital_id || currentUserStaff?.id;
+  
+  const hospitalDoctors = useMemo(() => {
+    return staffUsers.filter(u => u.role === 'DOCTOR' && (u.hospital_id === tenantHospitalId || u.grantedBy === 'Analytics Hub') && u.accessStatus !== 'Revoked');
+  }, [staffUsers, tenantHospitalId]);
+
+  const hospitalFrontOffice = useMemo(() => {
+    return staffUsers.find(u => u.role === 'FRONT_OFFICE' && (u.hospital_id === tenantHospitalId || u.grantedBy === 'Analytics Hub') && u.accessStatus !== 'Revoked');
+  }, [staffUsers, tenantHospitalId]);
+
+  const hospitalPackage = useMemo(() => {
+    return staffUsers.find(u => (u.role === 'PACKAGE' || u.role === 'PACKAGE_TEAM') && (u.hospital_id === tenantHospitalId || u.grantedBy === 'Analytics Hub') && u.accessStatus !== 'Revoked');
+  }, [staffUsers, tenantHospitalId]);
 
   const handleTogglePermission = async (key: 'front_office' | 'doctor' | 'package', grant: boolean) => {
     setUpdatingPermissionKey(key);
@@ -1000,6 +1018,63 @@ export const AnalyticsDashboard: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
+      {/* New Hospital Login Notification / Setup Banner */}
+      {isHospitalAccount && (
+        <div className="bg-gradient-to-r from-hospital-900 via-indigo-950 to-slate-950 rounded-3xl p-5 sm:p-6 text-white border border-hospital-500/30 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-5 relative overflow-hidden animate-in fade-in slide-in-from-top-4">
+          <div className="absolute right-0 top-0 w-80 h-full bg-hospital-500/10 blur-3xl pointer-events-none" />
+          <div className="flex items-start gap-4 relative z-10 min-w-0">
+            <div className="w-12 h-12 rounded-2xl bg-hospital-500/20 border border-hospital-400/30 flex items-center justify-center text-hospital-300 shrink-0 mt-0.5">
+              <ShieldCheck className="w-6 h-6 text-hospital-300" />
+            </div>
+            <div>
+              <div className="text-[10px] font-black tracking-widest text-hospital-400 uppercase mb-1">
+                Hospital Onboarding & Access Setup
+              </div>
+              <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
+                Welcome! Please provide access to your Doctors, Front Office, and Package Dashboard to start using the system.
+              </h3>
+              <div className="flex flex-wrap items-center gap-3 mt-3">
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                  hospitalDoctors.length > 0 
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' 
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                }`}>
+                  Doctors: {hospitalDoctors.length} Connected
+                </span>
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                  hospitalFrontOffice 
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' 
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                }`}>
+                  Front Office: {hospitalFrontOffice ? '1 / 1 Configured' : '0 / 1 Pending'}
+                </span>
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                  hospitalPackage 
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' 
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                }`}>
+                  Package: {hospitalPackage ? '1 / 1 Configured' : '0 / 1 Pending'}
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="shrink-0 w-full md:w-auto relative z-10">
+            <button
+              onClick={() => setActiveHubTab('accessManagement')}
+              className={`w-full md:w-auto px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer ${
+                activeHubTab === 'accessManagement'
+                  ? 'bg-white/15 text-white border border-white/20 hover:bg-white/25'
+                  : 'bg-hospital-500 hover:bg-hospital-400 text-slate-950 font-black active:scale-95 shadow-hospital-500/30'
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4" />
+              {activeHubTab === 'accessManagement' ? 'Configuring Access' : 'Give Access'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header Section */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-6 border-b border-slate-100 pb-6">
         <div className="shrink-0">
