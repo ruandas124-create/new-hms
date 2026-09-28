@@ -14,6 +14,7 @@ const DASHBOARD_NAMES: Record<DashboardKey, string> = {
   master_availability: 'Availability',
   master_reports: 'Report Access Management',
   analytics_hub: 'Analytics Hub Dashboard',
+  analytics_give_access: 'Analytics Access Management',
   front_office: 'Front Office Dashboard',
   doctor: 'Doctor Dashboard',
   package: 'Package Counselor Dashboard',

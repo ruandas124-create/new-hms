@@ -88,6 +88,7 @@ const MainApp: React.FC = () => {
       case 'master_reports':
         return <MasterDashboard />;
       case 'analytics_hub':
+      case 'analytics_give_access':
         return <AnalyticsDashboard />;
       case 'front_office':
         return <FrontOfficeDashboard />;

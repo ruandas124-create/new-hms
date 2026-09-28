@@ -100,6 +100,7 @@ export const DEFAULT_PERMISSIONS: Record<DashboardKey, boolean> = {
   master_availability: true,
   master_reports: true,
   analytics_hub: true,
+  analytics_give_access: true,
   front_office: true,
   doctor: true,
   package: true,
@@ -126,6 +127,7 @@ export const DASHBOARD_TO_SLUG: Record<DashboardKey, string> = {
   master_availability: 'master-availability',
   master_reports: 'master-reports',
   analytics_hub: 'analytics-hub',
+  analytics_give_access: 'analytics-give-access',
   front_office: 'front-office',
   doctor: 'doctor',
   package: 'package',
@@ -154,7 +156,7 @@ export const checkPermission = (
 
   // 2. ADMIN: Access to Analytics Hub and permitted operational dashboards
   if (role === 'ADMIN') {
-    if (dashboard === 'analytics_hub' || dashboard === 'analytics_give_access') return !!permissions.analytics_hub;
+    if (dashboard === 'analytics_hub') return !!permissions.analytics_hub;
     if (dashboard === 'front_office') return !!permissions.front_office;
     if (dashboard === 'doctor') return !!permissions.doctor;
     if (dashboard === 'package') return !!permissions.package;
@@ -237,7 +239,6 @@ const getDashboardFromLocation = (): DashboardKey | null => {
     if (hash === 'master-reports' || hash === 'master_reports') return 'master_reports';
     if (hash === 'admin') return 'analytics_hub';
     if (hash === 'analytics' || hash === 'analytics-hub' || hash === 'analytics_hub') return 'analytics_hub';
-    if (hash === 'give-access' || hash === 'give_access' || hash === 'analytics-give-access' || hash === 'analytics_give_access') return 'analytics_give_access';
     if (hash === 'front-office' || hash === 'front_office') return 'front_office';
     if (hash === 'doctor') return 'doctor';
     if (hash === 'package') return 'package';
