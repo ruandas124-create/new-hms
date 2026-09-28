@@ -298,23 +298,16 @@ ALTER TABLE public.lead_notes REPLICA IDENTITY FULL;
 -- Safe to run repeatedly (uses ON CONFLICT DO UPDATE / NOTHING)
 -- =================================================================
 
--- Default Staff Accounts
+-- Default Staff Accounts (Root Master Administrator)
 INSERT INTO public.staff_users (id, name, email, mobile, role, password, hospital_id, hospital_name, specialization, department)
 VALUES 
-  ('staff_master_01', 'Master Administrator', 'master@hms.com', '+10000000000', 'MASTER', 'Master@123', NULL, 'Global Control Center', 'Administration', 'Executive Management'),
-  ('himas_facility_01', 'HIMAS Hospital (Analytics A)', 'report@hms.com', '+91 98765 43210', 'ANALYTICS', 'Report@123', 'himas_facility_01', 'HIMAS Super Speciality Hospital', 'Hospital Analytics', 'Administration'),
-  ('staff_front_01', 'Front Office Executive (Analytics A)', 'office@hms.com', '+91 98765 43211', 'FRONT_OFFICE', 'Hms1984@', 'himas_facility_01', 'HIMAS Super Speciality Hospital', 'Reception & Triage', 'Front Office'),
-  ('staff_doc_01', 'Dr. S. K. Sharma (Analytics A)', 'doctor@hms.com', '+91 98765 43212', 'DOCTOR', 'Doctor@123', 'himas_facility_01', 'HIMAS Super Speciality Hospital', 'Laparoscopic Surgeon', 'General & Laparoscopic Surgery'),
-  ('staff_doc_02', 'Dr. Anita Verma (Analytics A)', 'doctor.a2@hms.com', '+91 98765 43213', 'DOCTOR', 'Doctor@123', 'himas_facility_01', 'HIMAS Super Speciality Hospital', 'General Surgeon', 'General Surgery'),
-  ('facility_apex_02', 'Apex Healthcare (Analytics B)', 'analytics.b@hms.com', '+91 98765 88800', 'ANALYTICS', 'AnalyticsB@123', 'facility_apex_02', 'Apex Multispeciality Hospital', 'Hospital Analytics', 'Administration'),
-  ('staff_front_b', 'Front Office Executive (Analytics B)', 'office.b@hms.com', '+91 98765 88801', 'FRONT_OFFICE', 'OfficeB@123', 'facility_apex_02', 'Apex Multispeciality Hospital', 'Reception & Triage', 'Front Office'),
-  ('staff_doc_b1', 'Dr. Rajesh Patel (Analytics B)', 'doctor.b1@hms.com', '+91 98765 88802', 'DOCTOR', 'DoctorB@123', 'facility_apex_02', 'Apex Multispeciality Hospital', 'Proctologist', 'Proctology & GI Surgery'),
-  ('staff_doc_b2', 'Dr. Priya Nair (Analytics B)', 'doctor.b2@hms.com', '+91 98765 88803', 'DOCTOR', 'DoctorB@123', 'facility_apex_02', 'Apex Multispeciality Hospital', 'Vascular Surgeon', 'Vascular Surgery'),
-  ('staff_sales_01', 'Sales Specialist', 'sales@hms.com', '+91 98765 99999', 'SALES', 'Sales@123', NULL, 'Central Sales Team', 'Patient Counseling', 'Sales & Conversion')
+  ('staff_master_01', 'Master Administrator', 'master@hms.com', '+10000000000', 'MASTER', 'Master@123', NULL, 'Global Control Center', 'Administration', 'Executive Management')
 ON CONFLICT (id) DO UPDATE SET 
+  email = EXCLUDED.email,
+  password = EXCLUDED.password,
+  role = EXCLUDED.role,
   hospital_id = EXCLUDED.hospital_id,
   hospital_name = EXCLUDED.hospital_name,
-  role = EXCLUDED.role,
   specialization = COALESCE(EXCLUDED.specialization, staff_users.specialization),
   department = COALESCE(EXCLUDED.department, staff_users.department);
 

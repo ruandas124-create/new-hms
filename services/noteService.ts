@@ -191,7 +191,7 @@ export const addNoteForLead = async (params: {
   try {
     await supabase.from('himas_appointments').insert({
       id: `lead_note_${id}`,
-      hospital_id: params.hospitalId || 'himas_facility_01',
+      hospital_id: params.hospitalId || null,
       name: `Note for ${params.leadId}`,
       mobile: '0000000000',
       booking_status: 'LeadNote',

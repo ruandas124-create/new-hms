@@ -93,7 +93,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       { key: 'front_office', label: 'Front Office', icon: User, colorClass: 'text-blue-400' },
       { key: 'doctor', label: 'Doctor', icon: Activity, colorClass: 'text-emerald-400' },
       { key: 'package', label: 'Package', icon: Briefcase, colorClass: 'text-purple-400' },
-      { key: 'sales', label: 'Sales Leads', icon: Target, colorClass: 'text-rose-400' },
+      { key: 'sales', label: 'Sales Bookings', icon: Target, colorClass: 'text-rose-400' },
     ];
 
     if (currentUserRole === 'MASTER') {
@@ -219,18 +219,18 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             {isMobileSidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
           
-          <div className="flex items-center gap-2 truncate">
+          <div className="flex items-center gap-2.5 truncate min-w-0">
             <img 
               src={HOSPITAL_LOGO_URL} 
-              alt="Hospital Logo" 
-              className="h-8 max-w-[140px] sm:max-w-[170px] w-auto object-contain"
+              alt="Patient Scheduling Softwer" 
+              className="h-8 max-w-[130px] sm:max-w-[160px] w-auto object-contain shrink-0"
               onError={(e) => {
                 // If remote logo fails, hide and show clean text mark
                 (e.currentTarget as HTMLElement).style.display = 'none';
               }}
             />
-            <span className="font-extrabold text-sm text-slate-900 tracking-tight truncate hidden xs:inline">
-              {systemName || 'HMS'}
+            <span className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-tight truncate hidden xs:inline">
+              Patient Scheduling Softwer
             </span>
           </div>
         </div>
@@ -267,22 +267,19 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           {/* Header Row: Logo & Collapse Button */}
           <div className="flex items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-800/80">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="bg-white/95 rounded-xl p-1.5 shadow-sm shrink-0 flex items-center justify-center">
+              <div className="shrink-0 flex items-center justify-center">
                 <img 
                   src={HOSPITAL_LOGO_URL} 
-                  alt="Hospital Logo" 
-                  className="h-7 w-auto object-contain max-w-[120px]"
+                  alt="Patient Scheduling Softwer" 
+                  className="h-8 w-auto object-contain max-w-[110px]"
                   onError={(e) => {
                     (e.currentTarget as HTMLElement).style.display = 'none';
                   }}
                 />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-black text-white tracking-wide uppercase truncate">
-                  {systemName || 'HMS'}
-                </div>
-                <div className="text-[10px] text-slate-400 font-medium truncate">
-                  Surgical Management
+                <div className="text-xs font-black text-white tracking-wide truncate">
+                  Patient Scheduling Softwer
                 </div>
               </div>
             </div>
@@ -439,7 +436,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             )}
             <div>
               <div className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <span>{systemName || 'HMS'}</span>
+                <span>Patient Scheduling Softwer</span>
                 <span>/</span>
                 <span className="text-hospital-600 font-extrabold">{activeItemLabel}</span>
               </div>

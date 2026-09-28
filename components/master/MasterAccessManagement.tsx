@@ -29,6 +29,7 @@ export const MasterAccessManagement = () => {
   });
   
   const [showPasswordFor, setShowPasswordFor] = useState<string | null>(null);
+  const [showSalesPassword, setShowSalesPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Users in Access Management (Hospitals, Doctors, and Sales)
@@ -58,24 +59,25 @@ export const MasterAccessManagement = () => {
     setIsSubmitting(true);
     
     // Simulate network delay
-    await new Promise(r => setTimeout(r, 800));
+    await new Promise(r => setTimeout(r, 600));
 
+    const isSales = formType === 'Sales';
     let roleToAssign: 'HOSPITAL' | 'DOCTOR' | 'SALES' = 'HOSPITAL';
     if (formType === 'Doctor') roleToAssign = 'DOCTOR';
     if (formType === 'Sales') roleToAssign = 'SALES';
 
     await registerStaff({
-      name: formData.name,
+      name: formData.name.trim(),
       role: roleToAssign,
-      mobile: formData.mobile,
-      email: formData.email,
+      mobile: formData.mobile.trim(),
+      email: formData.email.trim().toLowerCase(),
       password: formData.password,
-      city: formData.city,
-      state: formData.state,
-      address: formData.address,
-      fullAddress: formData.fullAddress,
-      pincode: formData.pincode,
-      department: formType === 'Sales' ? (formData.department || 'Sales & Patient Scheduling') : undefined,
+      city: isSales ? undefined : formData.city,
+      state: isSales ? undefined : formData.state,
+      address: isSales ? undefined : formData.address,
+      fullAddress: isSales ? undefined : formData.fullAddress,
+      pincode: isSales ? undefined : formData.pincode,
+      department: isSales ? 'Sales' : undefined,
       accessStatus: 'Active',
       grantedBy: 'Master Admin',
       hospital_id: formType === 'Doctor' ? (formData.hospital_id || undefined) : undefined,
@@ -131,207 +133,276 @@ export const MasterAccessManagement = () => {
 
 
       {formType && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-2xl max-h-[94dvh] sm:max-h-[90vh] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-sm">
+          <div className={`bg-white rounded-2xl sm:rounded-3xl w-full ${formType === 'Sales' ? 'max-w-md' : 'max-w-2xl'} max-h-[94dvh] sm:max-h-[90vh] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col`}>
             {/* Header (Sticky) */}
             <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-100 bg-slate-50/80 shrink-0">
-              <h3 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 {formType === 'Sales' ? (
                   <>
-                    <Target className="w-5 h-5 text-rose-600 shrink-0" />
-                    Grant Sales Access
+                    <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0">
+                      <Target className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-black text-slate-800">Sales Access</h3>
+                      <p className="text-[11px] text-slate-500 font-medium">Create a Sales login account with dashboard access</p>
+                    </div>
                   </>
                 ) : (
                   <>
-                    <Shield className="w-5 h-5 text-indigo-600 shrink-0" />
-                    Grant Access to CRM
+                    <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0">
+                      <Shield className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-black text-slate-800">Grant Access to CRM</h3>
+                      <p className="text-[11px] text-slate-500 font-medium">Create and grant operational CRM access</p>
+                    </div>
                   </>
                 )}
-              </h3>
-              <button onClick={() => setFormType(null)} className="p-2 hover:bg-slate-200 rounded-lg transition-colors text-slate-500">
+              </div>
+              <button 
+                type="button"
+                onClick={() => setFormType(null)} 
+                className="p-2 hover:bg-slate-200 rounded-xl transition-colors text-slate-400 hover:text-slate-700"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
             
             {/* Body (Scrollable) */}
             <div className="overflow-y-auto flex-1 p-4 sm:p-6">
-              <form id="access-form" onSubmit={handleCreateAccess} className="space-y-6">
-                <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
-                  <button
-                    type="button"
-                    onClick={() => setFormType('Hospital')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${
-                      formType === 'Hospital' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    <Building2 className="w-4 h-4" /> Hospital
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormType('Doctor')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${
-                      formType === 'Doctor' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    <Activity className="w-4 h-4" /> Doctor
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormType('Sales')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${
-                      formType === 'Sales' ? 'bg-white text-rose-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    <Target className="w-4 h-4" /> Sales Access
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="col-span-1 sm:col-span-2">
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                      {formType === 'Hospital' ? 'Hospital Name' : formType === 'Doctor' ? 'Doctor Name' : 'Sales Representative / Executive Name'} <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      required
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) => setFormData({...formData, name: e.target.value})}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
-                      placeholder={`Enter ${formType === 'Sales' ? 'sales executive' : formType.toLowerCase()} name`}
-                    />
+              <form id="access-form" onSubmit={handleCreateAccess} className="space-y-5">
+                {/* When NOT in direct Sales Access mode, show role switch tabs between Hospital and Doctor */}
+                {formType !== 'Sales' && (
+                  <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setFormType('Hospital')}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${
+                        formType === 'Hospital' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      <Building2 className="w-4 h-4" /> Hospital
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormType('Doctor')}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${
+                        formType === 'Doctor' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      <Activity className="w-4 h-4" /> Doctor
+                    </button>
                   </div>
+                )}
 
-                  {formType === 'Doctor' && (
-                    <div className="col-span-1 sm:col-span-2">
+                {/* SALES ACCESS: STRICTLY 4 FIELDS ONLY (Full Name, Mobile Number, Email, Password) */}
+                {formType === 'Sales' ? (
+                  <div className="space-y-4">
+                    {/* 1. Full Name */}
+                    <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                        Associated Hospital (Granted Access)
-                      </label>
-                      <select
-                        value={formData.hospital_id}
-                        onChange={(e) => {
-                          const selectedHosp = grantedHospitals.find(h => h.id === e.target.value);
-                          setFormData({
-                            ...formData,
-                            hospital_id: e.target.value,
-                            hospitalName: selectedHosp ? selectedHosp.name : ''
-                          });
-                        }}
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 font-medium"
-                      >
-                        <option value="">Unaffiliated / Select Hospital...</option>
-                        {grantedHospitals.map(h => (
-                          <option key={h.id} value={h.id}>{h.name} {h.city ? `(${h.city})` : ''}</option>
-                        ))}
-                      </select>
-                      {grantedHospitals.length === 0 && (
-                        <p className="text-[10px] text-amber-600 mt-1 font-medium">Tip: Grant access to a Hospital first to link doctors directly.</p>
-                      )}
-                    </div>
-                  )}
-
-                  {formType === 'Sales' && (
-                    <div className="col-span-1 sm:col-span-2">
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                        Sales Designation & Role Scope
+                        Full Name <span className="text-red-500">*</span>
                       </label>
                       <input
+                        required
                         type="text"
-                        value={formData.department}
-                        onChange={(e) => setFormData({...formData, department: e.target.value})}
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-rose-500"
-                        placeholder="e.g. Patient Counselor / Surgical Conversion Lead"
+                        value={formData.name}
+                        onChange={(e) => setFormData({...formData, name: e.target.value})}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none transition-all placeholder:text-slate-400"
+                        placeholder="Enter full name"
                       />
                     </div>
-                  )}
-                  
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">Mobile Number <span className="text-red-500">*</span></label>
-                    <input
-                      required
-                      type="tel"
-                      value={formData.mobile}
-                      onChange={(e) => setFormData({...formData, mobile: e.target.value})}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
-                      placeholder="10-digit number"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">Email Address <span className="text-red-500">*</span></label>
-                    <input
-                      required
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({...formData, email: e.target.value})}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
-                      placeholder="email@example.com"
-                    />
-                  </div>
 
-                  <div className="col-span-1 sm:col-span-2">
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">Short Address</label>
-                    <input
-                      type="text"
-                      value={formData.address}
-                      onChange={(e) => setFormData({...formData, address: e.target.value})}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Locality / Area"
-                    />
-                  </div>
+                    {/* 2. Mobile Number */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+                        Mobile Number <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        required
+                        type="tel"
+                        value={formData.mobile}
+                        onChange={(e) => setFormData({...formData, mobile: e.target.value})}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none transition-all placeholder:text-slate-400"
+                        placeholder="Enter mobile number"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">City</label>
-                    <input
-                      type="text"
-                      value={formData.city}
-                      onChange={(e) => setFormData({...formData, city: e.target.value})}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">State</label>
-                    <input
-                      type="text"
-                      value={formData.state}
-                      onChange={(e) => setFormData({...formData, state: e.target.value})}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
+                    {/* 3. Email */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+                        Email <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        required
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData({...formData, email: e.target.value})}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none transition-all placeholder:text-slate-400"
+                        placeholder="Enter email address"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">Pincode</label>
-                    <input
-                      type="text"
-                      value={formData.pincode}
-                      onChange={(e) => setFormData({...formData, pincode: e.target.value})}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
-                    />
+                    {/* 4. Password */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+                        Password <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          required
+                          type={showSalesPassword ? "text" : "password"}
+                          value={formData.password}
+                          onChange={(e) => setFormData({...formData, password: e.target.value})}
+                          className="w-full px-3.5 py-2.5 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none transition-all placeholder:text-slate-400"
+                          placeholder="Enter password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSalesPassword(prev => !prev)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                          aria-label={showSalesPassword ? "Hide password" : "Show password"}
+                        >
+                          {showSalesPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
                   </div>
+                ) : (
+                  /* HOSPITAL & DOCTOR CRM ACCESS FIELDS */
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="col-span-1 sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+                        {formType === 'Hospital' ? 'Hospital Name' : 'Doctor Name'} <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        required
+                        type="text"
+                        value={formData.name}
+                        onChange={(e) => setFormData({...formData, name: e.target.value})}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
+                        placeholder={`Enter ${formType.toLowerCase()} name`}
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">Password <span className="text-red-500">*</span></label>
-                    <input
-                      required
-                      type="password"
-                      value={formData.password}
-                      onChange={(e) => setFormData({...formData, password: e.target.value})}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Secure password"
-                    />
-                  </div>
+                    {formType === 'Doctor' && (
+                      <div className="col-span-1 sm:col-span-2">
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+                          Associated Hospital (Granted Access)
+                        </label>
+                        <select
+                          value={formData.hospital_id}
+                          onChange={(e) => {
+                            const selectedHosp = grantedHospitals.find(h => h.id === e.target.value);
+                            setFormData({
+                              ...formData,
+                              hospital_id: e.target.value,
+                              hospitalName: selectedHosp ? selectedHosp.name : ''
+                            });
+                          }}
+                          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 font-medium"
+                        >
+                          <option value="">Unaffiliated / Select Hospital...</option>
+                          {grantedHospitals.map(h => (
+                            <option key={h.id} value={h.id}>{h.name} {h.city ? `(${h.city})` : ''}</option>
+                          ))}
+                        </select>
+                        {grantedHospitals.length === 0 && (
+                          <p className="text-[10px] text-amber-600 mt-1 font-medium">Tip: Grant access to a Hospital first to link doctors directly.</p>
+                        )}
+                      </div>
+                    )}
+                    
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">Mobile Number <span className="text-red-500">*</span></label>
+                      <input
+                        required
+                        type="tel"
+                        value={formData.mobile}
+                        onChange={(e) => setFormData({...formData, mobile: e.target.value})}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
+                        placeholder="10-digit number"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">Email Address <span className="text-red-500">*</span></label>
+                      <input
+                        required
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData({...formData, email: e.target.value})}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
+                        placeholder="email@example.com"
+                      />
+                    </div>
 
-                  <div className="col-span-1 sm:col-span-2">
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">Full Address</label>
-                    <textarea
-                      rows={2}
-                      value={formData.fullAddress}
-                      onChange={(e) => setFormData({...formData, fullAddress: e.target.value})}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 resize-none"
-                      placeholder="Complete detailed address"
-                    />
+                    <div className="col-span-1 sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">Short Address</label>
+                      <input
+                        type="text"
+                        value={formData.address}
+                        onChange={(e) => setFormData({...formData, address: e.target.value})}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Locality / Area"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">City</label>
+                      <input
+                        type="text"
+                        value={formData.city}
+                        onChange={(e) => setFormData({...formData, city: e.target.value})}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">State</label>
+                      <input
+                        type="text"
+                        value={formData.state}
+                        onChange={(e) => setFormData({...formData, state: e.target.value})}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">Pincode</label>
+                      <input
+                        type="text"
+                        value={formData.pincode}
+                        onChange={(e) => setFormData({...formData, pincode: e.target.value})}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">Password <span className="text-red-500">*</span></label>
+                      <input
+                        required
+                        type="password"
+                        value={formData.password}
+                        onChange={(e) => setFormData({...formData, password: e.target.value})}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Secure password"
+                      />
+                    </div>
+
+                    <div className="col-span-1 sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">Full Address</label>
+                      <textarea
+                        rows={2}
+                        value={formData.fullAddress}
+                        onChange={(e) => setFormData({...formData, fullAddress: e.target.value})}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 resize-none"
+                        placeholder="Complete detailed address"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
               </form>
             </div>
 
@@ -483,7 +554,7 @@ export const MasterAccessManagement = () => {
                       {user.role === 'SALES' ? (
                         <div className="space-y-0.5">
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
-                            <Target className="w-3 h-3" /> Leads Directory
+                            <Target className="w-3 h-3" /> Patient Bookings
                           </span>
                           <div className="text-[10px] text-slate-500 font-medium">
                             {schedulingPermissions.sales ? 'Can Schedule Appts' : 'Scheduling Disabled'}

@@ -292,6 +292,9 @@ export const FrontOfficeDashboard: React.FC = () => {
         .sort((a, b) => new Date(b.registeredAt).getTime() - new Date(a.registeredAt).getTime())[0];
     }
 
+    const apptDoctorId = appt.assignedDoctorId || (existingPatient?.doctorAssessment?.assignedDoctorId);
+    const apptDoctorName = appt.assignedDoctorName || (existingPatient?.doctorAssessment?.assignedDoctorName);
+
     setFormData({ 
       id: '', 
       name: appt.name || existingPatient?.name || '', 
@@ -308,7 +311,11 @@ export const FrontOfficeDashboard: React.FC = () => {
       visitType: appt.bookingType === 'Follow Up' ? 'Follow Up' : 'OPD', 
       visit_type: appt.visit_type || 'New',
       entry_date: new Date().toISOString().split('T')[0],
-      arrivalTime: new Date().toTimeString().split(' ')[0].substring(0, 5)
+      arrivalTime: new Date().toTimeString().split(' ')[0].substring(0, 5),
+      doctorAssessment: apptDoctorId ? {
+        assignedDoctorId: apptDoctorId,
+        assignedDoctorName: apptDoctorName
+      } : existingPatient?.doctorAssessment
     }); 
     setEditingId(null); 
     setOriginatingAppointmentId(appt.id); 

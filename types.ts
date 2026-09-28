@@ -208,6 +208,11 @@ export interface Appointment {
   doctor_id?: string | null;
   patient_id?: string | null;
   hospitalName?: string;
+  notes?: string;
+  followup_date?: string;
+  followup_notes?: string;
+  notes_list?: { id: string; text: string; date: string; author: string }[];
+  followup_history?: { id: string; date: string; status: string; notes?: string; createdAt: string; author: string }[];
 }
 
 export interface DaySchedule {
@@ -264,7 +269,7 @@ export interface AnalyticsAccountHierarchy {
   appointmentCount: number;
 }
 
-export const HOSPITAL_LOGO_URL = "https://kgibprahnkpifyzjfzsf.supabase.co/storage/v1/object/public/img/Untitled_design__3_-removebg-preview.png";
+export const HOSPITAL_LOGO_URL = "https://aeghhbrvlefahqdbnudc.supabase.co/storage/v1/object/public/IMG/ChatGPT%20Image%20Sep%2028,%202026,%2001_57_44%20PM.png";
 
 export interface DashboardStats {
   totalPatients: number;

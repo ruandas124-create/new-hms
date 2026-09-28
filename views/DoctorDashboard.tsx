@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
-import { SurgeonCode, PainSeverity, Affordability, ConversionReadiness, Patient, DoctorAssessment } from '../types';
+import { SurgeonCode, PainSeverity, Affordability, ConversionReadiness, Patient, DoctorAssessment, Appointment } from '../types';
 import { Stethoscope, Check, ChevronRight, User, Calendar, Save, Briefcase, CreditCard, Activity, Tag, FileText, Database, Clock, Share2, ShieldCheck, Search, Filter, History, ClipboardList, RefreshCcw, Upload, Trash2 } from 'lucide-react';
 
 const PROCEDURES = [
@@ -42,12 +42,12 @@ const formatToDateTime = (dateString: string | undefined | null): string => {
 };
 
 export const DoctorDashboard: React.FC = () => {
-  const { patients, updateDoctorAssessment, staffUsers, updateStaff, schedulingPermissions } = useHospital();
+  const { patients, updateDoctorAssessment, staffUsers, updateStaff, schedulingPermissions, appointments, currentUserRole } = useHospital();
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Tabs State
-  const [activeTab, setActiveTab] = useState<'patients' | 'availability'>('patients');
+  const [activeTab, setActiveTab] = useState<'patients' | 'appointments' | 'availability' | 'package'>('patients');
 
   // Updated state for Date Range
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
@@ -65,11 +65,11 @@ export const DoctorDashboard: React.FC = () => {
     doctorSignature: ''
   });
 
-  const currentDoctorId = localStorage.getItem('hms_hospital_id') || 'static_doctor';
+  const currentDoctorId = localStorage.getItem('hms_hospital_id') || '';
   const loggedInDoctor = staffUsers?.find(u => u.id === currentDoctorId) || {
     id: currentDoctorId,
-    name: localStorage.getItem('hms_hospital_name') || 'Demo Doctor',
-    email: localStorage.getItem('hms_hospital_email') || 'doctor@hms.com',
+    name: localStorage.getItem('hms_hospital_name') || 'Doctor',
+    email: localStorage.getItem('hms_hospital_email') || '',
     mobile: 'N/A',
     role: 'DOCTOR',
     registeredAt: new Date().toISOString()
@@ -289,12 +289,11 @@ export const DoctorDashboard: React.FC = () => {
       const assignedId = p.doctorAssessment?.assignedDoctorId;
       const assignedName = p.doctorAssessment?.assignedDoctorName;
 
-      if (currentDoctorId === 'static_doctor') {
-        // Static/Demo doctor also sees unassigned patients for evaluating demo data easily
-        if (assignedId && assignedId !== 'static_doctor') return false;
-      } else {
-        // Dynamic doctors ONLY see patients explicitly assigned to them
-        if (assignedId !== currentDoctorId && assignedName !== currentDoctorName) {
+      // Doctors only see patients explicitly assigned to them
+      if (currentDoctorId || currentDoctorName) {
+        const idMatches = !!(assignedId && currentDoctorId && assignedId === currentDoctorId);
+        const nameMatches = !!(assignedName && currentDoctorName && assignedName.toLowerCase().trim() === currentDoctorName.toLowerCase().trim());
+        if (!idMatches && !nameMatches) {
           return false;
         }
       }
@@ -332,6 +331,16 @@ export const DoctorDashboard: React.FC = () => {
 
   const pendingCount = allPatients.filter(p => p.status === 'Arrived' && !p.doctorAssessment).length;
   const doneCount = allPatients.filter(p => !!p.doctorAssessment).length;
+
+  const doctorAppointments = useMemo(() => {
+    return (appointments || []).filter(a => {
+      const matchDoc = a.assignedDoctorId === loggedInDoctor.id || a.assignedDoctorName === loggedInDoctor.name;
+      if (loggedInDoctor.id === 'static_doctor') {
+        return matchDoc || !a.assignedDoctorId;
+      }
+      return matchDoc;
+    }).sort((a, b) => ((b.date || '') + (b.time || '')).localeCompare((a.date || '') + (a.time || '')));
+  }, [appointments, loggedInDoctor]);
     
   const isSurgery = formState.quickCode === SurgeonCode.S1;
 
@@ -420,6 +429,18 @@ export const DoctorDashboard: React.FC = () => {
           >
             <User className="w-4 h-4" /> Patients Queue
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('appointments')}
+            className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-200 ${
+              activeTab === 'appointments'
+                ? 'bg-white text-hospital-700 shadow'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Calendar className="w-4 h-4" /> Appointments ({doctorAppointments.length})
+          </button>
           
           <button
             type="button"
@@ -432,6 +453,20 @@ export const DoctorDashboard: React.FC = () => {
           >
             <Calendar className="w-4 h-4" /> Availability Mode
           </button>
+          
+          {currentUserRole === 'DOCTOR' && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('package')}
+              className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-200 ${
+                activeTab === 'package'
+                  ? 'bg-white text-hospital-700 shadow'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Briefcase className="w-4 h-4" /> Package Management
+            </button>
+          )}
         </div>
       </div>
 
@@ -703,6 +738,83 @@ export const DoctorDashboard: React.FC = () => {
                 <p className="text-lg font-bold text-center">Select a patient to begin assessment</p>
               </div>
             )}
+          </div>
+        </div>
+      ) : activeTab === 'appointments' ? (
+        /* Doctor Scheduled Appointments Roster view */
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4 animate-in fade-in duration-300">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-4">
+            <div>
+              <span className="text-[10px] font-black uppercase text-hospital-600 tracking-wider">Consultation Schedule</span>
+              <h3 className="text-xl font-black text-slate-800">Scheduled Appointments</h3>
+              <p className="text-xs text-slate-500">Patients booked specifically for Dr. {loggedInDoctor.name}</p>
+            </div>
+            <div className="text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+              Total Bookings: <strong className="text-hospital-700">{doctorAppointments.length}</strong>
+            </div>
+          </div>
+
+          {doctorAppointments.length === 0 ? (
+            <div className="text-center py-16 text-slate-400 space-y-2">
+              <Calendar className="w-12 h-12 mx-auto text-slate-300" />
+              <div className="font-bold text-slate-600 text-sm">No scheduled appointments</div>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">When patients are booked for your consultation by Sales or Front Office, they will appear here.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[700px]">
+                <thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b">
+                  <tr>
+                    <th className="p-4">Appt Slot</th>
+                    <th className="p-4">Patient Name</th>
+                    <th className="p-4">Mobile</th>
+                    <th className="p-4">Condition</th>
+                    <th className="p-4">Facility / Route</th>
+                    <th className="p-4">Source</th>
+                    <th className="p-4">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {doctorAppointments.map((appt: Appointment) => (
+                    <tr key={appt.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="p-4 whitespace-nowrap">
+                        <div className="font-bold text-slate-800 font-mono flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-hospital-500" /> {appt.date || 'TBD'} • {appt.time || 'TBD'}
+                        </div>
+                      </td>
+                      <td className="p-4 font-bold text-slate-900">{appt.name}</td>
+                      <td className="p-4 font-mono text-slate-600">{appt.mobile}</td>
+                      <td className="p-4">
+                        <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold">
+                          {appt.condition}
+                        </span>
+                      </td>
+                      <td className="p-4 text-slate-600">
+                        {appt.hospitalName || 'Consulting Clinic'}
+                      </td>
+                      <td className="p-4 text-slate-500">
+                        {appt.source}
+                        {appt.referral_person && ` (${appt.referral_person})`}
+                      </td>
+                      <td className="p-4">
+                        <span className="px-2.5 py-1 rounded-md text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          {appt.status || 'Scheduled'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : activeTab === 'package' ? (
+        /* Package Management Content */
+        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm animate-in fade-in duration-300">
+          <h3 className="text-sm font-black uppercase text-slate-800 tracking-wider">Package Management</h3>
+          <p className="text-slate-500 text-xs mt-2">Manage package information for your patients.</p>
+          <div className="mt-6 text-center py-10 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 font-bold text-sm">
+            Package management features will be listed here.
           </div>
         </div>
       ) : (

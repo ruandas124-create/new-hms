@@ -33,6 +33,7 @@ interface HospitalContextType {
   selectedTenantFilter: string;
   setSelectedTenantFilter: (tenantId: string) => void;
   createAnalyticsAccount: (accountData: { name: string; email: string; mobile?: string; password?: string; city?: string; state?: string; address?: string; fullAddress?: string; pincode?: string }) => Promise<StaffUser>;
+  createDoctorOnlyAccount: (doctorData: { name: string; email: string; mobile?: string; password?: string; specialization?: string }) => Promise<StaffUser>;
   createOrActivateFrontOffice: (analyticsId: string, frontOfficeData: { name: string; email: string; mobile?: string; password?: string }) => Promise<{ success: boolean; message: string; user?: StaffUser }>;
   createDoctorForAnalytics: (analyticsId: string, doctorData: { name: string; email: string; mobile?: string; password?: string; specialization?: string; department?: string; availability?: any }) => Promise<StaffUser>;
   reassignDoctorAnalytics: (doctorId: string, targetAnalyticsId: string) => Promise<void>;
@@ -77,9 +78,6 @@ const STORAGE_KEY_PERMS = 'hms_dashboard_permissions';
 const STORAGE_KEY_SCHED_PERMS = 'hms_scheduling_permissions';
 const STORAGE_KEY_REPORT_PERMS = 'hms_report_permissions';
 const APPOINTMENTS_TABLE = 'himas_appointments';
-const FACILITY_ID = 'himas_facility_01';
-const APEX_FACILITY_ID = 'facility_apex_02';
-
 export const DEFAULT_STAFF_SEEDS: StaffUser[] = [
   {
     id: 'staff_master_01',
@@ -92,229 +90,6 @@ export const DEFAULT_STAFF_SEEDS: StaffUser[] = [
     accessStatus: 'Active',
     grantedBy: 'System Root',
     hospitalName: 'Global Control Center'
-  },
-  {
-    id: 'himas_facility_01',
-    name: 'HIMAS Hospital (Analytics A)',
-    email: 'report@hms.com',
-    mobile: '+91 98765 43210',
-    role: 'ANALYTICS',
-    password: 'Report@123',
-    registeredAt: '2026-01-02T00:00:00.000Z',
-    accessStatus: 'Active',
-    grantedBy: 'Master Admin',
-    hospital_id: 'himas_facility_01',
-    hospitalName: 'HIMAS Super Speciality Hospital',
-    city: 'Mumbai',
-    state: 'Maharashtra',
-    address: '104 Healthcare Boulevard',
-    fullAddress: '104 Healthcare Boulevard, Worli, Mumbai'
-  },
-  {
-    id: 'staff_front_01',
-    name: 'Front Office Executive (Analytics A)',
-    email: 'office@hms.com',
-    mobile: '+91 98765 43211',
-    role: 'FRONT_OFFICE',
-    password: 'Hms1984@',
-    registeredAt: '2026-01-03T00:00:00.000Z',
-    accessStatus: 'Active',
-    grantedBy: 'Master Admin',
-    hospital_id: 'himas_facility_01',
-    hospitalName: 'HIMAS Super Speciality Hospital'
-  },
-  {
-    id: 'static_doctor',
-    name: 'Dr. S. K. Sharma (Analytics A)',
-    email: 'doctor@hms.com',
-    mobile: '+91 98765 43212',
-    role: 'DOCTOR',
-    password: 'Doctor@123',
-    registeredAt: '2026-01-04T00:00:00.000Z',
-    accessStatus: 'Active',
-    grantedBy: 'Master Admin',
-    specialization: 'Laparoscopic Surgeon',
-    department: 'General & Laparoscopic Surgery',
-    hospital_id: 'himas_facility_01',
-    hospitalName: 'HIMAS Super Speciality Hospital',
-    availability: {
-      availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-      startTime: '09:00',
-      endTime: '17:00',
-      unavailableDates: []
-    }
-  },
-  {
-    id: 'staff_doc_a2',
-    name: 'Dr. Anita Verma (Analytics A)',
-    email: 'doctor.a2@hms.com',
-    mobile: '+91 98765 43213',
-    role: 'DOCTOR',
-    password: 'Doctor@123',
-    registeredAt: '2026-01-05T00:00:00.000Z',
-    accessStatus: 'Active',
-    grantedBy: 'Master Admin',
-    specialization: 'Proctology & Laser Specialist',
-    department: 'Colorectal Surgery',
-    hospital_id: 'himas_facility_01',
-    hospitalName: 'HIMAS Super Speciality Hospital',
-    availability: {
-      availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-      startTime: '10:00',
-      endTime: '18:00',
-      unavailableDates: []
-    }
-  },
-  {
-    id: 'facility_apex_02',
-    name: 'Apex Healthcare (Analytics B)',
-    email: 'analytics.b@hms.com',
-    mobile: '+91 98765 88800',
-    role: 'ANALYTICS',
-    password: 'AnalyticsB@123',
-    registeredAt: '2026-01-10T00:00:00.000Z',
-    accessStatus: 'Active',
-    grantedBy: 'Master Admin',
-    hospital_id: 'facility_apex_02',
-    hospitalName: 'Apex Multispeciality Hospital',
-    city: 'Bengaluru',
-    state: 'Karnataka',
-    address: '42 Tech Park Road',
-    fullAddress: '42 Tech Park Road, Whitefield, Bengaluru'
-  },
-  {
-    id: 'staff_front_b',
-    name: 'Front Office Executive (Analytics B)',
-    email: 'office.b@hms.com',
-    mobile: '+91 98765 88801',
-    role: 'FRONT_OFFICE',
-    password: 'OfficeB@123',
-    registeredAt: '2026-01-11T00:00:00.000Z',
-    accessStatus: 'Active',
-    grantedBy: 'Master Admin',
-    hospital_id: 'facility_apex_02',
-    hospitalName: 'Apex Multispeciality Hospital'
-  },
-  {
-    id: 'staff_doc_b1',
-    name: 'Dr. Rajesh Patel (Analytics B)',
-    email: 'doctor.b1@hms.com',
-    mobile: '+91 98765 88802',
-    role: 'DOCTOR',
-    password: 'DoctorB@123',
-    registeredAt: '2026-01-12T00:00:00.000Z',
-    accessStatus: 'Active',
-    grantedBy: 'Master Admin',
-    specialization: 'General & Bariatric Surgeon',
-    department: 'Surgical Gastroenterology',
-    hospital_id: 'facility_apex_02',
-    hospitalName: 'Apex Multispeciality Hospital',
-    availability: {
-      availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-      startTime: '09:30',
-      endTime: '17:30',
-      unavailableDates: []
-    }
-  },
-  {
-    id: 'staff_doc_b2',
-    name: 'Dr. Priya Nair (Analytics B)',
-    email: 'doctor.b2@hms.com',
-    mobile: '+91 98765 88803',
-    role: 'DOCTOR',
-    password: 'DoctorB@123',
-    registeredAt: '2026-01-13T00:00:00.000Z',
-    accessStatus: 'Active',
-    grantedBy: 'Master Admin',
-    specialization: 'Vascular & Laser Specialist',
-    department: 'Vascular Surgery',
-    hospital_id: 'facility_apex_02',
-    hospitalName: 'Apex Multispeciality Hospital',
-    availability: {
-      availableDays: ['Tuesday', 'Wednesday', 'Thursday', 'Saturday'],
-      startTime: '10:00',
-      endTime: '16:00',
-      unavailableDates: []
-    }
-  },
-  {
-    id: 'staff_sales_01',
-    name: 'Sales Specialist',
-    email: 'sales@hms.com',
-    mobile: '+91 98765 99999',
-    role: 'SALES',
-    password: 'Sales@123',
-    registeredAt: '2026-01-15T00:00:00.000Z',
-    accessStatus: 'Active',
-    grantedBy: 'Master Admin',
-    department: 'Central Sales & Patient Scheduling'
-  }
-];
-
-export const DEFAULT_APEX_APPOINTMENTS: any[] = [
-  {
-    id: 'apex_appt_01',
-    hospital_id: 'facility_apex_02',
-    name: 'Vikramaditya Rao',
-    mobile: '9880123456',
-    age: 44,
-    gender: 'Male',
-    occupation: 'Software Architect',
-    condition: 'Gallstones',
-    source: 'Google / YouTube / Website',
-    booking_status: 'Scheduled',
-    visit_type: 'New',
-    entry_date: new Date().toISOString().split('T')[0],
-    booking_time: '11:30',
-    created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-    remarks: 'Master Admin',
-    doctor_assessment: {
-      assignedDoctorId: 'staff_doc_b1',
-      assignedDoctorName: 'Dr. Rajesh Patel (Analytics B)',
-      hospital_id: 'facility_apex_02',
-      hospitalName: 'Apex Multispeciality Hospital',
-      assignment_type: 'doctor'
-    }
-  },
-  {
-    id: 'apex_patient_01',
-    hospital_id: 'facility_apex_02',
-    name: 'Meenakshi Sundaram',
-    mobile: '9880654321',
-    age: 51,
-    gender: 'Female',
-    occupation: 'Professor',
-    condition: 'Varicose Veins',
-    source: 'Doctor Recommended',
-    source_doctor_name: 'Dr. K. Swaminathan',
-    booking_status: 'Arrived',
-    visit_type: 'New',
-    entry_date: new Date().toISOString().split('T')[0],
-    arrival_time: '10:15',
-    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-    doctor_assessment: {
-      patient_id: 'apex_patient_01',
-      quickCode: 'S1',
-      painSeverity: 'Moderate',
-      affordability: 'A2',
-      conversionReadiness: 'CR1',
-      surgeryProcedure: 'Laser Varicose Veins',
-      notes: 'Bilateral great saphenous vein reflux diagnosed on Doppler. Recommended endovenous laser ablation.',
-      assignedDoctorId: 'staff_doc_b2',
-      assignedDoctorName: 'Dr. Priya Nair (Analytics B)',
-      hospital_id: 'facility_apex_02',
-      hospitalName: 'Apex Multispeciality Hospital'
-    },
-    package_proposal: {
-      status: 'Surgery Fixed',
-      packageAmount: 68000,
-      paymentMode: 'Cash / TPA Insurance',
-      surgeryDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-      outcomeDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-      roomType: 'Semi-Private',
-      stayDays: '1 Day',
-      proposalCreatedAt: new Date().toISOString()
-    }
   }
 ];
 
@@ -659,17 +434,13 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('hms_hospital_tenant_id');
       if (stored && stored !== 'ALL' && stored !== 'null') return stored;
-      const email = localStorage.getItem('hms_hospital_email')?.toLowerCase().trim() || '';
-      if (email.includes('apex') || email.includes('.b@') || email.includes('doctor.b') || email.includes('office.b')) {
-        return APEX_FACILITY_ID;
-      }
     }
-    return FACILITY_ID;
+    return null;
   }, [currentUserRole, currentUserStaff]);
 
   const currentDoctorId = useMemo(() => {
     if (currentUserRole !== 'DOCTOR') return null;
-    return currentUserStaff?.id || (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') : null) || 'static_doctor';
+    return currentUserStaff?.id || (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') : null) || null;
   }, [currentUserRole, currentUserStaff]);
 
   // STRICT MULTI-TENANT ISOLATION
@@ -684,11 +455,18 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (currentUserRole === 'SALES') {
       return allPatients;
     }
+    if (currentUserRole === 'DOCTOR') {
+      return allPatients.filter(p => 
+        (currentTenantId && p.hospital_id === currentTenantId) ||
+        (currentDoctorId && p.doctorAssessment?.assignedDoctorId === currentDoctorId) ||
+        (currentUserStaff?.name && p.doctorAssessment?.assignedDoctorName?.toLowerCase() === currentUserStaff.name.toLowerCase())
+      );
+    }
     if (currentTenantId) {
       return allPatients.filter(p => p.hospital_id === currentTenantId);
     }
     return allPatients;
-  }, [allPatients, currentUserRole, selectedTenantFilter, currentTenantId]);
+  }, [allPatients, currentUserRole, selectedTenantFilter, currentTenantId, currentDoctorId, currentUserStaff]);
 
   const appointments = useMemo(() => {
     if (currentUserRole === 'MASTER') {
@@ -700,11 +478,18 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (currentUserRole === 'SALES') {
       return allAppointments;
     }
+    if (currentUserRole === 'DOCTOR') {
+      return allAppointments.filter(a => 
+        (currentTenantId && a.hospital_id === currentTenantId) ||
+        (currentDoctorId && (a.assignedDoctorId === currentDoctorId || a.doctor_id === currentDoctorId)) ||
+        (currentUserStaff?.name && a.assignedDoctorName?.toLowerCase() === currentUserStaff.name.toLowerCase())
+      );
+    }
     if (currentTenantId) {
       return allAppointments.filter(a => a.hospital_id === currentTenantId);
     }
     return allAppointments;
-  }, [allAppointments, currentUserRole, selectedTenantFilter, currentTenantId]);
+  }, [allAppointments, currentUserRole, selectedTenantFilter, currentTenantId, currentDoctorId, currentUserStaff]);
 
   const staffUsers = useMemo(() => {
     if (currentUserRole === 'MASTER' || currentUserRole === 'SALES') {
@@ -757,7 +542,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isStaffLoaded, setIsStaffLoaded] = useState(false);
-  const [systemName, setSystemNameState] = useState<string>(() => localStorage.getItem('hms_system_name') || 'HMS');
+  const [systemName, setSystemNameState] = useState<string>(() => localStorage.getItem('hms_system_name') || 'Patient Scheduling Softwer');
 
   const updateSystemName = (name: string) => {
     setSystemNameState(name);
@@ -813,6 +598,45 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
 
     await registerStaff(newAccount);
+    return newAccount;
+  };
+
+  const createDoctorOnlyAccount = async (doctorData: {
+    name: string; email: string; mobile?: string; password?: string; specialization?: string;
+  }): Promise<StaffUser> => {
+    const doctorId = `doc_${Math.random().toString(36).substring(2, 9)}`;
+    const newAccount: StaffUser = {
+      id: doctorId,
+      name: doctorData.name,
+      email: doctorData.email,
+      mobile: doctorData.mobile || 'N/A',
+      role: 'ANALYTICS_HUB', // Doctor-only Analytic Hub login
+      password: doctorData.password || 'Doctor@123',
+      registeredAt: new Date().toISOString(),
+      accessStatus: 'Active',
+      grantedBy: 'Master Admin',
+      hospital_id: doctorId, // Doctor is their own tenant
+      hospitalName: `${doctorData.name} (Doctor Only)`
+    };
+
+    // Also create the actual Doctor role account linked to this hub
+    const doctorRoleAccount: StaffUser = {
+      id: `doc_role_${Math.random().toString(36).substring(2, 9)}`,
+      name: doctorData.name,
+      email: `${doctorData.email}.doc`,
+      mobile: doctorData.mobile || 'N/A',
+      role: 'DOCTOR',
+      password: doctorData.password || 'Doctor@123',
+      registeredAt: new Date().toISOString(),
+      accessStatus: 'Active',
+      grantedBy: 'Master Admin',
+      hospital_id: doctorId,
+      hospitalName: `${doctorData.name} (Doctor Only)`,
+      specialization: doctorData.specialization || 'General Surgeon'
+    };
+
+    await registerStaff(newAccount);
+    await registerStaff(doctorRoleAccount);
     return newAccount;
   };
 
@@ -1171,8 +995,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       if (apptError) throw apptError;
 
-      const hasApexAppts = (apptRows || []).some((r: any) => r.hospital_id === APEX_FACILITY_ID);
-      const combinedApptRows = hasApexAppts ? (apptRows || []) : [...(apptRows || []), ...DEFAULT_APEX_APPOINTMENTS];
+      const combinedApptRows = apptRows || [];
 
       const metadataRows = combinedApptRows.filter((r: any) => r.id && r.id.startsWith('doctor_metadata_'));
 
@@ -1294,8 +1117,8 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         entry_date: patientData.entry_date || new Date().toISOString().split('T')[0],
         arrival_time: patientData.arrivalTime || new Date().toTimeString().split(' ')[0],
         hospital_id: (currentUserRole === 'MASTER' 
-          ? (selectedTenantFilter && selectedTenantFilter !== 'ALL' ? selectedTenantFilter : ((patientData as any).hospital_id || FACILITY_ID)) 
-          : (currentTenantId || FACILITY_ID)),
+          ? (selectedTenantFilter && selectedTenantFilter !== 'ALL' ? selectedTenantFilter : ((patientData as any).hospital_id || null)) 
+          : (currentTenantId || (patientData as any).hospital_id || null)),
         doctor_assessment: patientData.doctorAssessment || null,
         updated_at: new Date().toISOString()
       };
@@ -1433,6 +1256,16 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
   const convertAppointment = async (appointmentId: string, patientData: Omit<Patient, 'registeredAt' | 'hospital_id'>) => {
     setSaveStatus('saving');
     try {
+        const originalAppt = allAppointments.find(a => a.id === appointmentId);
+        const assignedDocId = patientData.doctorAssessment?.assignedDoctorId || (patientData as any).assignedDoctorId || originalAppt?.assignedDoctorId;
+        const assignedDocName = patientData.doctorAssessment?.assignedDoctorName || (patientData as any).assignedDoctorName || originalAppt?.assignedDoctorName;
+
+        const finalAssessment = (patientData.doctorAssessment || assignedDocId) ? {
+          ...(patientData.doctorAssessment || {}),
+          assignedDoctorId: assignedDocId || undefined,
+          assignedDoctorName: assignedDocName || undefined,
+        } : null;
+
         const dbRecord = {
             id: patientData.id,
             name: patientData.name,
@@ -1452,9 +1285,9 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
             entry_date: patientData.entry_date || new Date().toISOString().split('T')[0],
             arrival_time: patientData.arrivalTime || new Date().toTimeString().split(' ')[0].substring(0, 5),
             hospital_id: (currentUserRole === 'MASTER' 
-              ? (selectedTenantFilter && selectedTenantFilter !== 'ALL' ? selectedTenantFilter : ((patientData as any).hospital_id || FACILITY_ID)) 
-              : (currentTenantId || FACILITY_ID)),
-            doctor_assessment: patientData.doctorAssessment || null,
+              ? (selectedTenantFilter && selectedTenantFilter !== 'ALL' ? selectedTenantFilter : ((patientData as any).hospital_id || originalAppt?.hospital_id || null)) 
+              : (currentTenantId || originalAppt?.hospital_id || null)),
+            doctor_assessment: finalAssessment,
             updated_at: new Date().toISOString()
         };
         
@@ -1462,7 +1295,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         if (insertError) throw insertError;
         const { error: deleteError } = await supabase.from(APPOINTMENTS_TABLE).delete().eq('id', appointmentId);
         
-        syncToSheets({ ...patientData, registeredAt: dbRecord.updated_at, status: 'Arrived' });
+        syncToSheets({ ...patientData, registeredAt: dbRecord.updated_at, status: 'Arrived', doctorAssessment: finalAssessment as any });
         await refreshData();
         setSaveStatus('saved');
         setLastSavedAt(new Date());
@@ -1521,7 +1354,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       const resolvedAssignmentType = appointmentData.assignment_type || (appointmentData.assignedDoctorId ? 'doctor' : 'hospital');
       const resolvedDoctorId = appointmentData.assignedDoctorId || appointmentData.doctor_id || null;
-      const resolvedHospitalId = appointmentData.hospital_id || FACILITY_ID;
+      const resolvedHospitalId = appointmentData.hospital_id || currentTenantId || null;
       const resolvedHospitalName = appointmentData.hospitalName || null;
       const resolvedPatientId = appointmentData.patient_id || null;
 
@@ -1582,14 +1415,14 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         (typeof window !== 'undefined' ? (localStorage.getItem('hms_hospital_name') || localStorage.getItem('username') || localStorage.getItem('hms_hospital_email')) : '') || 
         'Master Admin';
 
-      const resolvedAssignmentType = appointment.assignment_type || (appointment.assignedDoctorId ? 'doctor' : 'hospital');
-      const resolvedDoctorId = appointment.assignedDoctorId || appointment.doctor_id || null;
-      const resolvedHospitalId = appointment.hospital_id || FACILITY_ID;
-      const resolvedHospitalName = appointment.hospitalName || null;
-      const resolvedPatientId = appointment.patient_id || null;
-
       // Existing record to prevent unauthorized role from overwriting source or referral person
       const existingAppt = appointments.find(a => a.id === appointment.id);
+
+      const resolvedAssignmentType = appointment.assignment_type || (appointment.assignedDoctorId ? 'doctor' : 'hospital');
+      const resolvedDoctorId = appointment.assignedDoctorId || appointment.doctor_id || null;
+      const resolvedHospitalId = appointment.hospital_id || existingAppt?.hospital_id || currentTenantId || null;
+      const resolvedHospitalName = appointment.hospitalName || null;
+      const resolvedPatientId = appointment.patient_id || null;
 
       const resolvedSource = isRoleMasterOrSales 
         ? appointment.source 
@@ -1695,7 +1528,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           booking_status: 'DoctorMetadata',
           doctor_assessment: metadataToSave,
           updated_at: new Date().toISOString(),
-          hospital_id: FACILITY_ID
+          hospital_id: staffData.hospital_id || null
         };
         await supabase.from(APPOINTMENTS_TABLE).insert(newRecord);
       }
@@ -1772,7 +1605,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
             booking_status: 'DoctorMetadata',
             doctor_assessment: updatedAssessment,
             updated_at: new Date().toISOString(),
-            hospital_id: FACILITY_ID
+            hospital_id: staffData.hospital_id || null
           };
           await supabase.from(APPOINTMENTS_TABLE).insert(newRecord);
         }
@@ -1823,7 +1656,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       currentTenantId, currentUserId, currentDoctorId, currentUserStaff,
       analyticsAccounts, analyticsHierarchies,
       selectedTenantFilter, setSelectedTenantFilter,
-      createAnalyticsAccount, createOrActivateFrontOffice,
+      createAnalyticsAccount, createDoctorOnlyAccount, createOrActivateFrontOffice,
       createDoctorForAnalytics, reassignDoctorAnalytics,
       dashboardPermissions, activeDashboard, setActiveDashboard,
       updateDashboardPermission, hasPermission, getAccessibleDashboards,

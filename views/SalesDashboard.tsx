@@ -2,16 +2,227 @@ import React, { useState, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
 import { Appointment, Patient, SurgeonCode, Condition, Gender } from '../types';
 import { 
-  TrendingUp, Calendar, Users, Phone, Search, Plus, CheckCircle2, 
-  Clock, Lock, ArrowRight, AlertCircle, ShieldAlert, Sparkles, Filter,
-  UserCheck, DollarSign, Building2, Stethoscope, Eye, RefreshCw, 
-  ChevronRight, FileText, MapPin, Tag, Check, X, UserPlus, HelpCircle
+  TrendingUp, Calendar, Phone, Search, CheckCircle2, 
+  Clock, Lock, ArrowRight, ArrowLeft, Filter,
+  Building2, Stethoscope, Eye, Tag, X,
+  MessageSquare, Edit3, CalendarCheck, Check
 } from 'lucide-react';
 
-export interface LeadItem {
+const isDoctorAssociatedWithHospital = (doctor: any, hospital: any): boolean => {
+  if (!doctor || !hospital) return false;
+  const hospIds = [hospital.id, hospital.hospital_id].filter(Boolean);
+  if (doctor.hospital_id && hospIds.includes(doctor.hospital_id)) return true;
+  const hospNames = [hospital.hospitalName, hospital.name].filter(Boolean).map((n: string) => n.toLowerCase().trim());
+  if (doctor.hospitalName && hospNames.includes(doctor.hospitalName.toLowerCase().trim())) return true;
+  return false;
+};
+
+const isDoctorAvailableOnDate = (doctor: any, dateString: string | undefined): boolean => {
+  if (!dateString) return true;
+  if (!doctor || !doctor.id) return true;
+  if (doctor.role === 'DEACTIVATED_DOCTOR') return false;
+
+  const availability = doctor.availability || {};
+  const formattedDate = dateString;
+
+  if (availability.blockedDates) {
+    const isBlocked = (availability.blockedDates || []).some((b: any) => b.date === formattedDate);
+    if (isBlocked) return false;
+  }
+  if (availability.unavailableDates && availability.unavailableDates.includes(formattedDate)) {
+    return false;
+  }
+
+  const weekday = new Date(dateString + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+
+  if (availability.daySchedules) {
+    const dayConfig = (availability.daySchedules || []).find((ds: any) => ds.day === weekday);
+    if (dayConfig) {
+      if (dayConfig.status !== 'Available') return false;
+    }
+  } else if (availability.availableDays && availability.availableDays.length > 0) {
+    if (!availability.availableDays.includes(weekday)) return false;
+  }
+
+  return true;
+};
+
+const getAvailableSlotsForDoctorAndDate = (doctor: any, dateString: string | undefined): string[] => {
+  const defaultSlots = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'];
+  if (!dateString) return defaultSlots;
+  if (!doctor) return defaultSlots;
+  if (!isDoctorAvailableOnDate(doctor, dateString)) return [];
+
+  const availability = doctor.availability || {};
+  let start = availability.startTime || '09:00';
+  let end = availability.endTime || '17:00';
+  let breaksList: any[] = [];
+
+  const weekday = new Date(dateString + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+  if (availability.daySchedules) {
+    const dayConfig = (availability.daySchedules || []).find((ds: any) => ds.day === weekday);
+    if (dayConfig && dayConfig.status === 'Available') {
+      start = dayConfig.startTime || start;
+      end = dayConfig.endTime || end;
+      breaksList = dayConfig.breaks || [];
+    }
+  }
+
+  const [sh, sm] = (start || '09:00').split(':').map(Number);
+  const [eh, em] = (end || '17:00').split(':').map(Number);
+  const startMinutes = (sh || 9) * 60 + (sm || 0);
+  const endMinutes = (eh || 17) * 60 + (em || 0);
+
+  const slotsList: string[] = [];
+  for (let min = startMinutes; min < endMinutes; min += 30) {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
+    const isDuringBreak = breaksList.some((br: any) => {
+      if (!br.startTime || !br.endTime) return false;
+      const [bsh, bsm] = br.startTime.split(':').map(Number);
+      const [beh, bem] = br.endTime.split(':').map(Number);
+      const bsMin = bsh * 60 + bsm;
+      const beMin = beh * 60 + bem;
+      return min >= bsMin && min < beMin;
+    });
+
+    if (!isDuringBreak) {
+      slotsList.push(timeStr);
+    }
+  }
+
+  return slotsList.length > 0 ? slotsList : defaultSlots;
+};
+
+const sourceConfig = [
+  { name: 'Google' },
+  { name: 'YouTube' },
+  { name: 'Website' },
+  { name: 'Facebook' },
+  { name: 'Instagram' },
+  { name: 'WhatsApp' },
+  { name: 'Referral' },
+  { name: 'Walking' },
+  { name: 'Relatives / Friend' },
+  { name: 'Hospital Billboards' },
+  { name: 'Doctor Recommended' },
+  { name: 'Others' }
+];
+
+const SOURCE_DISPLAY_MAP: Record<string, string> = {
+  'Google': 'Google',
+  'YouTube': 'YouTube',
+  'Website': 'Website',
+  'Facebook': 'Facebook',
+  'Instagram': 'Instagram',
+  'WhatsApp': 'WhatsApp',
+  'Referral': 'Referral',
+  'Walking': 'Walking',
+  'Relatives / Friend': 'Relatives / Friend',
+  'Hospital Billboards': 'Hospital Billboards',
+  'Doctor Recommended': 'Doctor Recommended',
+  'Other': 'Others',
+  'Others': 'Others'
+};
+
+const getSourceDisplay = (source: string | undefined): string => {
+  if (!source) return 'Google';
+  if (source.startsWith('Other: ')) return 'Others';
+  return SOURCE_DISPLAY_MAP[source] || source;
+};
+
+// All unique project/system statuses recognized across Master, Front Office, Doctor, and Counseling workflows
+// Every status appears exactly once (no duplicates like 'Schedule'/'Scheduled' or 'Follow Up'/'Follow-up')
+export const ALL_PROJECT_STATUSES: string[] = [
+  'Scheduled',
+  'Follow-up',
+  'Arrived',
+  'In Consultation',
+  'Doctor Done',
+  'Medication Done',
+  'Package Proposal',
+  'Surgery Scheduled',
+  'Follow-Up Surgery',
+  'Surgery Completed',
+  'Surgery Lost',
+  'Completed',
+  'Confirmed',
+  'Revisit',
+  'Cancelled',
+  'No Show',
+  'New Leads',
+  'Junk',
+  'Pending Scheduling'
+];
+
+export const normalizeProjectStatus = (status?: string): string => {
+  if (!status) return '';
+  const trimmed = status.trim();
+  const lower = trimmed.toLowerCase();
+  
+  if (lower === 'scheduled' || lower === 'schedule') return 'Scheduled';
+  if (lower === 'follow-up' || lower === 'follow up') return 'Follow-up';
+  if (lower === 'surgery scheduled' || lower === 'surgery fixed') return 'Surgery Scheduled';
+  if (lower === 'in consultation' || lower === 'in-consultation') return 'In Consultation';
+  if (lower === 'follow-up surgery' || lower === 'follow up surgery') return 'Follow-Up Surgery';
+  
+  const found = ALL_PROJECT_STATUSES.find(st => st.toLowerCase() === lower);
+  if (found) return found;
+  
+  return trimmed;
+};
+
+export const getStatusBadgeStyle = (status?: string): { badge: string; dot: string } => {
+  if (!status) return { badge: 'bg-slate-100 text-slate-700 border-slate-200', dot: 'bg-slate-400' };
+  const s = status.toLowerCase();
+  if (s.includes('scheduled') || s === 'schedule') {
+    return { badge: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500' };
+  }
+  if (s.includes('follow-up') || s.includes('follow up')) {
+    return { badge: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' };
+  }
+  if (s.includes('arrived')) {
+    return { badge: 'bg-cyan-50 text-cyan-700 border-cyan-200', dot: 'bg-cyan-500' };
+  }
+  if (s.includes('in consultation') || s.includes('in-consultation')) {
+    return { badge: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-500' };
+  }
+  if (s.includes('doctor done')) {
+    return { badge: 'bg-teal-50 text-teal-700 border-teal-200', dot: 'bg-teal-500' };
+  }
+  if (s.includes('medication done')) {
+    return { badge: 'bg-purple-50 text-purple-700 border-purple-200', dot: 'bg-purple-500' };
+  }
+  if (s.includes('package proposal')) {
+    return { badge: 'bg-orange-50 text-orange-700 border-orange-200', dot: 'bg-orange-500' };
+  }
+  if (s.includes('surgery completed') || s.includes('completed')) {
+    return { badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' };
+  }
+  if (s.includes('confirmed')) {
+    return { badge: 'bg-green-50 text-green-700 border-green-200', dot: 'bg-green-500' };
+  }
+  if (s.includes('lost') || s.includes('cancelled')) {
+    return { badge: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' };
+  }
+  if (s.includes('revisit')) {
+    return { badge: 'bg-violet-50 text-violet-700 border-violet-200', dot: 'bg-violet-500' };
+  }
+  if (s.includes('junk') || s.includes('no show')) {
+    return { badge: 'bg-slate-100 text-slate-600 border-slate-300', dot: 'bg-slate-400' };
+  }
+  if (s.includes('new leads') || s.includes('pending')) {
+    return { badge: 'bg-amber-50 text-amber-800 border-amber-300', dot: 'bg-amber-500' };
+  }
+  return { badge: 'bg-slate-100 text-slate-700 border-slate-200', dot: 'bg-slate-400' };
+};
+
+export interface BookingRecord {
   id: string;
+  appointmentId: string;
   patientId?: string;
-  appointmentId?: string;
   name: string;
   mobile: string;
   age?: number;
@@ -20,7 +231,7 @@ export interface LeadItem {
   condition: Condition | string;
   source: string;
   referralPerson?: string | null;
-  appointmentStatus: string;
+  status: string;
   assignedHospitalId?: string;
   assignedHospitalName?: string;
   assignedDoctorId?: string;
@@ -30,7 +241,11 @@ export interface LeadItem {
   scheduledBy?: string;
   quickCode?: SurgeonCode;
   notes?: string;
-  leadStage: 'New' | 'Pending Scheduling' | 'Scheduled' | 'In Consultation' | 'Converted' | 'Follow-Up' | 'Dropped';
+  notesList?: { id: string; text: string; date: string; author: string }[];
+  followupDate?: string;
+  followupNotes?: string;
+  followupHistory?: { id: string; date: string; status: string; notes?: string; createdAt: string; author: string }[];
+  assignmentType?: 'doctor' | 'hospital';
 }
 
 export const SalesDashboard: React.FC = () => {
@@ -41,21 +256,47 @@ export const SalesDashboard: React.FC = () => {
     updateAppointment, 
     updatePatient,
     staffUsers, 
-    schedulingPermissions,
-    systemName 
+    schedulingPermissions 
   } = useHospital();
 
-  const [activeTab, setActiveTab] = useState<'leads_directory' | 'appointments' | 's1_leads'>('leads_directory');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [selectedHospitalFilter, setSelectedHospitalFilter] = useState<string>('ALL');
   const [selectedDoctorFilter, setSelectedDoctorFilter] = useState<string>('ALL');
+  const [statusUpdateSuccessMessage, setStatusUpdateSuccessMessage] = useState<string | null>(null);
 
-  // Modals
+  // Modals & Scheduling state
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [showAddLeadModal, setShowAddLeadModal] = useState(false);
-  const [selectedLeadForDetail, setSelectedLeadForDetail] = useState<LeadItem | null>(null);
-  const [leadToSchedule, setLeadToSchedule] = useState<LeadItem | null>(null);
+  const [scheduleStep, setScheduleStep] = useState<'ROUTE_SELECTION' | 'BOOKING_FORM'>('ROUTE_SELECTION');
+  const [selectedRoute, setSelectedRoute] = useState<'HOSPITAL' | 'DOCTOR' | null>(null);
+  const [selectedHospitalId, setSelectedHospitalId] = useState<string>('');
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
+  const [bookingToEdit, setBookingToEdit] = useState<BookingRecord | null>(null);
+  const [selectedBookingForDetail, setSelectedBookingForDetail] = useState<BookingRecord | null>(null);
+
+  // Follow-up Modal state
+  // Sales users can update booking status only to: Follow-up or Scheduled
+  const [followupBooking, setFollowupBooking] = useState<BookingRecord | null>(null);
+  const [followupDateInput, setFollowupDateInput] = useState('');
+  const [followupStatusInput, setFollowupStatusInput] = useState<'Follow-up' | 'Scheduled'>('Follow-up');
+  const [followupNotesInput, setFollowupNotesInput] = useState('');
+
+  // Notes Modal state
+  const [notesBooking, setNotesBooking] = useState<BookingRecord | null>(null);
+  const [newNoteInput, setNewNoteInput] = useState('');
+
+  // Booking Form Data
+  const [bookingFormData, setBookingFormData] = useState({
+    name: '',
+    mobile: '',
+    condition: Condition.Other,
+    date: new Date().toISOString().split('T')[0],
+    time: '10:00',
+    source: 'Google',
+    referralPerson: '',
+    sourceDoctorName: '',
+    sourceOtherDetails: ''
+  });
 
   // Doctors & Hospitals lists
   const doctors = useMemo(() => {
@@ -63,93 +304,77 @@ export const SalesDashboard: React.FC = () => {
   }, [staffUsers]);
 
   const hospitals = useMemo(() => {
-    return (staffUsers || []).filter(u => u.role === 'HOSPITAL' && u.accessStatus !== 'Revoked');
+    return (staffUsers || []).filter(u => 
+      (u.role === 'HOSPITAL' || u.role === 'ANALYTICS' || u.role === 'ANALYTICS_HUB') && 
+      u.accessStatus !== 'Revoked'
+    );
   }, [staffUsers]);
 
-  // Unified Leads Directory aggregation
-  const unifiedLeads: LeadItem[] = useMemo(() => {
-    const list: LeadItem[] = [];
-    const processedMobiles = new Set<string>();
+  // Doctors associated with currently selected hospital
+  const doctorsForSelectedHospital = useMemo(() => {
+    if (!selectedHospitalId) return [];
+    const hosp = hospitals.find(h => h.id === selectedHospitalId);
+    if (!hosp) return [];
+    return doctors.filter(d => isDoctorAssociatedWithHospital(d, hosp));
+  }, [selectedHospitalId, hospitals, doctors]);
 
-    // 1. Process from registered Patients
-    patients.forEach(p => {
-      const matchingAppts = appointments.filter(a => 
-        (a.patient_id && a.patient_id === p.id) || 
-        (a.mobile && a.mobile === p.mobile) ||
-        (a.name && p.name && a.name.toLowerCase().trim() === p.name.toLowerCase().trim())
+  // Unified Patient Bookings list
+  const patientBookings: BookingRecord[] = useMemo(() => {
+    const list: BookingRecord[] = [];
+    const processedAppointmentIds = new Set<string>();
+
+    // 1. Process all appointments (the single source of truth for bookings)
+    (appointments || []).forEach(a => {
+      processedAppointmentIds.add(a.id);
+
+      // Match linked patient if available
+      const matchingPatient = patients.find(p => 
+        (a.patient_id && p.id === a.patient_id) || 
+        (a.mobile && p.mobile === a.mobile)
       );
 
-      // Sort by newest date
-      matchingAppts.sort((a, b) => new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime());
-      const latestAppt = matchingAppts[0];
-
-      let leadStage: LeadItem['leadStage'] = 'New';
-      let apptStatus = 'Pending Scheduling';
-
-      if (latestAppt) {
-        apptStatus = latestAppt.status || latestAppt.bookingType || 'Scheduled';
-        if (apptStatus === 'Scheduled' || apptStatus === 'Confirmed') {
-          leadStage = 'Scheduled';
-        } else if (apptStatus === 'Arrived' || apptStatus === 'In-Consultation') {
-          leadStage = 'In Consultation';
-        } else if (apptStatus === 'Completed' || p.packageProposal?.outcome === 'Completed') {
-          leadStage = 'Converted';
-        } else if (apptStatus === 'Follow Up' || p.packageProposal?.outcome === 'Follow-Up') {
-          leadStage = 'Follow-Up';
-        } else if (apptStatus === 'Cancelled' || p.packageProposal?.outcome === 'Lost') {
-          leadStage = 'Dropped';
-        }
-      } else if (p.doctorAssessment?.quickCode === SurgeonCode.S1) {
-        leadStage = 'Pending Scheduling';
-      }
-
-      const assignedDoc = doctors.find(d => d.id === latestAppt?.assignedDoctorId || d.id === p.doctorAssessment?.assignedDoctorId);
-      const assignedHosp = hospitals.find(h => h.id === latestAppt?.hospital_id || (assignedDoc && assignedDoc.hospital_id === h.id));
-
-      list.push({
-        id: `lead_p_${p.id}`,
-        patientId: p.id,
-        appointmentId: latestAppt?.id,
-        name: p.name,
-        mobile: p.mobile,
-        age: p.age,
-        gender: p.gender,
-        city: (p as any).city || (p as any).address || '',
-        condition: p.condition || Condition.Other,
-        source: p.source || latestAppt?.source || 'Other',
-        referralPerson: latestAppt?.referral_person || (p as any).sourceDoctorName || null,
-        appointmentStatus: apptStatus,
-        assignedHospitalId: assignedHosp?.id || latestAppt?.hospital_id,
-        assignedHospitalName: assignedHosp?.name || latestAppt?.hospitalName || (assignedDoc?.hospitalName),
-        assignedDoctorId: assignedDoc?.id || latestAppt?.assignedDoctorId,
-        assignedDoctorName: assignedDoc?.name || latestAppt?.assignedDoctorName || p.doctorAssessment?.assignedDoctorName,
-        appointmentDate: latestAppt?.date,
-        appointmentTime: latestAppt?.time,
-        scheduledBy: latestAppt?.username || 'Front Office / Clinical',
-        quickCode: p.doctorAssessment?.quickCode,
-        notes: p.doctorAssessment?.notes || p.packageProposal?.remarks || '',
-        leadStage: leadStage
-      });
-
-      if (p.mobile) processedMobiles.add(p.mobile);
-    });
-
-    // 2. Include appointments that might not be in patients table yet
-    appointments.forEach(a => {
-      if (a.mobile && processedMobiles.has(a.mobile)) return;
-
-      const assignedDoc = doctors.find(d => d.id === a.assignedDoctorId);
+      const assignedDoc = doctors.find(d => d.id === a.assignedDoctorId || d.id === a.doctor_id);
       const assignedHosp = hospitals.find(h => h.id === a.hospital_id || (assignedDoc && assignedDoc.hospital_id === h.id));
 
+      const notesArr = a.notes_list || (a.notes ? [{
+        id: `note_legacy_${a.id}`,
+        text: a.notes,
+        date: a.createdAt || new Date().toISOString(),
+        author: a.username || 'Sales'
+      }] : []);
+
+      // Reflect current lifecycle status (Arrived, Doctor Done, Medication Done, Package Proposal, Surgery Scheduled, etc.)
+      let resolvedStatus = a.status || a.bookingType || 'Scheduled';
+      if (matchingPatient) {
+        if (matchingPatient.packageProposal?.outcome) {
+          switch (matchingPatient.packageProposal.outcome) {
+            case 'Scheduled': resolvedStatus = 'Surgery Scheduled'; break;
+            case 'Follow-Up': resolvedStatus = 'Follow-Up Surgery'; break;
+            case 'Lost': resolvedStatus = 'Surgery Lost'; break;
+            case 'Completed': resolvedStatus = 'Surgery Completed'; break;
+          }
+        } else if (matchingPatient.doctorAssessment) {
+          if (matchingPatient.doctorAssessment.quickCode === SurgeonCode.S1) resolvedStatus = 'Package Proposal';
+          else if (matchingPatient.doctorAssessment.quickCode === SurgeonCode.M1) resolvedStatus = 'Medication Done';
+          else resolvedStatus = 'Doctor Done';
+        } else if (matchingPatient.status && matchingPatient.status !== 'Scheduled') {
+          resolvedStatus = matchingPatient.status;
+        }
+      }
+
       list.push({
-        id: `lead_a_${a.id}`,
+        id: a.id,
         appointmentId: a.id,
-        name: a.name,
-        mobile: a.mobile,
-        condition: a.condition || Condition.Other,
-        source: a.source || 'Other',
+        patientId: a.patient_id || matchingPatient?.id,
+        name: a.name || matchingPatient?.name || 'Unnamed Patient',
+        mobile: a.mobile || matchingPatient?.mobile || '',
+        age: matchingPatient?.age,
+        gender: matchingPatient?.gender,
+        city: (matchingPatient as any)?.city || (matchingPatient as any)?.address || '',
+        condition: a.condition || matchingPatient?.condition || Condition.Other,
+        source: a.source || matchingPatient?.source || 'Other',
         referralPerson: a.referral_person,
-        appointmentStatus: a.status || a.bookingType || 'Scheduled',
+        status: normalizeProjectStatus(resolvedStatus),
         assignedHospitalId: assignedHosp?.id || a.hospital_id,
         assignedHospitalName: assignedHosp?.name || a.hospitalName || assignedDoc?.hospitalName,
         assignedDoctorId: assignedDoc?.id || a.assignedDoctorId,
@@ -157,166 +382,258 @@ export const SalesDashboard: React.FC = () => {
         appointmentDate: a.date,
         appointmentTime: a.time,
         scheduledBy: a.username || 'Sales Executive',
-        leadStage: (a.status === 'Completed' ? 'Converted' : a.status === 'Cancelled' ? 'Dropped' : 'Scheduled'),
+        quickCode: matchingPatient?.doctorAssessment?.quickCode,
+        notes: a.notes || matchingPatient?.doctorAssessment?.notes || '',
+        notesList: notesArr,
+        followupDate: a.followup_date || (matchingPatient as any)?.followup_date,
+        followupNotes: a.followup_notes,
+        followupHistory: a.followup_history || [],
+        assignmentType: a.assignment_type
       });
-
-      if (a.mobile) processedMobiles.add(a.mobile);
     });
 
-    return list;
-  }, [patients, appointments, doctors, hospitals]);
+    // 2. Also include any registered patient records that do not have an appointment yet
+    (patients || []).forEach(p => {
+      const hasAppt = appointments.some(a => 
+        (a.patient_id && a.patient_id === p.id) || 
+        (a.mobile && p.mobile === p.mobile)
+      );
+      if (hasAppt) return;
 
-  // Filtered Leads Directory
-  const filteredLeads = useMemo(() => {
-    return unifiedLeads.filter(lead => {
+      const assignedDoc = doctors.find(d => d.id === p.doctorAssessment?.assignedDoctorId);
+      const assignedHosp = hospitals.find(h => h.id === p.hospital_id || (assignedDoc && assignedDoc.hospital_id === h.id));
+
+      let pStatus = p.status || 'Pending Scheduling';
+      if (p.packageProposal?.outcome) {
+        switch (p.packageProposal.outcome) {
+          case 'Scheduled': pStatus = 'Surgery Scheduled'; break;
+          case 'Follow-Up': pStatus = 'Follow-Up Surgery'; break;
+          case 'Lost': pStatus = 'Surgery Lost'; break;
+          case 'Completed': pStatus = 'Surgery Completed'; break;
+        }
+      } else if (p.doctorAssessment) {
+        if (p.doctorAssessment.quickCode === SurgeonCode.S1) pStatus = 'Package Proposal';
+        else if (p.doctorAssessment.quickCode === SurgeonCode.M1) pStatus = 'Medication Done';
+        else pStatus = 'Doctor Done';
+      }
+
+      list.push({
+        id: `p_${p.id}`,
+        appointmentId: '',
+        patientId: p.id,
+        name: p.name,
+        mobile: p.mobile,
+        age: p.age,
+        gender: p.gender,
+        city: (p as any).city || (p as any).address || '',
+        condition: p.condition || Condition.Other,
+        source: p.source || 'Other',
+        referralPerson: p.sourceDoctorName || null,
+        status: normalizeProjectStatus(pStatus),
+        assignedHospitalId: assignedHosp?.id || p.hospital_id,
+        assignedHospitalName: assignedHosp?.name || assignedDoc?.hospitalName,
+        assignedDoctorId: assignedDoc?.id || p.doctorAssessment?.assignedDoctorId,
+        assignedDoctorName: assignedDoc?.name || p.doctorAssessment?.assignedDoctorName,
+        appointmentDate: (p as any).entry_date || p.registeredAt?.split('T')[0],
+        appointmentTime: (p as any).arrivalTime || '10:00',
+        scheduledBy: 'Hospital Front Office',
+        quickCode: p.doctorAssessment?.quickCode,
+        notes: p.doctorAssessment?.notes || '',
+        notesList: [],
+        followupDate: (p as any).followup_date,
+        followupNotes: '',
+        followupHistory: []
+      });
+    });
+
+    // Sort by appointment date descending (newest bookings first)
+    return list.sort((x, y) => {
+      const dateX = x.appointmentDate || '1970-01-01';
+      const dateY = y.appointmentDate || '1970-01-01';
+      return dateY.localeCompare(dateX);
+    });
+  }, [appointments, patients, doctors, hospitals]);
+
+  // Comprehensive list of all statuses present across project and live records
+  // "Every status appears only once in the dropdown. Follow-up must appear only once. Scheduled must appear only once."
+  const allDropdownStatuses = useMemo(() => {
+    const set = new Set<string>();
+    
+    // Add all canonical project statuses
+    ALL_PROJECT_STATUSES.forEach(st => set.add(st));
+
+    // Normalize any record statuses so variations merge strictly into their single entry
+    patientBookings.forEach(b => {
+      if (b.status && b.status.trim()) {
+        const norm = normalizeProjectStatus(b.status);
+        if (norm) {
+          set.add(norm);
+        }
+      }
+    });
+
+    return Array.from(set);
+  }, [patientBookings]);
+
+  // Helper to count occurrences of a status for user convenience
+  const getStatusCount = (st: string) => {
+    const targetNorm = normalizeProjectStatus(st);
+    return patientBookings.filter(b => normalizeProjectStatus(b.status) === targetNorm).length;
+  };
+
+  // Filtered Patient Bookings
+  const filteredBookings = useMemo(() => {
+    return patientBookings.filter(booking => {
       const q = searchTerm.toLowerCase().trim();
       const matchesSearch = !q || 
-        lead.name.toLowerCase().includes(q) ||
-        lead.mobile.includes(q) ||
-        (lead.assignedDoctorName && lead.assignedDoctorName.toLowerCase().includes(q)) ||
-        (lead.assignedHospitalName && lead.assignedHospitalName.toLowerCase().includes(q)) ||
-        (lead.city && lead.city.toLowerCase().includes(q)) ||
-        (lead.source && lead.source.toLowerCase().includes(q));
+        booking.name.toLowerCase().includes(q) ||
+        booking.mobile.includes(q) ||
+        (booking.assignedDoctorName && booking.assignedDoctorName.toLowerCase().includes(q)) ||
+        (booking.assignedHospitalName && booking.assignedHospitalName.toLowerCase().includes(q)) ||
+        (booking.city && booking.city.toLowerCase().includes(q)) ||
+        (booking.source && booking.source.toLowerCase().includes(q));
 
-      const matchesStatus = statusFilter === 'ALL' || 
-        (statusFilter === 'PENDING' && (lead.appointmentStatus === 'Pending Scheduling' || !lead.appointmentDate)) ||
-        (statusFilter === 'SCHEDULED' && lead.appointmentStatus === 'Scheduled') ||
-        (statusFilter === 'CONVERTED' && (lead.leadStage === 'Converted' || lead.appointmentStatus === 'Completed')) ||
-        (statusFilter === 'FOLLOW_UP' && lead.leadStage === 'Follow-Up');
+      // Match Current Status filter
+      let matchesStatus = true;
+      if (statusFilter && statusFilter !== 'ALL') {
+        const targetNorm = normalizeProjectStatus(statusFilter);
+        const currentNorm = normalizeProjectStatus(booking.status);
+        matchesStatus = (currentNorm === targetNorm);
+      }
 
-      const matchesHospital = selectedHospitalFilter === 'ALL' || lead.assignedHospitalId === selectedHospitalFilter;
-      const matchesDoctor = selectedDoctorFilter === 'ALL' || lead.assignedDoctorId === selectedDoctorFilter;
+      const matchesHospital = selectedHospitalFilter === 'ALL' || booking.assignedHospitalId === selectedHospitalFilter;
+      const matchesDoctor = selectedDoctorFilter === 'ALL' || booking.assignedDoctorId === selectedDoctorFilter;
 
       return matchesSearch && matchesStatus && matchesHospital && matchesDoctor;
     });
-  }, [unifiedLeads, searchTerm, statusFilter, selectedHospitalFilter, selectedDoctorFilter]);
+  }, [patientBookings, searchTerm, statusFilter, selectedHospitalFilter, selectedDoctorFilter]);
 
-  // Lead metrics
-  const totalLeadsCount = unifiedLeads.length;
-  const pendingSchedulingCount = unifiedLeads.filter(l => l.appointmentStatus === 'Pending Scheduling' || !l.appointmentDate).length;
-  const scheduledCount = unifiedLeads.filter(l => l.appointmentStatus === 'Scheduled').length;
-  const convertedCount = unifiedLeads.filter(l => l.leadStage === 'Converted' || l.appointmentStatus === 'Completed').length;
+  // Metric counts
+  const totalBookingsCount = patientBookings.length;
+  const scheduledCount = patientBookings.filter(b => normalizeProjectStatus(b.status) === 'Scheduled').length;
+  const inConsultationCount = patientBookings.filter(b => {
+    const s = normalizeProjectStatus(b.status);
+    return s === 'Arrived' || s === 'In Consultation';
+  }).length;
+  const followUpCount = patientBookings.filter(b => normalizeProjectStatus(b.status) === 'Follow-up' || Boolean(b.followupDate)).length;
 
   const hasSchedulingAccess = schedulingPermissions.sales;
 
-  // Form state for Scheduling/Assigning modal
-  const [scheduleForm, setScheduleForm] = useState({
-    assignmentTarget: 'both' as 'both' | 'doctor' | 'hospital',
-    hospitalId: '',
-    doctorId: '',
-    date: new Date().toISOString().split('T')[0],
-    time: '10:00',
-    source: 'Google',
-    referralPerson: '',
-    condition: Condition.Other,
-    visitType: 'OPD',
-    remarks: ''
-  });
+  // Status Update Permission: Sales users can update a booking status only to: Follow-up or Scheduled
+  const handleQuickUpdateStatus = async (booking: BookingRecord, newStatus: string) => {
+    if (newStatus !== 'Scheduled' && newStatus !== 'Follow-up') {
+      alert("Permission notice: Sales users can only update status to 'Follow-up' or 'Scheduled'.");
+      return;
+    }
+    if (!booking.appointmentId) {
+      alert("This record cannot be updated directly as it does not have an active appointment ID.");
+      return;
+    }
 
-  // Form state for creating a brand new lead
-  const [newLeadForm, setNewLeadForm] = useState({
-    name: '',
-    mobile: '',
-    age: '',
-    gender: Gender.Male,
-    city: '',
-    condition: Condition.Other,
-    source: 'Google',
-    referralPerson: '',
-    hospitalId: '',
-    doctorId: '',
-    date: new Date().toISOString().split('T')[0],
-    time: '10:30',
-    scheduleImmediately: true,
-    notes: ''
-  });
+    const appt = appointments.find(a => a.id === booking.appointmentId);
+    if (!appt) return;
 
-  // Initiate scheduling for a lead
-  const handleOpenScheduleModal = (lead: LeadItem) => {
-    setLeadToSchedule(lead);
-    setScheduleForm({
-      assignmentTarget: 'both',
-      hospitalId: lead.assignedHospitalId || (hospitals[0]?.id || ''),
-      doctorId: lead.assignedDoctorId || (doctors[0]?.id || ''),
-      date: lead.appointmentDate || new Date().toISOString().split('T')[0],
-      time: lead.appointmentTime || '10:00',
-      source: lead.source || 'Google',
-      referralPerson: lead.referralPerson || '',
-      condition: (lead.condition as Condition) || Condition.Other,
-      visitType: 'OPD',
-      remarks: lead.notes || ''
+    await updateAppointment({
+      ...appt,
+      status: newStatus,
+      bookingType: newStatus === 'Follow-up' ? 'Follow Up' : 'Scheduled'
     });
+
+    setStatusUpdateSuccessMessage(`Status updated to "${newStatus}" for ${booking.name}`);
+    setTimeout(() => setStatusUpdateSuccessMessage(null), 3000);
+  };
+
+  // Initiate booking or scheduling for a new patient or edit existing booking
+  const handleOpenScheduleModal = (booking: BookingRecord | null = null) => {
+    if (booking) {
+      setBookingToEdit(booking);
+      if (booking.assignedHospitalId) {
+        setSelectedRoute('HOSPITAL');
+        setSelectedHospitalId(booking.assignedHospitalId);
+        setSelectedDoctorId(booking.assignedDoctorId || '');
+      } else if (booking.assignedDoctorId) {
+        setSelectedRoute('DOCTOR');
+        setSelectedDoctorId(booking.assignedDoctorId);
+        setSelectedHospitalId('');
+      } else {
+        setSelectedRoute(null);
+        setSelectedHospitalId('');
+        setSelectedDoctorId('');
+      }
+
+      setBookingFormData({
+        name: booking.name || '',
+        mobile: booking.mobile || '',
+        condition: (booking.condition as Condition) || Condition.Other,
+        date: booking.appointmentDate || new Date().toISOString().split('T')[0],
+        time: booking.appointmentTime || '10:00',
+        source: booking.source || 'Google',
+        referralPerson: booking.referralPerson || '',
+        sourceDoctorName: '',
+        sourceOtherDetails: ''
+      });
+      // When editing existing booking, go straight to form
+      setScheduleStep('BOOKING_FORM');
+    } else {
+      setBookingToEdit(null);
+      setSelectedRoute(null);
+      setSelectedHospitalId('');
+      setSelectedDoctorId('');
+      setBookingFormData({
+        name: '',
+        mobile: '',
+        condition: Condition.Other,
+        date: new Date().toISOString().split('T')[0],
+        time: '10:00',
+        source: 'Google',
+        referralPerson: '',
+        sourceDoctorName: '',
+        sourceOtherDetails: ''
+      });
+      setScheduleStep('ROUTE_SELECTION');
+    }
+
     setShowScheduleModal(true);
   };
 
-  // Submit appointment scheduling for patient/lead
-  const handleSaveScheduling = async (e: React.FormEvent) => {
+  const handleContinueToBooking = () => {
+    if (selectedRoute === 'HOSPITAL') {
+      if (!selectedHospitalId) {
+        alert('Please select a hospital facility.');
+        return;
+      }
+    } else if (selectedRoute === 'DOCTOR') {
+      if (!selectedDoctorId) {
+        alert('Please select an attending doctor.');
+        return;
+      }
+    } else {
+      alert('Please choose either Hospital or Doctor option to proceed.');
+      return;
+    }
+    setScheduleStep('BOOKING_FORM');
+  };
+
+  // Submit appointment booking / scheduling
+  const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasSchedulingAccess) {
       alert('Scheduling access is currently disabled by Master Admin.');
       return;
     }
-    if (!leadToSchedule) return;
 
-    const selectedDoc = doctors.find(d => d.id === scheduleForm.doctorId);
-    const selectedHosp = hospitals.find(h => h.id === scheduleForm.hospitalId);
-    const activeUsername = localStorage.getItem('hms_hospital_name') || 
-      localStorage.getItem('username') || 
-      'Sales Executive';
-
-    const hospitalName = selectedHosp ? selectedHosp.name : (selectedDoc?.hospitalName || 'Main Hospital Facility');
-    const doctorName = selectedDoc ? selectedDoc.name : undefined;
-
-    if (leadToSchedule.appointmentId) {
-      // Update existing appointment
-      const existingAppt = appointments.find(a => a.id === leadToSchedule.appointmentId);
-      if (existingAppt) {
-        await updateAppointment({
-          ...existingAppt,
-          date: scheduleForm.date,
-          time: scheduleForm.time,
-          assignedDoctorId: selectedDoc?.id,
-          assignedDoctorName: doctorName,
-          hospital_id: selectedHosp?.id || existingAppt.hospital_id,
-          hospitalName: hospitalName,
-          status: 'Scheduled',
-          bookingType: 'Scheduled',
-          source: scheduleForm.source,
-          referral_person: scheduleForm.source === 'Referral' ? scheduleForm.referralPerson : null,
-          username: activeUsername
-        });
-      }
-    } else {
-      // Create new scheduled appointment
-      await addAppointment({
-        name: leadToSchedule.name,
-        mobile: leadToSchedule.mobile,
-        source: scheduleForm.source,
-        referral_person: scheduleForm.source === 'Referral' ? scheduleForm.referralPerson : null,
-        condition: scheduleForm.condition,
-        date: scheduleForm.date,
-        time: scheduleForm.time,
-        assignedDoctorId: selectedDoc?.id,
-        assignedDoctorName: doctorName,
-        hospital_id: selectedHosp?.id,
-        hospitalName: hospitalName,
-        assignment_type: scheduleForm.assignmentTarget === 'hospital' ? 'hospital' : 'doctor',
-        patient_id: leadToSchedule.patientId || null,
-        bookingType: 'Scheduled',
-        visit_type: 'OPD',
-        username: activeUsername
-      });
+    if (!bookingFormData.name || !bookingFormData.mobile || !bookingFormData.date || !bookingFormData.time || !bookingFormData.condition) {
+      alert('Please fill in patient name, mobile, condition, appointment date and time.');
+      return;
     }
 
-    setShowScheduleModal(false);
-    setLeadToSchedule(null);
-  };
-
-  // Submit Brand New Lead
-  const handleCreateNewLead = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newLeadForm.name || !newLeadForm.mobile) {
-      alert('Please provide patient name and mobile number.');
+    const displaySource = getSourceDisplay(bookingFormData.source);
+    if (displaySource === 'Doctor Recommended' && !bookingFormData.sourceDoctorName) {
+      alert('Please provide the Doctor Name.');
+      return;
+    }
+    if (displaySource === 'Others' && !bookingFormData.sourceOtherDetails) {
+      alert('Please provide source details.');
       return;
     }
 
@@ -324,120 +641,241 @@ export const SalesDashboard: React.FC = () => {
       localStorage.getItem('username') || 
       'Sales Executive';
 
-    const selectedDoc = doctors.find(d => d.id === newLeadForm.doctorId);
-    const selectedHosp = hospitals.find(h => h.id === newLeadForm.hospitalId);
-    const hospitalName = selectedHosp ? selectedHosp.name : (selectedDoc?.hospitalName || 'Main Hospital Facility');
+    let finalHospitalId: string | undefined = undefined;
+    let finalHospitalName: string | undefined = undefined;
+    let finalDoctorId: string | undefined = undefined;
+    let finalDoctorName: string | undefined = undefined;
+    let assignmentType: 'hospital' | 'doctor' = 'hospital';
 
-    if (newLeadForm.scheduleImmediately && hasSchedulingAccess) {
-      await addAppointment({
-        name: newLeadForm.name,
-        mobile: newLeadForm.mobile,
-        source: newLeadForm.source,
-        referral_person: newLeadForm.source === 'Referral' ? newLeadForm.referralPerson : null,
-        condition: newLeadForm.condition,
-        date: newLeadForm.date,
-        time: newLeadForm.time,
-        assignedDoctorId: selectedDoc?.id,
-        assignedDoctorName: selectedDoc?.name,
-        hospital_id: selectedHosp?.id,
-        hospitalName: hospitalName,
-        assignment_type: selectedDoc ? 'doctor' : 'hospital',
-        bookingType: 'Scheduled',
-        visit_type: 'OPD',
-        username: activeUsername
-      });
-    } else {
-      // Add lead as appointment marked Pending
-      await addAppointment({
-        name: newLeadForm.name,
-        mobile: newLeadForm.mobile,
-        source: newLeadForm.source,
-        referral_person: newLeadForm.source === 'Referral' ? newLeadForm.referralPerson : null,
-        condition: newLeadForm.condition,
-        date: newLeadForm.date || new Date().toISOString().split('T')[0],
-        time: '10:00',
-        assignedDoctorId: selectedDoc?.id,
-        assignedDoctorName: selectedDoc?.name,
-        hospital_id: selectedHosp?.id,
-        hospitalName: hospitalName,
-        assignment_type: selectedDoc ? 'doctor' : 'hospital',
-        bookingType: 'Scheduled',
-        visit_type: 'OPD',
-        username: activeUsername
-      });
+    if (selectedRoute === 'HOSPITAL') {
+      const hosp = hospitals.find(h => h.id === selectedHospitalId);
+      finalHospitalId = hosp?.hospital_id || hosp?.id || selectedHospitalId;
+      finalHospitalName = hosp?.hospitalName || hosp?.name || 'Hospital Facility';
+
+      if (selectedDoctorId) {
+        const doc = doctors.find(d => d.id === selectedDoctorId);
+        finalDoctorId = doc?.id;
+        finalDoctorName = doc?.name;
+        assignmentType = 'doctor';
+      } else {
+        assignmentType = 'hospital';
+      }
+    } else if (selectedRoute === 'DOCTOR') {
+      const doc = doctors.find(d => d.id === selectedDoctorId);
+      finalDoctorId = doc?.id;
+      finalDoctorName = doc?.name;
+      assignmentType = 'doctor';
+      finalHospitalId = doc?.hospital_id || 'independent';
+      finalHospitalName = doc?.hospitalName || 'Consulting Clinic';
     }
 
-    setShowAddLeadModal(false);
-    setNewLeadForm({
-      name: '',
-      mobile: '',
-      age: '',
-      gender: Gender.Male,
-      city: '',
-      condition: Condition.Other,
-      source: 'Google',
-      referralPerson: '',
-      hospitalId: '',
-      doctorId: '',
-      date: new Date().toISOString().split('T')[0],
-      time: '10:30',
-      scheduleImmediately: true,
-      notes: ''
+    let sourceVal = bookingFormData.source;
+    let referralPersonVal: string | null = null;
+    let sourceDoctorNameVal: string | undefined = undefined;
+
+    if (displaySource === 'Doctor Recommended') {
+      sourceDoctorNameVal = bookingFormData.sourceDoctorName;
+    } else if (displaySource === 'Others') {
+      sourceVal = `Other: ${bookingFormData.sourceOtherDetails}`;
+    } else if (displaySource === 'Referral') {
+      referralPersonVal = bookingFormData.referralPerson;
+    }
+
+    // Status is Scheduled by default for new bookings, or preserves Follow-up if editing a follow-up booking
+    const assignedStatus = (bookingToEdit?.status === 'Follow-up' || bookingToEdit?.status === 'Follow Up') ? 'Follow-up' : 'Scheduled';
+
+    const payload: any = {
+      name: bookingFormData.name.trim(),
+      mobile: bookingFormData.mobile.trim(),
+      source: sourceVal,
+      sourceDoctorName: sourceDoctorNameVal,
+      referral_person: referralPersonVal,
+      condition: bookingFormData.condition as Condition,
+      date: bookingFormData.date,
+      time: bookingFormData.time,
+      assignedDoctorId: finalDoctorId,
+      assignedDoctorName: finalDoctorName,
+      doctor_id: finalDoctorId || null,
+      hospital_id: finalHospitalId,
+      hospitalName: finalHospitalName,
+      assignment_type: assignmentType,
+      bookingType: assignedStatus === 'Follow-up' ? 'Follow Up' : 'Scheduled',
+      status: assignedStatus,
+      visit_type: 'OPD',
+      username: activeUsername,
+      patient_id: bookingToEdit?.patientId || null
+    };
+
+    if (bookingToEdit?.appointmentId) {
+      const existing = appointments.find(a => a.id === bookingToEdit.appointmentId);
+      if (existing) {
+        await updateAppointment({
+          ...existing,
+          ...payload
+        });
+      } else {
+        await addAppointment(payload);
+      }
+    } else {
+      await addAppointment(payload);
+    }
+
+    setShowScheduleModal(false);
+    setScheduleStep('ROUTE_SELECTION');
+    setBookingToEdit(null);
+    setSelectedRoute(null);
+    setSelectedHospitalId('');
+    setSelectedDoctorId('');
+  };
+
+  // Follow-up handler: Sales users can update booking status only to: Follow-up or Scheduled
+  const handleOpenFollowup = (booking: BookingRecord) => {
+    setFollowupBooking(booking);
+    setFollowupDateInput(booking.followupDate || new Date().toISOString().split('T')[0]);
+    // Allowed values strictly 'Follow-up' or 'Scheduled'
+    const initialStatus = normalizeProjectStatus(booking.status) === 'Scheduled' ? 'Scheduled' : 'Follow-up';
+    setFollowupStatusInput(initialStatus);
+    setFollowupNotesInput(booking.followupNotes || '');
+  };
+
+  const handleSaveFollowup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!followupBooking) return;
+
+    // Sales users can update booking status only to: Follow-up or Scheduled
+    const allowedStatus: 'Follow-up' | 'Scheduled' = (followupStatusInput === 'Scheduled') ? 'Scheduled' : 'Follow-up';
+
+    const activeUsername = localStorage.getItem('hms_hospital_name') || 
+      localStorage.getItem('username') || 
+      'Sales Executive';
+
+    const newHistoryItem = {
+      id: `fu_${Date.now()}`,
+      date: followupDateInput,
+      status: allowedStatus,
+      notes: followupNotesInput.trim(),
+      createdAt: new Date().toISOString(),
+      author: activeUsername
+    };
+
+    const existingHistory = followupBooking.followupHistory || [];
+    const updatedHistory = [newHistoryItem, ...existingHistory];
+
+    if (followupBooking.appointmentId) {
+      const appt = appointments.find(a => a.id === followupBooking.appointmentId);
+      if (appt) {
+        await updateAppointment({
+          ...appt,
+          status: allowedStatus,
+          bookingType: allowedStatus === 'Follow-up' ? 'Follow Up' : 'Scheduled',
+          followup_date: followupDateInput,
+          followup_notes: followupNotesInput.trim(),
+          followup_history: updatedHistory
+        });
+      }
+    }
+
+    if (followupBooking.patientId) {
+      const pat = patients.find(p => p.id === followupBooking.patientId);
+      if (pat) {
+        await updatePatient(pat.id, {
+          ...pat,
+          followup_date: followupDateInput
+        } as any);
+      }
+    }
+
+    setFollowupBooking(null);
+    setStatusUpdateSuccessMessage(`Follow-up saved and status updated to "${allowedStatus}"`);
+    setTimeout(() => setStatusUpdateSuccessMessage(null), 3000);
+  };
+
+  // Notes handler
+  const handleOpenNotes = (booking: BookingRecord) => {
+    setNotesBooking(booking);
+    setNewNoteInput('');
+  };
+
+  const handleAddNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!notesBooking || !newNoteInput.trim()) return;
+
+    const activeUsername = localStorage.getItem('hms_hospital_name') || 
+      localStorage.getItem('username') || 
+      'Sales Executive';
+
+    const newNoteObj = {
+      id: `note_${Date.now()}`,
+      text: newNoteInput.trim(),
+      date: new Date().toISOString(),
+      author: activeUsername
+    };
+
+    const existingList = notesBooking.notesList || [];
+    const updatedList = [newNoteObj, ...existingList];
+    const combinedNotesStr = `${newNoteObj.text} (${newNoteObj.author} - ${new Date().toLocaleDateString()})\n${notesBooking.notes || ''}`.trim();
+
+    if (notesBooking.appointmentId) {
+      const appt = appointments.find(a => a.id === notesBooking.appointmentId);
+      if (appt) {
+        await updateAppointment({
+          ...appt,
+          notes: combinedNotesStr,
+          notes_list: updatedList
+        });
+      }
+    }
+
+    if (notesBooking.patientId) {
+      const pat = patients.find(p => p.id === notesBooking.patientId);
+      if (pat) {
+        await updatePatient(pat.id, {
+          ...pat,
+          doctorAssessment: {
+            ...pat.doctorAssessment,
+            notes: combinedNotesStr
+          }
+        } as any);
+      }
+    }
+
+    setNewNoteInput('');
+    setNotesBooking({
+      ...notesBooking,
+      notes: combinedNotesStr,
+      notesList: updatedList
     });
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12">
+      {/* Toast Notification */}
+      {statusUpdateSuccessMessage && (
+        <div className="fixed top-5 right-5 z-[200] bg-emerald-600 text-white px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-bold animate-in slide-in-from-top-3 duration-200">
+          <Check className="w-4 h-4" />
+          <span>{statusUpdateSuccessMessage}</span>
+        </div>
+      )}
+
       {/* Top Banner Header */}
       <div className="bg-gradient-to-r from-slate-900 via-rose-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white border border-rose-900/30 shadow-xl relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="space-y-2 max-w-2xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-bold uppercase tracking-wider">
-              <TrendingUp className="w-3.5 h-3.5" /> Sales & Patient Coordination
+              <TrendingUp className="w-3.5 h-3.5" /> Sales Patient Bookings & Scheduling
             </div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight">Sales Operations & Leads Directory</h1>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight">Patient Bookings & Schedules</h1>
             <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
-              Empowered with scheduling patients with appropriate hospitals or consulting doctors, managing incoming lead pipelines, and coordinating medical consultations.
+              Manage patient bookings, consultation schedules, follow-ups, and notes for hospital facilities and consulting doctors.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              id="add-lead-btn"
-              onClick={() => setShowAddLeadModal(true)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-rose-950 text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
-            >
-              <UserPlus className="w-4 h-4 text-rose-600" /> New Lead
-            </button>
-
             {hasSchedulingAccess ? (
               <button
-                id="book-appointment-btn"
-                onClick={() => {
-                  setLeadToSchedule({
-                    id: 'new_manual',
-                    name: '',
-                    mobile: '',
-                    condition: Condition.Other,
-                    source: 'Google',
-                    appointmentStatus: 'Pending Scheduling',
-                    leadStage: 'New'
-                  });
-                  setScheduleForm({
-                    assignmentTarget: 'both',
-                    hospitalId: hospitals[0]?.id || '',
-                    doctorId: doctors[0]?.id || '',
-                    date: new Date().toISOString().split('T')[0],
-                    time: '10:00',
-                    source: 'Google',
-                    referralPerson: '',
-                    condition: Condition.Other,
-                    visitType: 'OPD',
-                    remarks: ''
-                  });
-                  setShowScheduleModal(true);
-                }}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-rose-900/40 active:scale-95"
+                id="schedule-patient-btn"
+                onClick={() => handleOpenScheduleModal(null)}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-rose-900/40 active:scale-95"
               >
                 <Calendar className="w-4 h-4" /> Schedule Patient
               </button>
@@ -452,613 +890,952 @@ export const SalesDashboard: React.FC = () => {
 
       {/* KPI Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1.5">
+        <button
+          type="button"
+          onClick={() => setStatusFilter('ALL')}
+          className={`p-5 rounded-2xl border text-left transition-all space-y-1.5 ${
+            statusFilter === 'ALL' ? 'bg-rose-50/50 border-rose-300 ring-2 ring-rose-500/20 shadow-md' : 'bg-white border-slate-200 shadow-sm hover:border-slate-300'
+          }`}
+        >
           <div className="flex justify-between items-center text-slate-400">
-            <span className="text-[11px] font-black uppercase tracking-wider">Total Leads Directory</span>
-            <Users className="w-5 h-5 text-rose-600" />
+            <span className="text-[11px] font-black uppercase tracking-wider">Total Bookings</span>
+            <Calendar className="w-5 h-5 text-rose-600" />
           </div>
-          <div className="text-3xl font-black text-slate-900">{totalLeadsCount}</div>
-          <p className="text-[11px] text-slate-500 font-medium">Active inquiries & assigned patient leads</p>
-        </div>
+          <div className="text-3xl font-black text-slate-900">{totalBookingsCount}</div>
+          <p className="text-[11px] text-slate-500 font-medium">All registered & scheduled patient bookings</p>
+        </button>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1.5">
+        <button
+          type="button"
+          onClick={() => setStatusFilter('Scheduled')}
+          className={`p-5 rounded-2xl border text-left transition-all space-y-1.5 ${
+            statusFilter === 'Scheduled' ? 'bg-blue-50/50 border-blue-300 ring-2 ring-blue-500/20 shadow-md' : 'bg-white border-slate-200 shadow-sm hover:border-slate-300'
+          }`}
+        >
           <div className="flex justify-between items-center text-slate-400">
-            <span className="text-[11px] font-black uppercase tracking-wider">Pending Scheduling</span>
-            <Clock className="w-5 h-5 text-amber-500" />
+            <span className="text-[11px] font-black uppercase tracking-wider">Scheduled</span>
+            <Clock className="w-5 h-5 text-blue-600" />
           </div>
-          <div className="text-3xl font-black text-amber-600">{pendingSchedulingCount}</div>
-          <p className="text-[11px] text-slate-500 font-medium">Leads requiring hospital or doctor assignment</p>
-        </div>
+          <div className="text-3xl font-black text-blue-600">{scheduledCount}</div>
+          <p className="text-[11px] text-slate-500 font-medium">Upcoming doctor & hospital consultations</p>
+        </button>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1.5">
+        <button
+          type="button"
+          onClick={() => setStatusFilter('Arrived')}
+          className={`p-5 rounded-2xl border text-left transition-all space-y-1.5 ${
+            statusFilter === 'Arrived' ? 'bg-cyan-50/50 border-cyan-300 ring-2 ring-cyan-500/20 shadow-md' : 'bg-white border-slate-200 shadow-sm hover:border-slate-300'
+          }`}
+        >
           <div className="flex justify-between items-center text-slate-400">
-            <span className="text-[11px] font-black uppercase tracking-wider">Scheduled Appts</span>
-            <Calendar className="w-5 h-5 text-blue-600" />
+            <span className="text-[11px] font-black uppercase tracking-wider">In-Consultation / Arrived</span>
+            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
           </div>
-          <div className="text-3xl font-black text-slate-900">{scheduledCount}</div>
-          <p className="text-[11px] text-slate-500 font-medium">Assigned to consulting doctor / facility</p>
-        </div>
+          <div className="text-3xl font-black text-emerald-600">{inConsultationCount}</div>
+          <p className="text-[11px] text-slate-500 font-medium">Patients at facility or undergoing assessment</p>
+        </button>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1.5">
+        <button
+          type="button"
+          onClick={() => setStatusFilter('Follow-up')}
+          className={`p-5 rounded-2xl border text-left transition-all space-y-1.5 ${
+            statusFilter === 'Follow-up' ? 'bg-amber-50/50 border-amber-300 ring-2 ring-amber-500/20 shadow-md' : 'bg-white border-slate-200 shadow-sm hover:border-slate-300'
+          }`}
+        >
           <div className="flex justify-between items-center text-slate-400">
-            <span className="text-[11px] font-black uppercase tracking-wider">Scheduling Authority</span>
-            <Lock className="w-5 h-5 text-emerald-600" />
+            <span className="text-[11px] font-black uppercase tracking-wider">Follow-up</span>
+            <CalendarCheck className="w-5 h-5 text-amber-500" />
           </div>
-          <div className="text-xl font-black mt-1">
-            {hasSchedulingAccess ? (
-              <span className="text-emerald-600 flex items-center gap-1.5">
-                <CheckCircle2 className="w-5 h-5" /> Enabled (Active)
-              </span>
-            ) : (
-              <span className="text-rose-600 flex items-center gap-1.5 text-base">
-                <Lock className="w-4 h-4" /> Locked by Master Admin
-              </span>
-            )}
-          </div>
-          <p className="text-[11px] text-slate-500 font-medium">Distinct permission managed in Access Mgmt</p>
-        </div>
+          <div className="text-3xl font-black text-amber-600">{followUpCount}</div>
+          <p className="text-[11px] text-slate-500 font-medium">Active follow-ups scheduled or pending call</p>
+        </button>
       </div>
 
-      {/* Main Container with Tabs */}
+      {/* Main Container: Patient Bookings & Scheduling */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-        {/* Navigation Tabs Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between border-b border-slate-100 px-6 pt-4 gap-4 bg-slate-50/50">
-          <div className="flex items-center gap-2 overflow-x-auto pb-3 sm:pb-0">
-            <button
-              id="tab-leads-directory"
-              onClick={() => setActiveTab('leads_directory')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all shrink-0 ${
-                activeTab === 'leads_directory' 
-                  ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20' 
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
-            >
-              <Users className="w-4 h-4" /> Leads Directory ({filteredLeads.length})
-            </button>
-            <button
-              id="tab-appointments-roster"
-              onClick={() => setActiveTab('appointments')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all shrink-0 ${
-                activeTab === 'appointments' 
-                  ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20' 
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
-            >
-              <Calendar className="w-4 h-4" /> Booked Appointments ({appointments.length})
-            </button>
+        {/* Navigation / Header Bar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between border-b border-slate-100 px-6 py-4 gap-4 bg-slate-50/50">
+          <div>
+            <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-rose-600" /> Patient Bookings & Schedule Management
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Filter by Current Status, edit booking details, schedule follow-ups, and add internal notes.
+            </p>
           </div>
 
-          <div className="flex items-center gap-2 pb-3 sm:pb-0">
+          <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400 font-bold hidden md:inline">
               Available Doctors: <strong className="text-slate-700">{doctors.length}</strong> | Hospitals: <strong className="text-slate-700">{hospitals.length}</strong>
             </span>
           </div>
         </div>
 
-        {/* Tab 1: LEADS DIRECTORY TABLE */}
-        {activeTab === 'leads_directory' && (
-          <div className="p-6 space-y-6">
-            {/* Filter Controls Row */}
-            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="text-xs font-black uppercase text-slate-400 mr-1 flex items-center gap-1">
-                  <Filter className="w-3.5 h-3.5" /> Filter:
-                </div>
+        <div className="p-6 space-y-6">
+          {/* Filter Controls Row: Current Status Dropdown Filter */}
+          <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4 p-4 bg-slate-50/70 rounded-2xl border border-slate-200/80">
+            
+            {/* CURRENT STATUS DROPDOWN FILTER (Contains ALL project/system statuses) */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <label 
+                  htmlFor="current-status-dropdown-filter" 
+                  className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-1.5 shrink-0"
+                >
+                  <Filter className="w-4 h-4 text-rose-600" /> Current Status:
+                </label>
+                <select
+                  id="current-status-dropdown-filter"
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value)}
+                  className="px-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 shadow-xs min-w-[240px] cursor-pointer"
+                >
+                  <option value="ALL">All Current Statuses ({totalBookingsCount})</option>
+                  {allDropdownStatuses.map(statusName => {
+                    const count = getStatusCount(statusName);
+                    return (
+                      <option key={statusName} value={statusName}>
+                        {statusName} {count > 0 ? `(${count})` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {statusFilter !== 'ALL' && (
                 <button
+                  type="button"
                   onClick={() => setStatusFilter('ALL')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    statusFilter === 'ALL' ? 'bg-slate-900 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
+                  className="px-3 py-1.5 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg flex items-center gap-1 transition-colors border border-rose-200"
+                  title="Reset status filter to All"
                 >
-                  All ({unifiedLeads.length})
+                  <X className="w-3.5 h-3.5" /> Clear Filter
                 </button>
-                <button
-                  onClick={() => setStatusFilter('PENDING')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    statusFilter === 'PENDING' ? 'bg-amber-500 text-white shadow-xs' : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
-                  }`}
-                >
-                  <Clock className="w-3 h-3" /> Need Scheduling ({pendingSchedulingCount})
-                </button>
-                <button
-                  onClick={() => setStatusFilter('SCHEDULED')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    statusFilter === 'SCHEDULED' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
-                  }`}
-                >
-                  <CheckCircle2 className="w-3 h-3" /> Scheduled ({scheduledCount})
-                </button>
-                <button
-                  onClick={() => setStatusFilter('CONVERTED')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    statusFilter === 'CONVERTED' ? 'bg-purple-600 text-white shadow-xs' : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
-                  }`}
-                >
-                  <Sparkles className="w-3 h-3" /> Converted ({convertedCount})
-                </button>
-              </div>
-
-              {/* Search and Facility Dropdowns */}
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="relative flex-1 sm:w-56">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    placeholder="Search patient, phone, doctor..."
-                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
-
-                <select
-                  value={selectedHospitalFilter}
-                  onChange={e => setSelectedHospitalFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                >
-                  <option value="ALL">All Hospitals</option>
-                  {hospitals.map(h => (
-                    <option key={h.id} value={h.id}>{h.name}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={selectedDoctorFilter}
-                  onChange={e => setSelectedDoctorFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                >
-                  <option value="ALL">All Doctors</option>
-                  {doctors.map(d => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
-              </div>
+              )}
             </div>
 
-            {/* Permission Alert if scheduling disabled */}
-            {!hasSchedulingAccess && (
-              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 flex items-center gap-3 text-xs font-bold">
-                <Lock className="w-4 h-4 shrink-0 text-amber-600" />
-                <span>
-                  <strong>Master Admin Governance:</strong> Scheduling authority has been paused for the Sales team. You can view lead directories and profiles, but scheduling patients is locked until re-enabled in Master Access Management.
-                </span>
+            {/* Search and Facility Dropdowns */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 sm:w-60">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Search patient, phone, doctor..."
+                  className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500 shadow-xs"
+                />
               </div>
-            )}
 
-            {/* Leads Directory Table */}
-            <div className="overflow-x-auto table-container w-full border border-slate-100 rounded-2xl">
-              <table className="w-full text-left text-xs min-w-[1100px]">
-                <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200">
-                  <tr>
-                    <th className="py-3.5 px-4">Lead & Patient Details</th>
-                    <th className="py-3.5 px-4">Condition & Source</th>
-                    <th className="py-3.5 px-4">Appointment Status</th>
-                    <th className="py-3.5 px-4">Assigned Hospital / Doctor</th>
-                    <th className="py-3.5 px-4">Scheduling Information</th>
-                    <th className="py-3.5 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredLeads.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400">
-                        <Users className="w-10 h-10 text-slate-200 mx-auto mb-2" />
-                        <div className="font-bold text-slate-600">No leads found matching current filter</div>
-                        <div className="text-[11px] text-slate-400 mt-0.5">Click "New Lead" or adjust your search filters above</div>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredLeads.map(lead => {
-                      const isPending = lead.appointmentStatus === 'Pending Scheduling' || !lead.appointmentDate;
-                      return (
-                        <tr key={lead.id} className="hover:bg-slate-50/70 transition-colors group">
-                          {/* Patient Details */}
-                          <td className="py-4 px-4">
-                            <div className="flex items-start gap-2">
-                              <div>
-                                <div className="font-black text-slate-900 text-sm flex items-center gap-2">
-                                  {lead.name}
-                                  {lead.quickCode === SurgeonCode.S1 && (
-                                    <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[9px] font-black border border-rose-200">
-                                      S1 Surgery
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-xs text-slate-600 font-medium mt-0.5 flex items-center gap-1 font-mono">
-                                  <Phone className="w-3 h-3 text-slate-400" /> {lead.mobile}
-                                </div>
-                                <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-2">
-                                  {lead.age ? <span>{lead.age} Yrs</span> : null}
-                                  {lead.gender ? <span>• {lead.gender}</span> : null}
-                                  {lead.city ? <span>• {lead.city}</span> : null}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
+              <select
+                value={selectedHospitalFilter}
+                onChange={e => setSelectedHospitalFilter(e.target.value)}
+                className="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500 shadow-xs"
+              >
+                <option value="ALL">All Hospitals</option>
+                {hospitals.map(h => (
+                  <option key={h.id} value={h.id}>{h.hospitalName || h.name}</option>
+                ))}
+              </select>
 
-                          {/* Condition & Source */}
-                          <td className="py-4 px-4">
-                            <div className="space-y-1">
-                              <span className="inline-block px-2.5 py-0.5 bg-slate-100 text-slate-800 font-bold rounded-md text-[11px]">
-                                {lead.condition}
-                              </span>
-                              <div className="text-[11px] text-slate-500 flex items-center gap-1 font-medium">
-                                <Tag className="w-3 h-3 text-slate-400" />
-                                <span>{lead.source}</span>
-                                {lead.referralPerson && (
-                                  <span className="text-rose-600 font-bold">({lead.referralPerson})</span>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Appointment Status */}
-                          <td className="py-4 px-4">
-                            {isPending ? (
-                              <div className="space-y-1">
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-200">
-                                  <Clock className="w-3 h-3" /> Pending Scheduling
-                                </span>
-                                <div className="text-[10px] text-amber-600 font-bold">Needs Doctor/Hospital</div>
-                              </div>
-                            ) : lead.appointmentStatus === 'Scheduled' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                <CheckCircle2 className="w-3 h-3" /> Scheduled
-                              </span>
-                            ) : lead.appointmentStatus === 'Completed' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-purple-50 text-purple-700 border border-purple-200">
-                                <Sparkles className="w-3 h-3" /> Completed
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-blue-50 text-blue-700 border border-blue-200">
-                                {lead.appointmentStatus}
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Assigned Hospital / Doctor */}
-                          <td className="py-4 px-4">
-                            <div className="space-y-1">
-                              {/* Hospital Assignment */}
-                              {lead.assignedHospitalName ? (
-                                <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-900">
-                                  <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                                  <span className="truncate max-w-[170px]">{lead.assignedHospitalName}</span>
-                                </div>
-                              ) : (
-                                <div className="text-[10px] text-slate-400 italic">Facility: Unassigned</div>
-                              )}
-
-                              {/* Doctor Assignment */}
-                              {lead.assignedDoctorName ? (
-                                <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
-                                  <Stethoscope className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                  <span className="truncate max-w-[170px]">{lead.assignedDoctorName}</span>
-                                </div>
-                              ) : (
-                                <div className="text-[10px] text-amber-600 font-bold flex items-center gap-1">
-                                  <AlertCircle className="w-3 h-3" /> No Doctor Assigned
-                                </div>
-                              )}
-                            </div>
-                          </td>
-
-                          {/* Scheduling Information */}
-                          <td className="py-4 px-4">
-                            {lead.appointmentDate ? (
-                              <div className="space-y-0.5">
-                                <div className="font-bold text-slate-900 text-xs flex items-center gap-1">
-                                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                                  {lead.appointmentDate}
-                                </div>
-                                <div className="text-[11px] text-slate-500 font-medium">
-                                  Slot: <strong className="text-slate-700">{lead.appointmentTime || '10:00 AM'}</strong>
-                                </div>
-                                <div className="text-[10px] text-slate-400">
-                                  By: <span className="font-mono">{lead.scheduledBy || 'Sales'}</span>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="text-xs text-slate-400 font-medium italic">
-                                Not yet scheduled
-                              </div>
-                            )}
-                          </td>
-
-                          {/* Actions */}
-                          <td className="py-4 px-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => setSelectedLeadForDetail(lead)}
-                                className="px-2.5 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 text-xs font-bold transition-all flex items-center gap-1"
-                                title="View Lead Profile & Details"
-                              >
-                                <Eye className="w-3.5 h-3.5" /> Details
-                              </button>
-
-                              {hasSchedulingAccess ? (
-                                <button
-                                  onClick={() => handleOpenScheduleModal(lead)}
-                                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1 active:scale-95 shadow-xs ${
-                                    isPending 
-                                      ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20' 
-                                      : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
-                                  }`}
-                                >
-                                  <Calendar className="w-3.5 h-3.5" />
-                                  {isPending ? 'Schedule' : 'Reschedule'}
-                                </button>
-                              ) : (
-                                <button
-                                  disabled
-                                  className="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 text-xs font-bold cursor-not-allowed flex items-center gap-1"
-                                  title="Scheduling disabled by Master Admin"
-                                >
-                                  <Lock className="w-3 h-3" /> Locked
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+              <select
+                value={selectedDoctorFilter}
+                onChange={e => setSelectedDoctorFilter(e.target.value)}
+                className="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500 shadow-xs"
+              >
+                <option value="ALL">All Doctors</option>
+                {doctors.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
             </div>
           </div>
-        )}
 
-        {/* Tab 2: APPOINTMENTS ROSTER */}
-        {activeTab === 'appointments' && (
-          <div className="p-6 space-y-6">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
-              <div>
-                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Hospital Appointments Roster</h3>
-                <p className="text-xs text-slate-500 mt-0.5">All scheduled consultations and hospital visits booked across teams</p>
-              </div>
+          {/* Master Admin Scheduling Alert */}
+          {!hasSchedulingAccess && (
+            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 flex items-center gap-3 text-xs font-bold">
+              <Lock className="w-4 h-4 shrink-0 text-amber-600" />
+              <span>
+                <strong>Master Admin Governance:</strong> Scheduling authority has been paused for Sales. You can view bookings, update follow-up statuses, and add notes, but creating new schedules is locked.
+              </span>
             </div>
+          )}
 
-            <div className="overflow-x-auto table-container w-full border border-slate-100 rounded-2xl">
-              <table className="w-full text-left text-xs min-w-[1000px]">
-                <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200">
+          {/* Patient Bookings Table */}
+          <div className="overflow-x-auto table-container w-full border border-slate-100 rounded-2xl">
+            <table className="w-full text-left text-xs min-w-[1100px]">
+              <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                <tr>
+                  <th className="py-3.5 px-4">Patient Details</th>
+                  <th className="py-3.5 px-4">Booking Slot & Date</th>
+                  <th className="py-3.5 px-4">Assigned Destination</th>
+                  <th className="py-3.5 px-4">Condition & Source</th>
+                  <th className="py-3.5 px-4">Current Status & Action</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredBookings.length === 0 ? (
                   <tr>
-                    <th className="py-3.5 px-4">Patient Details</th>
-                    <th className="py-3.5 px-4">Slot & Date</th>
-                    <th className="py-3.5 px-4">Assigned Doctor / Hospital</th>
-                    <th className="py-3.5 px-4">Source & Condition</th>
-                    <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-4 text-right">Scheduled By</th>
+                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                      <Calendar className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                      <div className="font-bold text-slate-600">No patient bookings found matching status "{statusFilter}"</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        {statusFilter !== 'ALL' ? 'Select "All Current Statuses" from the dropdown or adjust your search.' : 'Adjust your filters or click "Schedule Patient"'}
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {appointments.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400 font-bold">
-                        No appointments currently scheduled.
-                      </td>
-                    </tr>
-                  ) : (
-                    appointments.map(appt => (
-                      <tr key={appt.id} className="hover:bg-slate-50/70 transition-colors">
+                ) : (
+                  filteredBookings.map(booking => {
+                    const isFollowUpDue = Boolean(booking.followupDate);
+                    const statusStyle = getStatusBadgeStyle(booking.status);
+                    return (
+                      <tr key={booking.id} className="hover:bg-slate-50/70 transition-colors group">
+                        {/* Patient Details */}
                         <td className="py-4 px-4">
-                          <div className="font-black text-slate-900 text-sm">{appt.name}</div>
-                          <div className="text-xs font-mono text-slate-600">{appt.mobile}</div>
-                        </td>
-                        <td className="py-4 px-4 font-semibold text-slate-700">
-                          <div className="font-bold text-slate-900 flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                            {appt.date}
-                          </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5">Time: {appt.time}</div>
-                        </td>
-                        <td className="py-4 px-4">
-                          <div className="font-bold text-slate-800">{appt.assignedDoctorName || 'General Doctor'}</div>
-                          <div className="text-[11px] text-indigo-600 font-medium flex items-center gap-1 mt-0.5">
-                            <Building2 className="w-3 h-3 text-indigo-500 shrink-0" />
-                            <span>{appt.hospitalName || 'Main Hospital Facility'}</span>
+                          <div>
+                            <div className="font-black text-slate-900 text-sm flex items-center gap-2">
+                              {booking.name}
+                              {booking.quickCode === SurgeonCode.S1 && (
+                                <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[9px] font-black border border-rose-200">
+                                  S1 Surgery
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-600 font-medium mt-0.5 flex items-center gap-1 font-mono">
+                              <Phone className="w-3 h-3 text-slate-400" /> {booking.mobile}
+                            </div>
+                            <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-2">
+                              {booking.age ? <span>{booking.age} Yrs</span> : null}
+                              {booking.gender ? <span>• {booking.gender}</span> : null}
+                              {booking.city ? <span>• {booking.city}</span> : null}
+                            </div>
                           </div>
                         </td>
+
+                        {/* Booking Slot & Date */}
                         <td className="py-4 px-4">
-                          <span className="px-2 py-0.5 bg-slate-100 rounded text-slate-700 font-bold text-[11px]">
-                            {appt.condition}
-                          </span>
-                          <div className="text-[10px] text-slate-500 mt-1">{appt.source}</div>
+                          <div className="space-y-0.5">
+                            <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5 text-rose-500" />
+                              {booking.appointmentDate || 'Not scheduled'}
+                            </div>
+                            <div className="text-[11px] text-slate-500 font-medium">
+                              Slot: <strong className="text-slate-700">{booking.appointmentTime || '10:00'}</strong>
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              By: <span className="font-mono font-semibold text-slate-600">{booking.scheduledBy || 'Sales'}</span>
+                            </div>
+                          </div>
                         </td>
+
+                        {/* Assigned Destination */}
                         <td className="py-4 px-4">
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            {appt.bookingType || appt.status || 'Scheduled'}
-                          </span>
+                          <div className="space-y-1">
+                            {booking.assignedHospitalName ? (
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-900">
+                                <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                <span className="truncate max-w-[170px]">{booking.assignedHospitalName}</span>
+                              </div>
+                            ) : null}
+
+                            {booking.assignedDoctorName ? (
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                                <Stethoscope className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span className="truncate max-w-[170px]">{booking.assignedDoctorName}</span>
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-slate-500 italic">
+                                Hospital Front Office Direct
+                              </div>
+                            )}
+
+                            {booking.assignmentType === 'doctor' && (
+                              <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[9px] font-bold border border-emerald-200">
+                                Doctor Flow
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td className="py-4 px-4 text-right font-mono text-xs font-bold text-rose-600">
-                          {appt.username || 'Staff'}
+
+                        {/* Condition & Source */}
+                        <td className="py-4 px-4">
+                          <div className="space-y-1">
+                            <span className="inline-block px-2.5 py-0.5 bg-slate-100 text-slate-800 font-bold rounded-md text-[11px]">
+                              {booking.condition}
+                            </span>
+                            <div className="text-[11px] text-slate-500 flex items-center gap-1 font-medium">
+                              <Tag className="w-3 h-3 text-slate-400" />
+                              <span>{booking.source}</span>
+                              {booking.referralPerson && (
+                                <span className="text-rose-600 font-bold">({booking.referralPerson})</span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Current Status & Sales Update Permission (Allowed: Follow-up or Scheduled only) */}
+                        <td className="py-4 px-4">
+                          <div className="space-y-1.5">
+                            {/* Current Status Badge */}
+                            <div>
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase border shadow-2xs ${statusStyle.badge}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusStyle.dot}`} />
+                                {booking.status}
+                              </span>
+                            </div>
+
+                            {/* Status Update Dropdown: Sales users can update booking status only to: Follow-up or Scheduled */}
+                            {booking.appointmentId && (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Set:</span>
+                                <select
+                                  aria-label="Update Booking Status"
+                                  value={
+                                    normalizeProjectStatus(booking.status) === 'Follow-up' 
+                                      ? 'Follow-up' 
+                                      : (normalizeProjectStatus(booking.status) === 'Scheduled' ? 'Scheduled' : '')
+                                  }
+                                  onChange={e => handleQuickUpdateStatus(booking, e.target.value)}
+                                  className="text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-md px-2 py-0.5 outline-none hover:border-slate-300 focus:ring-1 focus:ring-rose-500 cursor-pointer shadow-2xs"
+                                >
+                                  <option value="" disabled>Update Status...</option>
+                                  <option value="Follow-up">Follow-up</option>
+                                  <option value="Scheduled">Scheduled</option>
+                                </select>
+                              </div>
+                            )}
+
+                            {/* Follow-up Date indicator */}
+                            {isFollowUpDue && (
+                              <div className="text-[10px] text-amber-700 font-bold flex items-center gap-1 pt-0.5">
+                                <CalendarCheck className="w-3 h-3 text-amber-600" />
+                                <span>Next: {booking.followupDate}</span>
+                              </div>
+                            )}
+
+                            {/* Notes count indicator */}
+                            {Boolean(booking.notesList?.length || booking.notes) && (
+                              <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                                <MessageSquare className="w-2.5 h-2.5 text-slate-400" />
+                                <span>{booking.notesList?.length || 1} note{(booking.notesList?.length || 1) > 1 ? 's' : ''}</span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Actions: Edit, Follow-up, Notes */}
+                        <td className="py-4 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                            {/* View Detail */}
+                            <button
+                              onClick={() => setSelectedBookingForDetail(booking)}
+                              className="px-2 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 text-xs font-bold transition-all flex items-center gap-1"
+                              title="View Booking Profile"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Edit Booking */}
+                            {hasSchedulingAccess && (
+                              <button
+                                onClick={() => handleOpenScheduleModal(booking)}
+                                className="px-2.5 py-1.5 rounded-lg text-indigo-700 hover:bg-indigo-50 border border-indigo-200 text-xs font-bold transition-all flex items-center gap-1"
+                                title="Edit Booking Details"
+                              >
+                                <Edit3 className="w-3 h-3" /> Edit
+                              </button>
+                            )}
+
+                            {/* Add Follow-up */}
+                            <button
+                              onClick={() => handleOpenFollowup(booking)}
+                              className="px-2.5 py-1.5 rounded-lg text-amber-700 hover:bg-amber-50 border border-amber-200 text-xs font-bold transition-all flex items-center gap-1"
+                              title="Add or Update Follow-up"
+                            >
+                              <CalendarCheck className="w-3 h-3" /> Follow-up
+                            </button>
+
+                            {/* Add / View Notes */}
+                            <button
+                              onClick={() => handleOpenNotes(booking)}
+                              className="px-2.5 py-1.5 rounded-lg text-slate-700 hover:bg-slate-100 border border-slate-200 text-xs font-bold transition-all flex items-center gap-1"
+                              title="Add Notes"
+                            >
+                              <MessageSquare className="w-3 h-3" /> Notes
+                            </button>
+                          </div>
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* SCHEDULING MODAL FOR SALES TEAM */}
-      {showScheduleModal && leadToSchedule && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full border border-slate-200 shadow-2xl space-y-6 max-h-[94dvh] overflow-y-auto animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center border-b pb-4">
+      {/* SCHEDULE PATIENT MODAL: 2 OPTIONS (HOSPITAL / DOCTOR) + EXISTING BOOKING POPUP */}
+      {showScheduleModal && (
+        <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-xl flex items-center justify-center p-2 sm:p-4 md:p-6 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-3xl rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[94dvh] sm:max-h-[90vh]">
+            
+            {/* Modal Body */}
+            <div className="flex-1 p-5 sm:p-7 md:p-8 bg-white overflow-y-auto relative">
+              {/* Close Button */}
+              <button 
+                type="button" 
+                onClick={() => { setShowScheduleModal(false); setBookingToEdit(null); }} 
+                className="absolute top-5 right-5 p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors z-10 cursor-pointer"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {/* STEP 1: ROUTE SELECTION (2 OPTIONS: HOSPITAL vs DOCTOR) */}
+              {scheduleStep === 'ROUTE_SELECTION' ? (
+                <div className="space-y-6 animate-in fade-in duration-200">
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-rose-600 tracking-wider">Step 1 of 2</span>
+                    <h3 className="text-xl sm:text-2xl font-black text-slate-900 mt-1">Schedule Patient</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Select whether you want to schedule with a Hospital facility or directly with a Doctor.
+                    </p>
+                  </div>
+
+                  {/* Exactly 2 options */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Option 1: Hospital */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedRoute('HOSPITAL');
+                        setSelectedDoctorId('');
+                        if (!selectedHospitalId && hospitals.length > 0) {
+                          setSelectedHospitalId(hospitals[0].id);
+                        }
+                      }}
+                      className={`p-5 rounded-2xl border-2 text-left transition-all flex flex-col justify-between group ${
+                        selectedRoute === 'HOSPITAL'
+                          ? 'border-indigo-600 bg-indigo-50/40 shadow-md ring-2 ring-indigo-500/20'
+                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/60'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-3">
+                        <div className={`p-3 rounded-xl ${
+                          selectedRoute === 'HOSPITAL' ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600'
+                        }`}>
+                          <Building2 className="w-6 h-6" />
+                        </div>
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          selectedRoute === 'HOSPITAL' ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'
+                        }`}>
+                          {selectedRoute === 'HOSPITAL' && <div className="w-2 h-2 rounded-full bg-white" />}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="font-black text-slate-900 text-base">Hospital</div>
+                        <div className="text-[11px] text-slate-500 mt-1 leading-snug">
+                          Schedule with a hospital facility and optionally select an affiliated doctor.
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Option 2: Doctor */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedRoute('DOCTOR');
+                        setSelectedHospitalId('');
+                        if (!selectedDoctorId && doctors.length > 0) {
+                          setSelectedDoctorId(doctors[0].id);
+                        }
+                      }}
+                      className={`p-5 rounded-2xl border-2 text-left transition-all flex flex-col justify-between group ${
+                        selectedRoute === 'DOCTOR'
+                          ? 'border-emerald-600 bg-emerald-50/40 shadow-md ring-2 ring-emerald-500/20'
+                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/60'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-3">
+                        <div className={`p-3 rounded-xl ${
+                          selectedRoute === 'DOCTOR' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-600'
+                        }`}>
+                          <Stethoscope className="w-6 h-6" />
+                        </div>
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          selectedRoute === 'DOCTOR' ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'
+                        }`}>
+                          {selectedRoute === 'DOCTOR' && <div className="w-2 h-2 rounded-full bg-white" />}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="font-black text-slate-900 text-base">Doctor</div>
+                        <div className="text-[11px] text-slate-500 mt-1 leading-snug">
+                          Schedule directly with an attending doctor without requiring a hospital.
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Sub-Selection based on chosen option */}
+                  {selectedRoute === 'HOSPITAL' && (
+                    <div className="p-5 rounded-2xl bg-indigo-50/50 border border-indigo-100 space-y-4 animate-in fade-in duration-200">
+                      <div>
+                        <label className="block text-[10px] font-black uppercase text-indigo-900 mb-1.5 tracking-wider">
+                          1. Select Hospital Facility *
+                        </label>
+                        <select
+                          required
+                          value={selectedHospitalId}
+                          onChange={e => {
+                            setSelectedHospitalId(e.target.value);
+                            setSelectedDoctorId('');
+                          }}
+                          className="w-full p-3 bg-white border border-indigo-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs"
+                        >
+                          <option value="">Select Hospital Facility...</option>
+                          {hospitals.map(h => (
+                            <option key={h.id} value={h.id}>
+                              {h.hospitalName || h.name} {h.city ? `(${h.city})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {selectedHospitalId && (
+                        <div className="animate-in fade-in duration-200">
+                          <label className="block text-[10px] font-black uppercase text-indigo-900 mb-1.5 tracking-wider flex items-center justify-between">
+                            <span>2. Select Associated Doctor (Optional)</span>
+                            <span className="text-[9px] text-indigo-600 normal-case font-medium">Leave blank for Hospital Front Office only</span>
+                          </label>
+                          <select
+                            value={selectedDoctorId}
+                            onChange={e => setSelectedDoctorId(e.target.value)}
+                            className="w-full p-3 bg-white border border-indigo-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs"
+                          >
+                            <option value="">-- No Doctor (Hospital Front Office Only) --</option>
+                            {doctorsForSelectedHospital.map(d => (
+                              <option key={d.id} value={d.id}>
+                                {d.name} {d.specialization ? `• ${d.specialization}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          {doctorsForSelectedHospital.length === 0 && (
+                            <p className="text-[10px] text-slate-400 mt-1 italic">
+                              No doctors currently associated with this facility. Booking will route to Hospital Front Office.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedRoute === 'DOCTOR' && (
+                    <div className="p-5 rounded-2xl bg-emerald-50/50 border border-emerald-100 space-y-4 animate-in fade-in duration-200">
+                      <div>
+                        <label className="block text-[10px] font-black uppercase text-emerald-900 mb-1.5 tracking-wider">
+                          Select Attending Doctor *
+                        </label>
+                        <select
+                          required
+                          value={selectedDoctorId}
+                          onChange={e => setSelectedDoctorId(e.target.value)}
+                          className="w-full p-3 bg-white border border-emerald-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
+                        >
+                          <option value="">Select Doctor...</option>
+                          {doctors.map(d => (
+                            <option key={d.id} value={d.id}>
+                              {d.name} {d.specialization ? `• ${d.specialization}` : ''} {d.hospitalName ? `(${d.hospitalName})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-emerald-700 mt-1.5 font-medium">
+                          Direct doctor consultation flow. Hospital selection is NOT required.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Continue Button */}
+                  <div className="pt-4 border-t flex justify-end gap-3 items-center">
+                    <button
+                      type="button"
+                      onClick={() => { setShowScheduleModal(false); setBookingToEdit(null); }}
+                      className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!selectedRoute || (selectedRoute === 'HOSPITAL' && !selectedHospitalId) || (selectedRoute === 'DOCTOR' && !selectedDoctorId)}
+                      onClick={handleContinueToBooking}
+                      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
+                    >
+                      Continue to Booking Form <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* STEP 2: EXISTING BOOKING POPUP */
+                <div className="space-y-6 animate-in fade-in duration-200">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-4">
+                    <div>
+                      <span className="text-[10px] font-black uppercase text-rose-600 tracking-wider">
+                        {bookingToEdit?.appointmentId ? 'Edit Patient Booking' : 'Step 2 of 2: Booking Details'}
+                      </span>
+                      <h3 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                        {bookingToEdit?.appointmentId ? 'Update Booking' : 'Book Appointment'}
+                      </h3>
+                    </div>
+
+                    {/* Routing Summary Badge */}
+                    <div className="flex items-center gap-2">
+                      <div className="px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        {selectedRoute === 'HOSPITAL' ? (
+                          <>
+                            <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                            <span className="truncate max-w-[160px]">
+                              {hospitals.find(h => h.id === selectedHospitalId)?.hospitalName || hospitals.find(h => h.id === selectedHospitalId)?.name}
+                            </span>
+                            {selectedDoctorId && (
+                              <span className="text-emerald-700">
+                                • {doctors.find(d => d.id === selectedDoctorId)?.name}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <Stethoscope className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-emerald-800 font-bold">
+                              {doctors.find(d => d.id === selectedDoctorId)?.name}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setScheduleStep('ROUTE_SELECTION')}
+                        className="text-xs text-rose-600 hover:text-rose-700 font-bold underline cursor-pointer"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleBookingSubmit} className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">
+                          Full Name *
+                        </label>
+                        <input 
+                          required 
+                          className="w-full text-xl sm:text-2xl font-black border-b-2 border-slate-100 p-2 outline-none focus:border-rose-500 placeholder-slate-200" 
+                          value={bookingFormData.name} 
+                          onChange={e => setBookingFormData({ ...bookingFormData, name: e.target.value })} 
+                          placeholder="Patient Name" 
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">
+                          Mobile Number *
+                        </label>
+                        <input 
+                          required 
+                          type="tel" 
+                          className="w-full text-lg sm:text-xl font-mono border-b-2 border-slate-100 p-2 outline-none focus:border-rose-500" 
+                          value={bookingFormData.mobile} 
+                          onChange={e => setBookingFormData({ ...bookingFormData, mobile: e.target.value })} 
+                          placeholder="9988776655" 
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">
+                          Primary Complaint *
+                        </label>
+                        <select 
+                          required 
+                          className="w-full border-b-2 border-slate-100 p-2 outline-none focus:border-rose-500 text-sm font-bold bg-white" 
+                          value={bookingFormData.condition} 
+                          onChange={e => setBookingFormData({ ...bookingFormData, condition: e.target.value as Condition })}
+                        >
+                          <option value="">Select Condition</option>
+                          {Object.values(Condition).map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">
+                          Appt Date *
+                        </label>
+                        <input 
+                          required 
+                          type="date" 
+                          className="w-full border-b-2 border-slate-100 p-2 text-sm font-bold" 
+                          value={bookingFormData.date} 
+                          onChange={e => setBookingFormData({ ...bookingFormData, date: e.target.value, time: '' })} 
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">
+                          Preferred Doctor
+                        </label>
+                        {selectedRoute === 'DOCTOR' ? (
+                          <div className="w-full border-b-2 border-slate-100 p-2 bg-slate-50 rounded-lg text-sm font-bold text-emerald-800 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <Stethoscope className="w-4 h-4 text-emerald-600" />
+                              {doctors.find(d => d.id === selectedDoctorId)?.name}
+                            </span>
+                            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                              Selected Doctor
+                            </span>
+                          </div>
+                        ) : (
+                          <select 
+                            className="w-full border-b-2 border-slate-100 p-2 bg-white text-sm font-bold" 
+                            value={selectedDoctorId} 
+                            onChange={e => {
+                              setSelectedDoctorId(e.target.value);
+                              setBookingFormData({ ...bookingFormData, time: '' });
+                            }}
+                          >
+                            <option value="">-- No Doctor (Hospital Front Office Only) --</option>
+                            {doctorsForSelectedHospital.map(d => {
+                              const isAvailable = isDoctorAvailableOnDate(d, bookingFormData.date);
+                              return (
+                                <option key={d.id} value={d.id} disabled={!isAvailable}>
+                                  {d.name} {!isAvailable ? '(Unavailable Today)' : ''}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">
+                          Appt Time *
+                        </label>
+                        {(() => {
+                          const activeDoc = doctors.find(d => d.id === selectedDoctorId);
+                          const slots = getAvailableSlotsForDoctorAndDate(activeDoc, bookingFormData.date);
+                          const bookedSlots = appointments
+                            ?.filter(a => a.assignedDoctorId === selectedDoctorId && a.date === bookingFormData.date && a.id !== bookingToEdit?.appointmentId)
+                            ?.map(a => a.time ? a.time.substring(0, 5) : '') || [];
+                          return (
+                            <select
+                              required
+                              className="w-full border-b-2 border-slate-100 p-2 bg-white text-sm font-bold"
+                              value={bookingFormData.time}
+                              onChange={e => setBookingFormData({ ...bookingFormData, time: e.target.value })}
+                            >
+                              <option value="">Select Time Slot...</option>
+                              {slots.map(s => {
+                                const isBooked = bookedSlots.includes(s);
+                                return (
+                                  <option key={s} value={s} disabled={isBooked}>
+                                    {s} {isBooked ? '(Booked)' : ''}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          );
+                        })()}
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">
+                          Lead Source *
+                        </label>
+                        <select 
+                          required 
+                          className="w-full border-b-2 border-slate-100 p-2 text-sm font-bold bg-white" 
+                          value={getSourceDisplay(bookingFormData.source)} 
+                          onChange={e => setBookingFormData({ ...bookingFormData, source: e.target.value })}
+                        >
+                          <option value="">Select Source</option>
+                          {sourceConfig.map(s => (
+                            <option key={s.name} value={s.name}>{s.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {getSourceDisplay(bookingFormData.source) === 'Doctor Recommended' && (
+                        <div className="md:col-span-2 animate-in slide-in-from-top-2 duration-300">
+                          <label className="block text-[10px] font-black uppercase text-rose-600 mb-2 tracking-widest">
+                            Referring Doctor Name *
+                          </label>
+                          <input 
+                            required 
+                            className="w-full text-lg font-bold border-b-2 border-rose-200 p-2 outline-none focus:border-rose-500 placeholder-slate-300" 
+                            value={bookingFormData.sourceDoctorName} 
+                            onChange={e => setBookingFormData({ ...bookingFormData, sourceDoctorName: e.target.value })} 
+                            placeholder="Dr. Enter Referring Doctor Name" 
+                          />
+                        </div>
+                      )}
+
+                      {getSourceDisplay(bookingFormData.source) === 'Referral' && (
+                        <div className="md:col-span-2 animate-in slide-in-from-top-2 duration-300">
+                          <label className="block text-[10px] font-black uppercase text-rose-600 mb-2 tracking-widest">
+                            Referral Person / Partner *
+                          </label>
+                          <input 
+                            required 
+                            className="w-full text-lg font-bold border-b-2 border-rose-200 p-2 outline-none focus:border-rose-500 placeholder-slate-300" 
+                            value={bookingFormData.referralPerson} 
+                            onChange={e => setBookingFormData({ ...bookingFormData, referralPerson: e.target.value })} 
+                            placeholder="Enter contact or partner name" 
+                          />
+                        </div>
+                      )}
+
+                      {getSourceDisplay(bookingFormData.source) === 'Others' && (
+                        <div className="md:col-span-2 animate-in slide-in-from-top-2 duration-300">
+                          <label className="block text-[10px] font-black uppercase text-rose-600 mb-2 tracking-widest">
+                            Source Details *
+                          </label>
+                          <input 
+                            required 
+                            className="w-full text-lg font-bold border-b-2 border-rose-200 p-2 outline-none focus:border-rose-500 placeholder-slate-300" 
+                            value={bookingFormData.sourceOtherDetails} 
+                            onChange={e => setBookingFormData({ ...bookingFormData, sourceOtherDetails: e.target.value })} 
+                            placeholder="Enter specific source name or details..." 
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Attribution info */}
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600 flex items-center justify-between">
+                      <span>Scheduled by: <strong className="text-slate-800">{localStorage.getItem('hms_hospital_name') || 'Sales Executive'}</strong></span>
+                      <span className="font-mono text-slate-400">HMS Booking System</span>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row justify-between gap-3 pt-4 border-t">
+                      <button
+                        type="button"
+                        onClick={() => setScheduleStep('ROUTE_SELECTION')}
+                        className="px-5 py-3 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl flex items-center justify-center gap-1.5"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" /> Back to Route Selection
+                      </button>
+                      <button 
+                        type="submit" 
+                        className="py-3.5 px-8 bg-rose-600 hover:bg-rose-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-xl shadow-rose-900/30 hover:scale-[1.02] active:scale-98 transition-all"
+                      >
+                        {bookingToEdit?.appointmentId ? 'Update Booking' : 'Confirm & Schedule Patient'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FOLLOW-UP MODAL (Sales status update strictly limited to 'Follow-up' and 'Scheduled') */}
+      {followupBooking && (
+        <div className="fixed inset-0 z-[130] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full border border-slate-200 shadow-2xl space-y-6 max-h-[92dvh] overflow-y-auto animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-start border-b pb-4">
               <div>
-                <span className="text-[10px] font-black uppercase text-rose-600 tracking-wider">Sales Scheduling Desk</span>
-                <h3 className="text-xl font-black text-slate-900 uppercase">
-                  Schedule Patient with Hospital / Doctor
-                </h3>
+                <span className="text-[10px] font-black uppercase text-amber-600 tracking-wider">Patient Booking Follow-Up</span>
+                <h3 className="text-xl font-black text-slate-900 mt-0.5">{followupBooking.name}</h3>
+                <div className="text-xs text-slate-500 font-mono mt-0.5">{followupBooking.mobile}</div>
               </div>
               <button 
-                onClick={() => { setShowScheduleModal(false); setLeadToSchedule(null); }} 
+                onClick={() => setFollowupBooking(null)} 
                 className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveScheduling} className="space-y-4">
-              {/* Patient Basic Info Banner */}
-              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Target Patient</div>
-                  <div className="text-sm font-black text-slate-900">{leadToSchedule.name || 'New Patient'}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Contact</div>
-                  <div className="text-sm font-mono font-bold text-slate-800">{leadToSchedule.mobile || '—'}</div>
-                </div>
+            <form onSubmit={handleSaveFollowup} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1.5 tracking-wider">
+                  Next Follow-Up Date *
+                </label>
+                <input
+                  required
+                  type="date"
+                  value={followupDateInput}
+                  onChange={e => setFollowupDateInput(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500"
+                />
               </div>
 
-              {!leadToSchedule.name && (
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider">Patient Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={scheduleForm.remarks}
-                    onChange={e => setLeadToSchedule({ ...leadToSchedule, name: e.target.value })}
-                    placeholder="Enter patient full name"
-                    className="w-full mt-1 p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                  />
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1.5 tracking-wider flex items-center justify-between">
+                  <span>Booking Status *</span>
+                  <span className="text-[10px] font-medium text-amber-700 normal-case">Sales Allowed: Follow-up or Scheduled</span>
+                </label>
+                <select
+                  value={followupStatusInput}
+                  onChange={e => setFollowupStatusInput(e.target.value as 'Follow-up' | 'Scheduled')}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value="Follow-up">Follow-up</option>
+                  <option value="Scheduled">Scheduled</option>
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Sales permissions strictly permit updating status to <strong>Follow-up</strong> or <strong>Scheduled</strong>.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1.5 tracking-wider">
+                  Follow-Up Remarks / Conversation Notes
+                </label>
+                <textarea
+                  rows={3}
+                  value={followupNotesInput}
+                  onChange={e => setFollowupNotesInput(e.target.value)}
+                  placeholder="Record summary of discussion, concerns, or next scheduled touchpoint..."
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              {/* Previous Follow-Up History */}
+              {followupBooking.followupHistory && followupBooking.followupHistory.length > 0 && (
+                <div className="space-y-2 pt-2 border-t">
+                  <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Previous Follow-Ups</div>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {followupBooking.followupHistory.map(item => (
+                      <div key={item.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs">
+                        <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
+                          <span>{item.date} • {item.status}</span>
+                          <span className="font-mono text-slate-400">{item.author}</span>
+                        </div>
+                        {item.notes && <p className="text-slate-700 mt-1">{item.notes}</p>}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {/* Assignment Target: Hospital Selection */}
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider flex items-center gap-1.5 mb-1">
-                  <Building2 className="w-3.5 h-3.5 text-indigo-600" /> Assign Hospital Facility *
-                </label>
-                <select
-                  required
-                  value={scheduleForm.hospitalId}
-                  onChange={e => setScheduleForm({ ...scheduleForm, hospitalId: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                >
-                  <option value="">Select Hospital Facility...</option>
-                  {hospitals.map(h => (
-                    <option key={h.id} value={h.id}>{h.name} {h.city ? `(${h.city})` : ''}</option>
-                  ))}
-                  {hospitals.length === 0 && (
-                    <option value="main_hospital">Main Hospital Facility</option>
-                  )}
-                </select>
-              </div>
-
-              {/* Assignment Target: Doctor Selection */}
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider flex items-center gap-1.5 mb-1">
-                  <Stethoscope className="w-3.5 h-3.5 text-emerald-600" /> Assign Consulting Doctor *
-                </label>
-                <select
-                  required
-                  value={scheduleForm.doctorId}
-                  onChange={e => setScheduleForm({ ...scheduleForm, doctorId: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                >
-                  <option value="">Select Doctor...</option>
-                  {doctors.map(d => (
-                    <option key={d.id} value={d.id}>
-                      {d.name} {d.hospitalName ? `(${d.hospitalName})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Date and Time */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider">Appointment Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={scheduleForm.date}
-                    onChange={e => setScheduleForm({ ...scheduleForm, date: e.target.value })}
-                    className="w-full mt-1 p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider">Slot Time *</label>
-                  <input
-                    type="time"
-                    required
-                    value={scheduleForm.time}
-                    onChange={e => setScheduleForm({ ...scheduleForm, time: e.target.value })}
-                    className="w-full mt-1 p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
-              </div>
-
-              {/* Source & Referral */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider">Source *</label>
-                  <select
-                    required
-                    value={scheduleForm.source}
-                    onChange={e => setScheduleForm({ ...scheduleForm, source: e.target.value })}
-                    className="w-full mt-1 p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                  >
-                    <option value="Google">Google</option>
-                    <option value="Instagram">Instagram</option>
-                    <option value="Walking">Walking</option>
-                    <option value="Relatives / Friend">Relatives / Friend</option>
-                    <option value="Billboard">Billboard</option>
-                    <option value="Referral">Referral</option>
-                  </select>
-                </div>
-
-                {scheduleForm.source === 'Referral' ? (
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-rose-600 tracking-wider">Referral Person *</label>
-                    <input
-                      type="text"
-                      required
-                      value={scheduleForm.referralPerson}
-                      onChange={e => setScheduleForm({ ...scheduleForm, referralPerson: e.target.value })}
-                      placeholder="Doctor / Partner name"
-                      className="w-full mt-1 p-2.5 bg-white border-2 border-rose-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                    />
-                  </div>
-                ) : (
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider">Condition</label>
-                    <select
-                      value={scheduleForm.condition}
-                      onChange={e => setScheduleForm({ ...scheduleForm, condition: e.target.value as Condition })}
-                      className="w-full mt-1 p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                    >
-                      {Object.values(Condition).map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              {/* Sales Rep Attribution Notice */}
-              <div className="p-3 bg-rose-50/70 border border-rose-200 rounded-xl text-[11px] text-rose-800 font-medium">
-                Scheduled by Sales Rep: <strong>{localStorage.getItem('hms_hospital_name') || 'Sales Executive'}</strong>. The appointment will reflect in the Hospital Roster with full attribution.
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t">
+              <div className="flex justify-end gap-2 pt-4 border-t">
                 <button
                   type="button"
-                  onClick={() => { setShowScheduleModal(false); setLeadToSchedule(null); }}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  onClick={() => setFollowupBooking(null)}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 text-xs font-black uppercase tracking-wider bg-rose-600 text-white rounded-xl hover:bg-rose-500 shadow-md shadow-rose-900/30 active:scale-95"
+                  className="px-6 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95"
                 >
-                  Confirm & Schedule
+                  Save Follow-Up
                 </button>
               </div>
             </form>
@@ -1066,184 +1843,82 @@ export const SalesDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* NEW LEAD CREATION MODAL */}
-      {showAddLeadModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full border border-slate-200 shadow-2xl space-y-5 max-h-[94dvh] overflow-y-auto animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center border-b pb-4">
+      {/* NOTES MODAL */}
+      {notesBooking && (
+        <div className="fixed inset-0 z-[130] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full border border-slate-200 shadow-2xl space-y-6 max-h-[92dvh] overflow-y-auto animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-start border-b pb-4">
               <div>
-                <span className="text-[10px] font-black uppercase text-rose-600 tracking-wider">Leads Pipeline</span>
-                <h3 className="text-xl font-black text-slate-900 uppercase">Register New Patient Lead</h3>
+                <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Booking Notes & Remarks</span>
+                <h3 className="text-xl font-black text-slate-900 mt-0.5">{notesBooking.name}</h3>
+                <div className="text-xs text-slate-500 font-mono mt-0.5">{notesBooking.mobile}</div>
               </div>
-              <button onClick={() => setShowAddLeadModal(false)} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100">
+              <button 
+                onClick={() => setNotesBooking(null)} 
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateNewLead} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="col-span-1 sm:col-span-2">
-                  <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider">Patient Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newLeadForm.name}
-                    onChange={e => setNewLeadForm({ ...newLeadForm, name: e.target.value })}
-                    placeholder="e.g. Ramesh Chandra"
-                    className="w-full mt-1 p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider">Mobile Number *</label>
-                  <input
-                    type="tel"
-                    required
-                    value={newLeadForm.mobile}
-                    onChange={e => setNewLeadForm({ ...newLeadForm, mobile: e.target.value })}
-                    placeholder="10-digit mobile"
-                    className="w-full mt-1 p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider">City / Location</label>
-                  <input
-                    type="text"
-                    value={newLeadForm.city}
-                    onChange={e => setNewLeadForm({ ...newLeadForm, city: e.target.value })}
-                    placeholder="City / Region"
-                    className="w-full mt-1 p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider">Condition</label>
-                  <select
-                    value={newLeadForm.condition}
-                    onChange={e => setNewLeadForm({ ...newLeadForm, condition: e.target.value as Condition })}
-                    className="w-full mt-1 p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                  >
-                    {Object.values(Condition).map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider">Lead Source *</label>
-                  <select
-                    value={newLeadForm.source}
-                    onChange={e => setNewLeadForm({ ...newLeadForm, source: e.target.value })}
-                    className="w-full mt-1 p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                  >
-                    <option value="Google">Google</option>
-                    <option value="Instagram">Instagram</option>
-                    <option value="Walking">Walking</option>
-                    <option value="Relatives / Friend">Relatives / Friend</option>
-                    <option value="Billboard">Billboard</option>
-                    <option value="Referral">Referral</option>
-                  </select>
-                </div>
+            <form onSubmit={handleAddNote} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1.5 tracking-wider">
+                  Add Internal Note
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={newNoteInput}
+                  onChange={e => setNewNoteInput(e.target.value)}
+                  placeholder="Enter counseling observations, special requests, patient preferences, or financial details..."
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-rose-500"
+                />
               </div>
 
-              {newLeadForm.source === 'Referral' && (
-                <div>
-                  <label className="text-[10px] font-black uppercase text-rose-600 tracking-wider">Referral Person *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newLeadForm.referralPerson}
-                    onChange={e => setNewLeadForm({ ...newLeadForm, referralPerson: e.target.value })}
-                    placeholder="Referring doctor or contact"
-                    className="w-full mt-1 p-2.5 bg-white border-2 border-rose-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
-              )}
-
-              {/* Schedule Immediately Toggle */}
-              <div className="pt-2 border-t border-slate-100">
-                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <div>
-                    <div className="text-xs font-black text-slate-800">Schedule Consultation Immediately</div>
-                    <div className="text-[10px] text-slate-400">Assign to hospital facility or doctor right away</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={newLeadForm.scheduleImmediately}
-                    onChange={e => setNewLeadForm({ ...newLeadForm, scheduleImmediately: e.target.checked })}
-                    className="w-4 h-4 text-rose-600 rounded"
-                  />
-                </div>
-              </div>
-
-              {newLeadForm.scheduleImmediately && (
-                <div className="space-y-3 p-4 bg-slate-50 rounded-2xl border border-slate-200 animate-in fade-in duration-200">
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider">Assign Hospital</label>
-                    <select
-                      value={newLeadForm.hospitalId}
-                      onChange={e => setNewLeadForm({ ...newLeadForm, hospitalId: e.target.value })}
-                      className="w-full mt-1 p-2 bg-white border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                    >
-                      <option value="">Select Hospital Facility...</option>
-                      {hospitals.map(h => (
-                        <option key={h.id} value={h.id}>{h.name}</option>
-                      ))}
-                      {hospitals.length === 0 && <option value="main">Main Hospital</option>}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider">Assign Doctor</label>
-                    <select
-                      value={newLeadForm.doctorId}
-                      onChange={e => setNewLeadForm({ ...newLeadForm, doctorId: e.target.value })}
-                      className="w-full mt-1 p-2 bg-white border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                    >
-                      <option value="">Select Doctor...</option>
-                      {doctors.map(d => (
-                        <option key={d.id} value={d.id}>{d.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider">Date</label>
-                      <input
-                        type="date"
-                        value={newLeadForm.date}
-                        onChange={e => setNewLeadForm({ ...newLeadForm, date: e.target.value })}
-                        className="w-full mt-1 p-2 bg-white border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black uppercase text-slate-600 tracking-wider">Time</label>
-                      <input
-                        type="time"
-                        value={newLeadForm.time}
-                        onChange={e => setNewLeadForm({ ...newLeadForm, time: e.target.value })}
-                        className="w-full mt-1 p-2 bg-white border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-3 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => setShowAddLeadModal(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
-                >
-                  Cancel
-                </button>
+              <div className="flex justify-end">
                 <button
                   type="submit"
-                  className="px-6 py-2 text-xs font-black uppercase tracking-wider bg-rose-600 text-white rounded-xl hover:bg-rose-500 shadow-md shadow-rose-900/30"
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center gap-1.5"
                 >
-                  Save Lead to Directory
+                  <MessageSquare className="w-3.5 h-3.5" /> Save Note
+                </button>
+              </div>
+
+              {/* Notes Timeline */}
+              <div className="space-y-2 pt-4 border-t">
+                <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Notes History</div>
+                {(!notesBooking.notesList || notesBooking.notesList.length === 0) && !notesBooking.notes ? (
+                  <div className="py-6 text-center text-slate-400 text-xs italic">
+                    No notes recorded yet for this booking.
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 max-h-56 overflow-y-auto">
+                    {(notesBooking.notesList || []).map(noteItem => (
+                      <div key={noteItem.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs space-y-1">
+                        <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
+                          <span className="font-mono text-slate-700">{noteItem.author}</span>
+                          <span>{new Date(noteItem.date).toLocaleDateString()} {new Date(noteItem.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                        <p className="text-slate-800 whitespace-pre-wrap">{noteItem.text}</p>
+                      </div>
+                    ))}
+                    {(!notesBooking.notesList || notesBooking.notesList.length === 0) && notesBooking.notes && (
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-800 whitespace-pre-wrap">
+                        {notesBooking.notes}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setNotesBooking(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  Close
                 </button>
               </div>
             </form>
@@ -1251,18 +1926,18 @@ export const SalesDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* VIEW LEAD DETAILS MODAL */}
-      {selectedLeadForDetail && (
+      {/* VIEW BOOKING DETAILS MODAL */}
+      {selectedBookingForDetail && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full border border-slate-200 shadow-2xl space-y-6 max-h-[94dvh] overflow-y-auto animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-start border-b pb-4">
               <div>
-                <span className="text-[10px] font-black uppercase text-rose-600 tracking-wider">Lead Profile & History</span>
-                <h3 className="text-xl font-black text-slate-900">{selectedLeadForDetail.name}</h3>
-                <div className="text-xs text-slate-500 mt-0.5 font-mono">{selectedLeadForDetail.mobile}</div>
+                <span className="text-[10px] font-black uppercase text-rose-600 tracking-wider">Patient Booking Profile</span>
+                <h3 className="text-xl font-black text-slate-900">{selectedBookingForDetail.name}</h3>
+                <div className="text-xs text-slate-500 mt-0.5 font-mono">{selectedBookingForDetail.mobile}</div>
               </div>
               <button 
-                onClick={() => setSelectedLeadForDetail(null)} 
+                onClick={() => setSelectedBookingForDetail(null)} 
                 className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100"
               >
                 <X className="w-5 h-5" />
@@ -1270,41 +1945,44 @@ export const SalesDashboard: React.FC = () => {
             </div>
 
             <div className="space-y-4 text-xs">
-              {/* Status Pill & Stage */}
+              {/* Status Pill */}
               <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
                 <div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Appointment Status</div>
-                  <div className="text-sm font-black text-slate-800 mt-0.5">{selectedLeadForDetail.appointmentStatus}</div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Current Status</div>
+                  <div className="text-sm font-black text-slate-800 mt-0.5 flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${getStatusBadgeStyle(selectedBookingForDetail.status).dot}`} />
+                    {selectedBookingForDetail.status}
+                  </div>
                 </div>
                 <div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Lead Category</div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Condition Category</div>
                   <div className="text-xs font-black text-rose-700 text-right mt-0.5">
-                    {selectedLeadForDetail.quickCode || selectedLeadForDetail.condition}
+                    {selectedBookingForDetail.quickCode || selectedBookingForDetail.condition}
                   </div>
                 </div>
               </div>
 
-              {/* Clinical & Ingestion Details */}
+              {/* Booking Details */}
               <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
                 <div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">Condition</div>
-                  <div className="font-bold text-slate-800 mt-0.5">{selectedLeadForDetail.condition}</div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">Condition / Complaint</div>
+                  <div className="font-bold text-slate-800 mt-0.5">{selectedBookingForDetail.condition}</div>
                 </div>
                 <div>
                   <div className="text-[10px] font-bold text-slate-400 uppercase">Source Channel</div>
                   <div className="font-bold text-slate-800 mt-0.5">
-                    {selectedLeadForDetail.source}
-                    {selectedLeadForDetail.referralPerson && ` (${selectedLeadForDetail.referralPerson})`}
+                    {selectedBookingForDetail.source}
+                    {selectedBookingForDetail.referralPerson && ` (${selectedBookingForDetail.referralPerson})`}
                   </div>
                 </div>
                 <div>
                   <div className="text-[10px] font-bold text-slate-400 uppercase">Location</div>
-                  <div className="font-bold text-slate-800 mt-0.5">{selectedLeadForDetail.city || 'Not specified'}</div>
+                  <div className="font-bold text-slate-800 mt-0.5">{selectedBookingForDetail.city || 'Not specified'}</div>
                 </div>
                 <div>
                   <div className="text-[10px] font-bold text-slate-400 uppercase">Age / Gender</div>
                   <div className="font-bold text-slate-800 mt-0.5">
-                    {selectedLeadForDetail.age ? `${selectedLeadForDetail.age} Yrs` : '—'} / {selectedLeadForDetail.gender || '—'}
+                    {selectedBookingForDetail.age ? `${selectedBookingForDetail.age} Yrs` : '—'} / {selectedBookingForDetail.gender || '—'}
                   </div>
                 </div>
               </div>
@@ -1312,44 +1990,58 @@ export const SalesDashboard: React.FC = () => {
               {/* Assignment & Scheduling Info */}
               <div className="space-y-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
                 <div className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                  Scheduling & Facility Assignment
+                  Scheduling & Destination
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <div className="text-[10px] font-bold text-slate-400 uppercase">Assigned Hospital</div>
                     <div className="font-bold text-indigo-900 mt-0.5 flex items-center gap-1">
                       <Building2 className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>{selectedLeadForDetail.assignedHospitalName || 'Unassigned'}</span>
+                      <span>{selectedBookingForDetail.assignedHospitalName || 'Unassigned'}</span>
                     </div>
                   </div>
                   <div>
                     <div className="text-[10px] font-bold text-slate-400 uppercase">Assigned Doctor</div>
                     <div className="font-bold text-emerald-900 mt-0.5 flex items-center gap-1">
                       <Stethoscope className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>{selectedLeadForDetail.assignedDoctorName || 'Unassigned'}</span>
+                      <span>{selectedBookingForDetail.assignedDoctorName || 'Front Office Direct'}</span>
                     </div>
                   </div>
                   <div>
                     <div className="text-[10px] font-bold text-slate-400 uppercase">Appointment Date</div>
-                    <div className="font-bold text-slate-800 mt-0.5">{selectedLeadForDetail.appointmentDate || 'Pending'}</div>
+                    <div className="font-bold text-slate-800 mt-0.5">{selectedBookingForDetail.appointmentDate || 'Pending'}</div>
                   </div>
                   <div>
                     <div className="text-[10px] font-bold text-slate-400 uppercase">Slot Time</div>
-                    <div className="font-bold text-slate-800 mt-0.5">{selectedLeadForDetail.appointmentTime || 'Pending'}</div>
+                    <div className="font-bold text-slate-800 mt-0.5">{selectedBookingForDetail.appointmentTime || 'Pending'}</div>
                   </div>
                   <div className="col-span-2">
                     <div className="text-[10px] font-bold text-slate-400 uppercase">Scheduled By</div>
                     <div className="font-mono text-slate-700 mt-0.5 font-semibold">
-                      {selectedLeadForDetail.scheduledBy || 'Sales Operations'}
+                      {selectedBookingForDetail.scheduledBy || 'Sales Operations'}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {selectedLeadForDetail.notes && (
+              {selectedBookingForDetail.followupDate && (
+                <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200">
+                  <div className="text-[10px] font-bold text-amber-800 uppercase flex items-center gap-1">
+                    <CalendarCheck className="w-3.5 h-3.5 text-amber-600" /> Scheduled Follow-Up
+                  </div>
+                  <p className="text-amber-900 mt-0.5 font-bold">
+                    Date: {selectedBookingForDetail.followupDate}
+                  </p>
+                  {selectedBookingForDetail.followupNotes && (
+                    <p className="text-amber-800 text-xs mt-1">{selectedBookingForDetail.followupNotes}</p>
+                  )}
+                </div>
+              )}
+
+              {selectedBookingForDetail.notes && (
                 <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">Counseling / Clinical Notes</div>
-                  <p className="text-slate-700 mt-1 leading-relaxed text-xs">{selectedLeadForDetail.notes}</p>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">Notes & Remarks</div>
+                  <p className="text-slate-700 mt-1 leading-relaxed text-xs">{selectedBookingForDetail.notes}</p>
                 </div>
               )}
             </div>
@@ -1357,7 +2049,7 @@ export const SalesDashboard: React.FC = () => {
             <div className="flex justify-between items-center pt-4 border-t">
               <button
                 type="button"
-                onClick={() => setSelectedLeadForDetail(null)}
+                onClick={() => setSelectedBookingForDetail(null)}
                 className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
               >
                 Close
@@ -1366,13 +2058,13 @@ export const SalesDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    const l = selectedLeadForDetail;
-                    setSelectedLeadForDetail(null);
-                    handleOpenScheduleModal(l);
+                    const b = selectedBookingForDetail;
+                    setSelectedBookingForDetail(null);
+                    handleOpenScheduleModal(b);
                   }}
                   className="px-5 py-2 text-xs font-black uppercase tracking-wider bg-rose-600 text-white rounded-xl hover:bg-rose-500 shadow-md shadow-rose-900/30 flex items-center gap-1.5"
                 >
-                  <Calendar className="w-3.5 h-3.5" /> Schedule / Reassign
+                  <Edit3 className="w-3.5 h-3.5" /> Edit Booking
                 </button>
               )}
             </div>

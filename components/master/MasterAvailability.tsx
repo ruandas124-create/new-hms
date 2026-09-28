@@ -1,13 +1,30 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useHospital } from '../../context/HospitalContext';
 import { StaffUser, DaySchedule, BlockedDate } from '../../types';
 import { 
   Clock, Calendar, CheckCircle2, XCircle, User, Plus, 
   Trash2, Save, AlertCircle, RefreshCw, Stethoscope, Shield, 
-  ChevronRight, Coffee, Sun, Moon, Info, Check, Loader2
+  ChevronRight, Coffee, Sun, Moon, Info, Check, Loader2,
+  Search, ChevronDown, ChevronUp, Building2, UserCheck, Filter, X, Sparkles
 } from 'lucide-react';
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+export type DoctorTypeFilter = 'ALL' | 'HOSPITAL_DOCTOR' | 'DOCTOR';
+
+export const isHospitalDoctor = (u: StaffUser): boolean => {
+  const hId = (u.hospital_id || '').trim();
+  const hName = (u.hospitalName || '').trim();
+  if (!hId && !hName) return false;
+  if (hName.toLowerCase().includes('independent') || hName.toLowerCase() === 'none') {
+    return false;
+  }
+  return true;
+};
+
+export const getDoctorTypeLabel = (u: StaffUser): 'Hospital Doctor' | 'Doctor' => {
+  return isHospitalDoctor(u) ? 'Hospital Doctor' : 'Doctor';
+};
 
 export const MasterAvailability: React.FC = () => {
   const { staffUsers, updateStaff } = useHospital();
@@ -15,24 +32,85 @@ export const MasterAvailability: React.FC = () => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Doctors list
-  const doctorsList = useMemo(() => {
-    return staffUsers.filter(u => u.role === 'DOCTOR');
+  // Search & Type Filter State for Doctor Dropdown
+  const [searchTerm, setSearchTerm] = useState('');
+  const [doctorTypeFilter, setDoctorTypeFilter] = useState<DoctorTypeFilter>('ALL');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Focus search input when dropdown opens
+  useEffect(() => {
+    if (isDropdownOpen) {
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 50);
+    }
+  }, [isDropdownOpen]);
+
+  // All doctors available under Master Admin (Hospital Doctors + Independent Doctors)
+  const allDoctors = useMemo(() => {
+    return staffUsers.filter(u => {
+      const roleUpper = (u.role || '').toUpperCase();
+      return roleUpper === 'DOCTOR' || roleUpper === 'DEACTIVATED_DOCTOR';
+    });
   }, [staffUsers]);
 
+  // Counts by type
+  const totalDoctorCount = allDoctors.length;
+  const hospitalDoctorCount = useMemo(() => allDoctors.filter(isHospitalDoctor).length, [allDoctors]);
+  const independentDoctorCount = useMemo(() => allDoctors.filter(d => !isHospitalDoctor(d)).length, [allDoctors]);
+
+  // Filtered doctors based on search query and selected doctor type
+  const filteredDoctors = useMemo(() => {
+    return allDoctors.filter(doc => {
+      // 1. Doctor type filter
+      if (doctorTypeFilter === 'HOSPITAL_DOCTOR' && !isHospitalDoctor(doc)) return false;
+      if (doctorTypeFilter === 'DOCTOR' && isHospitalDoctor(doc)) return false;
+
+      // 2. Search query filter
+      if (!searchTerm.trim()) return true;
+      const term = searchTerm.toLowerCase().trim();
+      const docName = (doc.name || '').toLowerCase();
+      const hospital = (doc.hospitalName || '').toLowerCase();
+      const specialty = (doc.specialization || '').toLowerCase();
+      const dept = (doc.department || '').toLowerCase();
+      const docType = getDoctorTypeLabel(doc).toLowerCase();
+
+      return (
+        docName.includes(term) ||
+        hospital.includes(term) ||
+        specialty.includes(term) ||
+        dept.includes(term) ||
+        docType.includes(term)
+      );
+    });
+  }, [allDoctors, doctorTypeFilter, searchTerm]);
+
   // Selected doctor state
-  const [selectedDoctorId, setSelectedDoctorId] = useState<string>(doctorsList[0]?.id || '');
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>(allDoctors[0]?.id || '');
 
   // Keep selected doctor in sync if list loads
   useEffect(() => {
-    if (!selectedDoctorId && doctorsList.length > 0) {
-      setSelectedDoctorId(doctorsList[0].id);
+    if (!selectedDoctorId && allDoctors.length > 0) {
+      setSelectedDoctorId(allDoctors[0].id);
     }
-  }, [doctorsList, selectedDoctorId]);
+  }, [allDoctors, selectedDoctorId]);
 
   const selectedDoctor = useMemo(() => {
-    return doctorsList.find(d => d.id === selectedDoctorId) || doctorsList[0];
-  }, [doctorsList, selectedDoctorId]);
+    return allDoctors.find(d => d.id === selectedDoctorId) || allDoctors[0];
+  }, [allDoctors, selectedDoctorId]);
 
   // Local form state for selected doctor availability
   const [availableDays, setAvailableDays] = useState<string[]>([]);
@@ -69,7 +147,7 @@ export const MasterAvailability: React.FC = () => {
       });
       setDaySchedules(defaultSchedules);
     }
-  }, [selectedDoctor]);
+  }, [selectedDoctor?.id]);
 
   // Day toggle handler
   const handleToggleDay = (day: string) => {
@@ -125,7 +203,7 @@ export const MasterAvailability: React.FC = () => {
     setBlockedDates(prev => prev.filter(b => b.date !== dateToRemove));
   };
 
-  // Save changes to database
+  // Save changes to database (isolated strictly to the selected doctor)
   const handleSaveAvailability = async () => {
     if (!selectedDoctor) return;
     setIsSaving(true);
@@ -163,6 +241,10 @@ export const MasterAvailability: React.FC = () => {
     );
   }
 
+  const selectedDoctorIsHospital = isHospitalDoctor(selectedDoctor);
+  const selectedDoctorTypeLabel = getDoctorTypeLabel(selectedDoctor);
+  const selectedDoctorDaysCount = selectedDoctor.availability?.availableDays?.length ?? availableDays.length;
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       {/* Toast Alert */}
@@ -184,7 +266,7 @@ export const MasterAvailability: React.FC = () => {
               Doctor Schedules & Working Hours
             </h2>
             <p className="text-xs text-slate-500 mt-1 max-w-2xl">
-              Master Admin manages doctor consultation availability, shift hours, break slots, and blocked leaves.
+              Master Admin manages consultation schedules, shift hours, break slots, and blocked leaves for both Hospital and Independent Doctors.
             </p>
           </div>
 
@@ -208,41 +290,313 @@ export const MasterAvailability: React.FC = () => {
           </div>
         </div>
 
-        {/* Doctor Selection Pill Cards */}
-        <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">
-            Select Attending Doctor to Configure
-          </label>
-          <div className="flex flex-wrap gap-3">
-            {doctorsList.map(doc => {
-              const isSelected = doc.id === selectedDoctor.id;
-              const docDaysCount = doc.availability?.availableDays?.length ?? 5;
+        {/* Enhanced Doctor Selection Section */}
+        <div className="space-y-3" ref={dropdownRef}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <label className="block text-[11px] font-black uppercase tracking-widest text-slate-700">
+                Select Attending Doctor to Configure
+              </label>
+              <p className="text-[11px] text-slate-400">
+                Search and select across all registered Hospital Doctors & Independent Doctors.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full border border-slate-200">
+                {totalDoctorCount} Total Doctors
+              </span>
+              <span className="text-[10px] font-black uppercase px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-200">
+                {hospitalDoctorCount} Hospital
+              </span>
+              <span className="text-[10px] font-black uppercase px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200">
+                {independentDoctorCount} Doctor
+              </span>
+            </div>
+          </div>
 
-              return (
-                <button
-                  key={doc.id}
-                  type="button"
-                  onClick={() => setSelectedDoctorId(doc.id)}
-                  className={`px-4 py-3 rounded-2xl border text-left transition-all flex items-center gap-3 ${
-                    isSelected
-                      ? 'bg-slate-900 border-slate-900 text-white shadow-lg'
-                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs ${
-                    isSelected ? 'bg-hospital-600 text-white' : 'bg-slate-100 text-slate-700'
-                  }`}>
-                    {doc.name.charAt(0)}
+          {/* Interactive Trigger Button */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsDropdownOpen(prev => !prev)}
+              className={`w-full p-4 rounded-2xl sm:rounded-3xl border-2 text-left transition-all flex items-center justify-between gap-4 bg-white shadow-sm hover:border-hospital-400 ${
+                isDropdownOpen ? 'border-hospital-600 ring-4 ring-hospital-100' : 'border-slate-200/90'
+              }`}
+            >
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-base shrink-0 shadow-sm ${
+                  selectedDoctorIsHospital 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-emerald-600 text-white'
+                }`}>
+                  {selectedDoctor.name.charAt(0)}
+                </div>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm sm:text-base font-black text-slate-900 tracking-tight truncate">
+                      {selectedDoctor.name}
+                    </span>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border shrink-0 ${
+                      selectedDoctorIsHospital
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    }`}>
+                      {selectedDoctorTypeLabel}
+                    </span>
                   </div>
-                  <div>
-                    <div className="text-xs font-extrabold">{doc.name}</div>
-                    <div className={`text-[10px] ${isSelected ? 'text-slate-300' : 'text-slate-400'}`}>
-                      {doc.specialization || 'General Surgeon'} • {docDaysCount} days/wk
+
+                  {/* Doctor Info Format: Specialty • Hospital Name • Doctor Type */}
+                  <div className="text-xs text-slate-500 flex items-center flex-wrap gap-1.5 mt-0.5">
+                    <span className="font-bold text-slate-700">
+                      {selectedDoctor.specialization || 'General Surgeon'}
+                    </span>
+                    {selectedDoctor.hospitalName && (
+                      <>
+                        <span className="text-slate-300">•</span>
+                        <span className="text-slate-600 font-medium">{selectedDoctor.hospitalName}</span>
+                      </>
+                    )}
+                    <span className="text-slate-300">•</span>
+                    <span className="font-semibold text-slate-500">{selectedDoctorTypeLabel}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <div className="text-right hidden md:block">
+                  <div className="text-xs font-black text-slate-800">
+                    {selectedDoctorDaysCount} Days Active
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono">
+                    {startTime} - {endTime}
+                  </div>
+                </div>
+                <div className={`w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-500 transition-transform ${
+                  isDropdownOpen ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50'
+                }`}>
+                  {isDropdownOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </div>
+              </div>
+            </button>
+
+            {/* Searchable Dropdown Menu */}
+            {isDropdownOpen && (
+              <div className="absolute top-full left-0 right-0 mt-2 z-40 bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                {/* Search Box Header */}
+                <div className="p-3.5 sm:p-4 bg-slate-50/90 border-b border-slate-200/80 space-y-3">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                      placeholder="Search by doctor name, hospital, specialty..."
+                      className="w-full pl-10 pr-9 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-hospital-500/20 focus:border-hospital-500 transition-all shadow-sm"
+                    />
+                    {searchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchTerm('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                        title="Clear search"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Doctor Type Filter Options */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1 flex items-center gap-1 shrink-0">
+                      <Filter className="w-3 h-3" /> Doctor Type:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDoctorTypeFilter('ALL')}
+                      className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                        doctorTypeFilter === 'ALL'
+                          ? 'bg-slate-900 text-white shadow-sm'
+                          : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      All Types ({totalDoctorCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDoctorTypeFilter('HOSPITAL_DOCTOR')}
+                      className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                        doctorTypeFilter === 'HOSPITAL_DOCTOR'
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-white text-blue-700 hover:bg-blue-50 border border-blue-200'
+                      }`}
+                    >
+                      <Building2 className="w-3 h-3" /> Hospital Doctor ({hospitalDoctorCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDoctorTypeFilter('DOCTOR')}
+                      className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                        doctorTypeFilter === 'DOCTOR'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'bg-white text-emerald-700 hover:bg-emerald-50 border border-emerald-200'
+                      }`}
+                    >
+                      <UserCheck className="w-3 h-3" /> Doctor ({independentDoctorCount})
+                    </button>
+                  </div>
+                </div>
+
+                {/* Scrollable Doctor List */}
+                <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                  {filteredDoctors.length === 0 ? (
+                    <div className="p-8 text-center space-y-2">
+                      <AlertCircle className="w-8 h-8 text-slate-300 mx-auto" />
+                      <div className="text-xs font-black uppercase tracking-wide text-slate-700">No doctors found</div>
+                      <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                        {searchTerm ? `No doctor matches "${searchTerm}"` : 'No doctors match the selected type filter.'}
+                      </p>
+                      {(searchTerm || doctorTypeFilter !== 'ALL') && (
+                        <button
+                          type="button"
+                          onClick={() => { setSearchTerm(''); setDoctorTypeFilter('ALL'); }}
+                          className="mt-2 inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors"
+                        >
+                          Clear Search & Filters
+                        </button>
+                      )}
                     </div>
-                  </div>
-                </button>
-              );
-            })}
+                  ) : (
+                    filteredDoctors.map(doc => {
+                      const isSelected = doc.id === selectedDoctor.id;
+                      const isHosp = isHospitalDoctor(doc);
+                      const docDays = doc.availability?.availableDays?.length ?? 5;
+                      const sTime = doc.availability?.startTime || '09:00';
+                      const eTime = doc.availability?.endTime || '17:00';
+                      const docType = getDoctorTypeLabel(doc);
+
+                      return (
+                        <button
+                          key={doc.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedDoctorId(doc.id);
+                            setIsDropdownOpen(false);
+                          }}
+                          className={`w-full p-3.5 sm:p-4 text-left transition-all flex items-center justify-between gap-3 hover:bg-slate-50/80 ${
+                            isSelected ? 'bg-hospital-50/70 border-l-4 border-hospital-600' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-xs shrink-0 shadow-sm ${
+                              isSelected
+                                ? 'bg-hospital-600 text-white'
+                                : isHosp
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {doc.name.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs sm:text-sm font-black text-slate-900 truncate">
+                                  {doc.name}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border shrink-0 ${
+                                  isHosp
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                }`}>
+                                  {docType}
+                                </span>
+                              </div>
+                              {/* Display: Specialty • Hospital Name • Doctor Type */}
+                              <div className="text-[11px] text-slate-500 flex items-center flex-wrap gap-1.5 mt-0.5">
+                                <span className="font-semibold text-slate-700">{doc.specialization || 'General Surgeon'}</span>
+                                {doc.hospitalName && (
+                                  <>
+                                    <span className="text-slate-300">•</span>
+                                    <span className="text-slate-600 font-medium">{doc.hospitalName}</span>
+                                  </>
+                                )}
+                                <span className="text-slate-300">•</span>
+                                <span className="font-semibold text-slate-500">{docType}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="text-right hidden sm:block">
+                              <div className="text-[11px] font-bold text-slate-700">{docDays} days/wk</div>
+                              <div className="text-[10px] text-slate-400 font-mono">{sTime} - {eTime}</div>
+                            </div>
+                            {isSelected ? (
+                              <div className="w-7 h-7 rounded-xl bg-hospital-600 text-white flex items-center justify-center shadow-sm">
+                                <Check className="w-4 h-4 stroke-[3]" />
+                              </div>
+                            ) : (
+                              <div className="w-7 h-7 rounded-xl border border-slate-200 flex items-center justify-center text-slate-300">
+                                <ChevronRight className="w-4 h-4" />
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Dropdown Footer Status */}
+                <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[10px] font-bold text-slate-500">
+                  <span>Showing {filteredDoctors.length} of {totalDoctorCount} doctors</span>
+                  <span className="text-slate-400">Master Admin Doctor Availability</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Quick Doctor Selection Pills Bar */}
+          <div className="pt-1">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-2">
+              Quick Doctor Switch:
+            </span>
+            <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
+              {allDoctors.map(doc => {
+                const isSelected = doc.id === selectedDoctor.id;
+                const isHosp = isHospitalDoctor(doc);
+                const docType = getDoctorTypeLabel(doc);
+
+                return (
+                  <button
+                    key={doc.id}
+                    type="button"
+                    onClick={() => setSelectedDoctorId(doc.id)}
+                    className={`px-3 py-2 rounded-xl border text-left transition-all flex items-center gap-2.5 shrink-0 ${
+                      isSelected
+                        ? 'bg-slate-900 border-slate-900 text-white shadow-md'
+                        : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-black text-[10px] ${
+                      isSelected 
+                        ? 'bg-hospital-600 text-white' 
+                        : isHosp 
+                          ? 'bg-blue-100 text-blue-700' 
+                          : 'bg-emerald-100 text-emerald-700'
+                    }`}>
+                      {doc.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-extrabold whitespace-nowrap">{doc.name}</div>
+                      <div className={`text-[9px] ${isSelected ? 'text-slate-300' : 'text-slate-400'} whitespace-nowrap`}>
+                        {doc.specialization || 'Consultant'} • {docType}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -253,8 +607,20 @@ export const MasterAvailability: React.FC = () => {
         <div className="lg:col-span-2 bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm p-4 sm:p-6 md:p-8 space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div>
-              <h3 className="text-lg font-black text-slate-900 uppercase">Weekly Consultation Schedule</h3>
-              <p className="text-xs text-slate-500">Configure consultation days and working hours for {selectedDoctor.name}.</p>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-black text-slate-900 uppercase">Weekly Consultation Schedule</h3>
+                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${
+                  selectedDoctorIsHospital
+                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                }`}>
+                  {selectedDoctorTypeLabel}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Configure consultation days and working hours for <strong className="text-slate-800">{selectedDoctor.name}</strong>
+                {selectedDoctor.hospitalName ? ` (${selectedDoctor.hospitalName})` : ''}.
+              </p>
             </div>
             <div className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-black uppercase">
               {availableDays.length} Days Active
@@ -454,8 +820,13 @@ export const MasterAvailability: React.FC = () => {
 
       {/* 3. Hospital-Wide Doctor Availability Overview */}
       <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm p-4 sm:p-6 md:p-8 space-y-4">
-        <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400">
-          <Stethoscope className="w-4 h-4" /> Hospital-Wide Doctor Duty Roster
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-700">
+            <Stethoscope className="w-4 h-4 text-hospital-600" /> Master Admin Doctor Duty Roster
+          </div>
+          <span className="text-[10px] font-bold text-slate-400">
+            {allDoctors.length} Registered Doctors
+          </span>
         </div>
 
         <div className="overflow-x-auto table-container w-full">
@@ -463,30 +834,57 @@ export const MasterAvailability: React.FC = () => {
             <thead>
               <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-400">
                 <th className="pb-3 pl-2">Doctor Name</th>
-                <th className="pb-3">Specialization</th>
+                <th className="pb-3">Doctor Type</th>
+                <th className="pb-3">Specialty & Facility</th>
                 <th className="pb-3">Working Days</th>
                 <th className="pb-3">Shift Hours</th>
                 <th className="pb-3">Blocked Leaves</th>
-                <th className="pb-3 pr-2 text-right">Quick Edit</th>
+                <th className="pb-3 pr-2 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
-              {doctorsList.map(doc => {
+              {allDoctors.map(doc => {
                 const avail = doc.availability;
                 const days = avail?.availableDays || ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
                 const sTime = avail?.startTime || '09:00';
                 const eTime = avail?.endTime || '17:00';
                 const blocksCount = avail?.blockedDates?.length || (avail?.unavailableDates?.length || 0);
+                const isHosp = isHospitalDoctor(doc);
+                const docType = getDoctorTypeLabel(doc);
+                const isSelected = doc.id === selectedDoctor.id;
 
                 return (
-                  <tr key={doc.id} className="hover:bg-slate-50/60">
+                  <tr key={doc.id} className={`hover:bg-slate-50/60 ${isSelected ? 'bg-hospital-50/40' : ''}`}>
                     <td className="py-3.5 pl-2 font-extrabold text-slate-800 text-sm flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-hospital-50 text-hospital-700 flex items-center justify-center font-bold text-xs">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
+                        isHosp ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
+                      }`}>
                         {doc.name.charAt(0)}
                       </div>
-                      {doc.name}
+                      <div>
+                        <div>{doc.name}</div>
+                        {isSelected && (
+                          <span className="text-[9px] font-black text-hospital-600 uppercase tracking-wider">
+                            Currently Editing
+                          </span>
+                        )}
+                      </div>
                     </td>
-                    <td className="py-3.5 text-slate-600 font-semibold">{doc.specialization || 'General Surgeon'}</td>
+                    <td className="py-3.5">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                        isHosp 
+                          ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      }`}>
+                        {docType}
+                      </span>
+                    </td>
+                    <td className="py-3.5 text-slate-600 font-semibold">
+                      <div>{doc.specialization || 'General Surgeon'}</div>
+                      <div className="text-[10px] text-slate-400 font-normal">
+                        {doc.hospitalName || 'Independent Practice'}
+                      </div>
+                    </td>
                     <td className="py-3.5">
                       <div className="flex flex-wrap gap-1 max-w-xs">
                         {days.map(d => (
@@ -509,10 +907,17 @@ export const MasterAvailability: React.FC = () => {
                     <td className="py-3.5 pr-2 text-right">
                       <button
                         type="button"
-                        onClick={() => setSelectedDoctorId(doc.id)}
-                        className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-[11px] font-bold uppercase transition-colors"
+                        onClick={() => {
+                          setSelectedDoctorId(doc.id);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-[11px] font-bold uppercase transition-colors ${
+                          isSelected 
+                            ? 'bg-hospital-600 text-white shadow-sm'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
+                        }`}
                       >
-                        Configure
+                        {isSelected ? 'Editing Now' : 'Configure'}
                       </button>
                     </td>
                   </tr>
