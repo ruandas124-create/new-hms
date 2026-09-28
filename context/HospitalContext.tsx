@@ -154,7 +154,7 @@ export const checkPermission = (
 
   // 2. ADMIN: Access to Analytics Hub and permitted operational dashboards
   if (role === 'ADMIN') {
-    if (dashboard === 'analytics_hub') return !!permissions.analytics_hub;
+    if (dashboard === 'analytics_hub' || dashboard === 'analytics_give_access') return !!permissions.analytics_hub;
     if (dashboard === 'front_office') return !!permissions.front_office;
     if (dashboard === 'doctor') return !!permissions.doctor;
     if (dashboard === 'package') return !!permissions.package;
@@ -164,7 +164,7 @@ export const checkPermission = (
 
   // 3. ANALYTICS / ANALYTICS_HUB / HOSPITAL
   if (role === 'ANALYTICS' || role === 'ANALYTICS_HUB' || role === 'HOSPITAL') {
-    if (dashboard === 'analytics_hub') return !!permissions.analytics_hub;
+    if (dashboard === 'analytics_hub' || dashboard === 'analytics_give_access') return !!permissions.analytics_hub;
     return false;
   }
 
@@ -237,6 +237,7 @@ const getDashboardFromLocation = (): DashboardKey | null => {
     if (hash === 'master-reports' || hash === 'master_reports') return 'master_reports';
     if (hash === 'admin') return 'analytics_hub';
     if (hash === 'analytics' || hash === 'analytics-hub' || hash === 'analytics_hub') return 'analytics_hub';
+    if (hash === 'give-access' || hash === 'give_access' || hash === 'analytics-give-access' || hash === 'analytics_give_access') return 'analytics_give_access';
     if (hash === 'front-office' || hash === 'front_office') return 'front_office';
     if (hash === 'doctor') return 'doctor';
     if (hash === 'package') return 'package';

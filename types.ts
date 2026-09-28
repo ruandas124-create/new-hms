@@ -13,7 +13,7 @@ export type Role =
   | 'SALES'
   | null;
 
-export type DashboardKey = 'master' | 'master_access' | 'master_scheduling' | 'master_availability' | 'master_reports' | 'analytics_hub' | 'front_office' | 'doctor' | 'package' | 'sales';
+export type DashboardKey = 'master' | 'master_access' | 'master_scheduling' | 'master_availability' | 'master_reports' | 'analytics_hub' | 'analytics_give_access' | 'front_office' | 'doctor' | 'package' | 'sales';
 
 export interface DashboardPermission {
   id: string;
