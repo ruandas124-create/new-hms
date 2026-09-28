@@ -172,7 +172,7 @@ export const GiveAccessView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 pb-16">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-16">
       {/* Top Banner Alert / Error Notice */}
       {errorMessage && (
         <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-2xl flex items-center justify-between gap-3 text-xs font-bold animate-in fade-in">
@@ -185,68 +185,6 @@ export const GiveAccessView: React.FC = () => {
           </button>
         </div>
       )}
-
-      {/* 1. TOP SECTION: Hospital Onboarding & Access Setup */}
-      <div className="bg-gradient-to-r from-hospital-950 via-slate-900 to-indigo-950 rounded-3xl p-6 sm:p-8 text-white border border-hospital-500/30 shadow-xl relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-96 h-full bg-hospital-500/10 blur-3xl pointer-events-none" />
-        
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
-          <div className="space-y-3 max-w-2xl min-w-0">
-            <div className="flex items-center gap-2 text-[10px] font-black tracking-widest text-hospital-400 uppercase">
-              <ShieldCheck className="w-4 h-4 text-hospital-400" />
-              Hospital Onboarding & Access Setup
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              Give Dashboard Access
-            </h1>
-            <p className="text-slate-300 text-xs sm:text-sm font-medium">
-              Grant isolated access credentials to your Doctors, Front Office receptionist, and Surgical Package counselors for <span className="text-white font-bold">{tenantHospitalName}</span>.
-            </p>
-
-            {/* Live Count Status Pills */}
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              <div className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 ${
-                activeDoctors.length > 0 
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' 
-                  : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-              }`}>
-                <Stethoscope className="w-3.5 h-3.5" />
-                <span>Doctors: <strong className="text-white font-black">{activeDoctors.length} Connected</strong></span>
-              </div>
-
-              <div className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 ${
-                activeFrontOffice 
-                  ? 'bg-blue-500/20 text-blue-300 border-blue-500/40' 
-                  : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-              }`}>
-                <User className="w-3.5 h-3.5" />
-                <span>Front Office: <strong className="text-white font-black">{activeFrontOffice ? '1 / 1 Configured' : '0 / 1 Pending'}</strong></span>
-              </div>
-
-              <div className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 ${
-                activePackage 
-                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' 
-                  : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-              }`}>
-                <Briefcase className="w-3.5 h-3.5" />
-                <span>Package: <strong className="text-white font-black">{activePackage ? '1 / 1 Configured' : '0 / 1 Pending'}</strong></span>
-              </div>
-            </div>
-          </div>
-
-          {/* Action Button */}
-          <div className="shrink-0 w-full lg:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <button
-              id="primary-give-access-btn"
-              onClick={() => handleOpenForm('Doctor')}
-              className="px-6 py-3.5 bg-hospital-500 hover:bg-hospital-400 text-slate-950 font-black rounded-2xl text-xs sm:text-sm uppercase tracking-wider transition-all shadow-xl shadow-hospital-500/20 flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              GIVE ACCESS
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* Quick Role Provision Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
