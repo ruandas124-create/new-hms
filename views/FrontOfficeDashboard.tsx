@@ -175,6 +175,7 @@ export const FrontOfficeDashboard: React.FC = () => {
   const [step, setStep] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   
+  const [showFilters, setShowFilters] = useState(false);
   const [opdStartDate, setOpdStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [opdEndDate, setOpdEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [apptStartDate, setApptStartDate] = useState(new Date().toISOString().split('T')[0]);
@@ -621,9 +622,9 @@ export const FrontOfficeDashboard: React.FC = () => {
 
       {/* Search and Filters Card */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-xs border border-slate-200/80 flex flex-col gap-4">
-        <div className="flex flex-col lg:flex-row gap-4 justify-between items-stretch lg:items-center">
-          <div className="flex flex-1 flex-col sm:flex-row gap-3 items-stretch sm:items-center w-full">
-            <div className="relative w-full lg:max-w-xs">
+        <div className="flex flex-col lg:flex-row gap-3 justify-between items-stretch lg:items-center">
+          <div className="flex flex-1 flex-col sm:flex-row gap-2.5 items-stretch sm:items-center w-full">
+            <div className="relative flex-1 max-w-full sm:max-w-xs">
               <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
               <input 
                 type="text" 
@@ -634,123 +635,203 @@ export const FrontOfficeDashboard: React.FC = () => {
               />
             </div>
 
-            {activeTab === 'REGISTRATION' && (
-              <div className="flex items-center gap-2 w-full sm:w-auto animate-in fade-in duration-200 flex-wrap">
-                <span className="text-[10px] font-bold uppercase text-slate-400">From</span>
-                <input 
-                  type="date" 
-                  className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500" 
-                  value={opdStartDate} 
-                  onChange={e => setOpdStartDate(e.target.value)} 
-                />
-                <span className="text-[10px] font-bold uppercase text-slate-400">To</span>
-                <input 
-                  type="date" 
-                  className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500" 
-                  value={opdEndDate} 
-                  onChange={e => setOpdEndDate(e.target.value)} 
-                />
-                <span className="text-[10px] font-bold uppercase text-slate-400 ml-1">Doctor</span>
-                <select 
-                  className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500"
-                  value={opdDoctorFilter} 
-                  onChange={e => setOpdDoctorFilter(e.target.value)}
-                >
-                  <option value="ALL">All Doctors</option>
-                  {staffUsers?.filter(u => u.role === 'DOCTOR').map(doc => (
-                    <option key={doc.id} value={doc.id}>{doc.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {/* Unified Filter Button */}
+            {(() => {
+              const activeCount = activeTab === 'REGISTRATION'
+                ? (opdDoctorFilter !== 'ALL' ? 1 : 0) + (opdStartDate !== todayIso || opdEndDate !== todayIso ? 1 : 0)
+                : activeTab === 'APPOINTMENTS'
+                ? (apptStartDate !== todayIso || apptEndDate !== todayIso ? 1 : 0)
+                : (historyFilters.startDate ? 1 : 0) + (historyFilters.endDate ? 1 : 0) + (historyFilters.source ? 1 : 0) + (historyFilters.visitType !== 'ALL' ? 1 : 0) + (historyFilters.status ? 1 : 0) + (historyFilters.condition ? 1 : 0) + (historyFilters.doctor !== 'ALL' ? 1 : 0) + (historyFilters.type !== 'ALL' ? 1 : 0);
 
-            {activeTab === 'APPOINTMENTS' && (
-              <div className="flex items-center gap-2 w-full sm:w-auto animate-in fade-in duration-200 flex-wrap">
-                <span className="text-[10px] font-bold uppercase text-slate-400">From</span>
-                <input 
-                  type="date" 
-                  className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500" 
-                  value={apptStartDate} 
-                  onChange={e => setApptStartDate(e.target.value)} 
-                />
-                <span className="text-[10px] font-bold uppercase text-slate-400">To</span>
-                <input 
-                  type="date" 
-                  className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500" 
-                  value={apptEndDate} 
-                  onChange={e => setApptEndDate(e.target.value)} 
-                />
-              </div>
-            )}
+              return (
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`px-3.5 py-2.5 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 ${
+                    showFilters || activeCount > 0 
+                      ? 'bg-hospital-50 border-hospital-300 text-hospital-700 shadow-2xs' 
+                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <Filter className="w-3.5 h-3.5 text-hospital-600" />
+                  <span>Filters</span>
+                  {activeCount > 0 && (
+                    <span className="w-5 h-5 rounded-full bg-hospital-600 text-white text-[10px] font-black flex items-center justify-center">
+                      {activeCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })()}
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2.5 w-full lg:w-auto shrink-0">
+          <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto shrink-0">
             <button 
               onClick={() => { resetBookingForm(); setShowBookingForm(true); }} 
-              className="w-full sm:w-auto bg-white border border-hospital-600 hover:bg-hospital-50 text-hospital-700 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 font-bold text-xs transition-all shadow-xs active:scale-95 cursor-pointer"
+              className="w-full sm:w-auto bg-white border border-hospital-600 hover:bg-hospital-50 text-hospital-700 px-3.5 py-2.5 rounded-xl flex items-center justify-center gap-1.5 font-bold text-xs transition-all shadow-2xs active:scale-95 cursor-pointer"
             >
               <CalendarCheck className="w-4 h-4 text-hospital-600" /> Book Appointment
             </button>
             <button 
               onClick={() => { resetForm(); setShowForm(true); }} 
-              className="w-full sm:w-auto bg-hospital-600 hover:bg-hospital-700 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 font-bold text-xs shadow-sm transition-all active:scale-95 cursor-pointer"
+              className="w-full sm:w-auto bg-hospital-600 hover:bg-hospital-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 font-bold text-xs shadow-xs transition-all active:scale-95 cursor-pointer"
             >
               <PlusCircle className="w-4 h-4" /> Register Patient
             </button>
           </div>
         </div>
 
-        {activeTab === 'GLOBAL_SEARCH' && (
-          <div className="pt-4 border-t border-slate-50 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-12 gap-6 items-end animate-in slide-in-from-top-2">
-            <div className="flex flex-col gap-1.5 w-full xl:col-span-3">
-              <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Date Range</label>
-              <div className="flex items-center gap-2">
-                <input type="date" className={filterInputClasses} value={historyFilters.startDate} onChange={e => setHistoryFilters({...historyFilters, startDate: e.target.value})} />
-                <input type="date" className={filterInputClasses} value={historyFilters.endDate} onChange={e => setHistoryFilters({...historyFilters, endDate: e.target.value})} />
+        {/* Expandable Unified Filter Panel */}
+        {showFilters && (
+          <div className="pt-4 border-t border-slate-100 animate-in slide-in-from-top-2 duration-200 space-y-3">
+            {activeTab === 'REGISTRATION' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">From Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white" 
+                    value={opdStartDate} 
+                    onChange={e => setOpdStartDate(e.target.value)} 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">To Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white" 
+                    value={opdEndDate} 
+                    onChange={e => setOpdEndDate(e.target.value)} 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">Consulting Doctor</label>
+                  <select 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white cursor-pointer"
+                    value={opdDoctorFilter} 
+                    onChange={e => setOpdDoctorFilter(e.target.value)}
+                  >
+                    <option value="ALL">All Doctors</option>
+                    {staffUsers?.filter(u => u.role === 'DOCTOR').map(doc => (
+                      <option key={doc.id} value={doc.id}>{doc.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpdStartDate(todayIso);
+                      setOpdEndDate(todayIso);
+                      setOpdDoctorFilter('ALL');
+                    }}
+                    className="w-full py-2 px-3 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Reset Filters
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="flex flex-col gap-1.5 w-full xl:col-span-2">
-              <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Source</label>
-              <select className={filterInputClasses} value={historyFilters.source} onChange={e => setHistoryFilters({...historyFilters, source: e.target.value})}>
-                <option value="">All Sources</option>
-                {sourceConfig.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5 w-full xl:col-span-1">
-              <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Visit</label>
-              <select className={filterInputClasses} value={historyFilters.visitType} onChange={e => setHistoryFilters({...historyFilters, visitType: e.target.value})}>
-                <option value="ALL">All</option>
-                <option value="New">New</option>
-                <option value="Revisit">Revisit</option>
-                <option value="Scheduled">Scheduled</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5 w-full xl:col-span-1">
-              <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Status</label>
-              <select className={filterInputClasses} value={historyFilters.status} onChange={e => setHistoryFilters({...historyFilters, status: e.target.value})}>
-                <option value="">All</option>
-                {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5 w-full xl:col-span-2">
-              <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Condition</label>
-              <select className={filterInputClasses} value={historyFilters.condition} onChange={e => setHistoryFilters({...historyFilters, condition: e.target.value})}>
-                <option value="">All Conditions</option>
-                {Object.values(Condition).map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5 w-full xl:col-span-2">
-              <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Consulting Doctor</label>
-              <select className={filterInputClasses} value={historyFilters.doctor} onChange={e => setHistoryFilters({...historyFilters, doctor: e.target.value})}>
-                <option value="ALL">All Doctors</option>
-                {staffUsers?.filter(u => u.role === 'DOCTOR').map(doc => (
-                  <option key={doc.id} value={doc.id}>{doc.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5 w-full xl:col-span-1">
-              <button onClick={handleExportFilteredCSV} className="h-10 w-full bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-sm"><FileSpreadsheet className="w-4 h-4" /> CSV</button>
-            </div>
+            )}
+
+            {activeTab === 'APPOINTMENTS' && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">From Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white" 
+                    value={apptStartDate} 
+                    onChange={e => setApptStartDate(e.target.value)} 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">To Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white" 
+                    value={apptEndDate} 
+                    onChange={e => setApptEndDate(e.target.value)} 
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setApptStartDate(todayIso);
+                      setApptEndDate(todayIso);
+                    }}
+                    className="w-full py-2 px-3 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Reset Filters
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'GLOBAL_SEARCH' && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 items-end">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">Date Range</label>
+                    <div className="flex items-center gap-1.5">
+                      <input type="date" className="w-1/2 bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white" value={historyFilters.startDate} onChange={e => setHistoryFilters({...historyFilters, startDate: e.target.value})} />
+                      <input type="date" className="w-1/2 bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white" value={historyFilters.endDate} onChange={e => setHistoryFilters({...historyFilters, endDate: e.target.value})} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">Source</label>
+                    <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white cursor-pointer" value={historyFilters.source} onChange={e => setHistoryFilters({...historyFilters, source: e.target.value})}>
+                      <option value="">All Sources</option>
+                      {sourceConfig.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">Visit</label>
+                    <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white cursor-pointer" value={historyFilters.visitType} onChange={e => setHistoryFilters({...historyFilters, visitType: e.target.value})}>
+                      <option value="ALL">All</option>
+                      <option value="New">New</option>
+                      <option value="Revisit">Revisit</option>
+                      <option value="Scheduled">Scheduled</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">Status</label>
+                    <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white cursor-pointer" value={historyFilters.status} onChange={e => setHistoryFilters({...historyFilters, status: e.target.value})}>
+                      <option value="">All</option>
+                      {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">Condition</label>
+                    <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white cursor-pointer" value={historyFilters.condition} onChange={e => setHistoryFilters({...historyFilters, condition: e.target.value})}>
+                      <option value="">All Conditions</option>
+                      {Object.values(Condition).map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">Doctor</label>
+                    <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white cursor-pointer" value={historyFilters.doctor} onChange={e => setHistoryFilters({...historyFilters, doctor: e.target.value})}>
+                      <option value="ALL">All Doctors</option>
+                      {staffUsers?.filter(u => u.role === 'DOCTOR').map(doc => (
+                        <option key={doc.id} value={doc.id}>{doc.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={handleExportFilteredCSV} className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer">
+                      <FileSpreadsheet className="w-3.5 h-3.5" /> CSV
+                    </button>
+                    <button 
+                      onClick={() => setHistoryFilters({ startDate: '', endDate: '', source: '', condition: '', status: '', visitType: 'ALL', type: 'ALL', doctor: 'ALL' })} 
+                      className="py-2 px-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                      title="Reset filters"
+                    >
+                      <RefreshCcw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
