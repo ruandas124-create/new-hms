@@ -68,7 +68,6 @@ const formatToDateTime = (dateString: string | undefined | null): string => {
 export const PackageTeamDashboard: React.FC = () => {
   const { patients, updatePackageProposal, staffUsers, registerStaff } = useHospital();
   
-  const [activeTab, setActiveTab] = useState<'counseling' | 'staff'>('counseling');
   const [listCategory, setListCategory] = useState<'PENDING' | 'SCHEDULED' | 'FOLLOWUP' | 'COMPLETED' | 'LOST'>('PENDING');
   const [viewMode, setViewMode] = useState<'split' | 'table'>('split');
   const [searchTerm, setSearchTerm] = useState('');
@@ -369,32 +368,9 @@ export const PackageTeamDashboard: React.FC = () => {
           <h2 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">Package & Counseling Dashboard</h2>
           <p className="text-slate-500 text-xs sm:text-sm font-medium mt-0.5">Patient Counseling, Financial Structuring & Conversion Operations</p>
         </div>
-        <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto shadow-2xs">
-          <button 
-            onClick={() => setActiveTab('counseling')} 
-            className={`flex-1 sm:flex-initial px-3.5 sm:px-4 py-2 text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'counseling' 
-                ? 'bg-white text-hospital-700 shadow-sm' 
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Briefcase className="w-4 h-4" /> Counseling
-          </button>
-          <button 
-            onClick={() => setActiveTab('staff')} 
-            className={`flex-1 sm:flex-initial px-3.5 sm:px-4 py-2 text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'staff' 
-                ? 'bg-white text-hospital-700 shadow-sm' 
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Users className="w-4 h-4" /> Staff
-          </button>
-        </div>
       </div>
 
-      {activeTab === 'counseling' ? (
-        <div className="space-y-5">
+      <div className="space-y-5">
           {/* Main Controls Card */}
           <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-xs border border-slate-200/80 space-y-4">
             {/* Category Sub-Tabs */}
@@ -1100,11 +1076,6 @@ export const PackageTeamDashboard: React.FC = () => {
             </div>
           )}
         </div>
-      ) : (
-        <div className="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-16 text-center text-slate-400 font-bold uppercase tracking-wider text-xs">
-          Staff Management View
-        </div>
-      )}
 
       {/* Outcome Confirmation Modal */}
       {outcomeModal.show && (
