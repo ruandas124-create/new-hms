@@ -15,6 +15,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     refreshData, 
     isLoading, 
     patients, 
+    appointments = [],
     systemName,
     activeDashboard,
     setActiveDashboard,
@@ -109,6 +110,25 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       return [
         { key: 'analytics_hub' as DashboardKey, label: 'Analytics Hub', icon: BarChart3, colorClass: 'text-indigo-400' },
         { key: 'analytics_give_access' as DashboardKey, label: 'Give Access', icon: Key, colorClass: 'text-emerald-400' }
+      ];
+    }
+
+    if (currentUserRole === 'DOCTOR') {
+      const currentDocId = typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') || '' : '';
+      const currentDocName = typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_name') || '' : '';
+      const docApptCount = (appointments || []).filter(a => {
+        const matchDoc = (currentDocId && a.assignedDoctorId === currentDocId) || 
+                         (currentDocName && a.assignedDoctorName && a.assignedDoctorName.toLowerCase().trim() === currentDocName.toLowerCase().trim());
+        if (currentDocId === 'static_doctor' || !currentDocId) {
+          return matchDoc || !a.assignedDoctorId;
+        }
+        return matchDoc;
+      }).length;
+
+      return [
+        { key: 'doctor' as DashboardKey, label: 'Patients Queue', icon: User, colorClass: 'text-emerald-400' },
+        { key: 'doctor_appointments' as DashboardKey, label: `Appointments${docApptCount > 0 ? ` (${docApptCount})` : ''}`, icon: Calendar, colorClass: 'text-emerald-400' },
+        { key: 'doctor_availability' as DashboardKey, label: 'Availability Mode', icon: Clock, colorClass: 'text-emerald-400' }
       ];
     }
 

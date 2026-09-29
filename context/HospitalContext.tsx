@@ -103,6 +103,8 @@ export const DEFAULT_PERMISSIONS: Record<DashboardKey, boolean> = {
   analytics_give_access: true,
   front_office: true,
   doctor: true,
+  doctor_appointments: true,
+  doctor_availability: true,
   package: true,
   sales: true,
 };
@@ -130,6 +132,8 @@ export const DASHBOARD_TO_SLUG: Record<DashboardKey, string> = {
   analytics_give_access: 'analytics-give-access',
   front_office: 'front-office',
   doctor: 'doctor',
+  doctor_appointments: 'doctor-appointments',
+  doctor_availability: 'doctor-availability',
   package: 'package',
   sales: 'sales',
 };
@@ -176,9 +180,9 @@ export const checkPermission = (
     return false;
   }
 
-  // 5. DOCTOR: Can only access doctor if permitted
+  // 5. DOCTOR: Can access doctor patient queue, appointments, and availability
   if (role === 'DOCTOR') {
-    if (dashboard === 'doctor') return !!permissions.doctor;
+    if (dashboard === 'doctor' || dashboard === 'doctor_appointments' || dashboard === 'doctor_availability') return !!permissions.doctor;
     return false;
   }
 

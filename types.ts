@@ -23,6 +23,8 @@ export type DashboardKey =
   | 'analytics_give_access'
   | 'front_office' 
   | 'doctor' 
+  | 'doctor_appointments'
+  | 'doctor_availability'
   | 'package' 
   | 'sales';
 

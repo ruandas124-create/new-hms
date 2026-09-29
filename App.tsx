@@ -95,6 +95,8 @@ const MainApp: React.FC = () => {
       case 'front_office':
         return <FrontOfficeDashboard />;
       case 'doctor':
+      case 'doctor_appointments':
+      case 'doctor_availability':
         return <DoctorDashboard />;
       case 'package':
         return <PackageTeamDashboard />;

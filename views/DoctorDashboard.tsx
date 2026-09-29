@@ -42,12 +42,26 @@ const formatToDateTime = (dateString: string | undefined | null): string => {
 };
 
 export const DoctorDashboard: React.FC = () => {
-  const { patients, updateDoctorAssessment, staffUsers, updateStaff, schedulingPermissions, appointments, currentUserRole } = useHospital();
+  const { 
+    patients, 
+    updateDoctorAssessment, 
+    staffUsers, 
+    updateStaff, 
+    schedulingPermissions, 
+    appointments, 
+    currentUserRole,
+    activeDashboard,
+    setActiveDashboard
+  } = useHospital();
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Tabs State
-  const [activeTab, setActiveTab] = useState<'patients' | 'appointments' | 'availability'>('patients');
+  // Current active view synced with side menu
+  const activeTab: 'patients' | 'appointments' | 'availability' = useMemo(() => {
+    if (activeDashboard === 'doctor_appointments') return 'appointments';
+    if (activeDashboard === 'doctor_availability') return 'availability';
+    return 'patients';
+  }, [activeDashboard]);
 
   // Updated state for Date Range
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
@@ -416,43 +430,30 @@ export const DoctorDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex bg-slate-100 p-1 rounded-xl w-full md:w-auto gap-0.5 shrink-0">
-          <button
-            type="button"
-            onClick={() => setActiveTab('patients')}
-            className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-200 ${
-              activeTab === 'patients'
-                ? 'bg-white text-hospital-700 shadow'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <User className="w-4 h-4" /> Patients Queue
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('appointments')}
-            className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-200 ${
-              activeTab === 'appointments'
-                ? 'bg-white text-hospital-700 shadow'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Calendar className="w-4 h-4" /> Appointments ({doctorAppointments.length})
-          </button>
-          
-          <button
-            type="button"
-            onClick={() => setActiveTab('availability')}
-            className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-200 ${
-              activeTab === 'availability'
-                ? 'bg-white text-hospital-700 shadow'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Calendar className="w-4 h-4" /> Availability Mode
-          </button>
+        {/* Active Section Indicator (Controlled via Side Menu) */}
+        <div className="flex items-center gap-2">
+          <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center gap-2">
+            {activeTab === 'patients' && (
+              <>
+                <User className="w-4 h-4 text-emerald-600" />
+                <span className="text-xs font-black uppercase text-slate-800 tracking-wider">Patients Queue</span>
+              </>
+            )}
+            {activeTab === 'appointments' && (
+              <>
+                <Calendar className="w-4 h-4 text-hospital-600" />
+                <span className="text-xs font-black uppercase text-slate-800 tracking-wider">
+                  Appointments ({doctorAppointments.length})
+                </span>
+              </>
+            )}
+            {activeTab === 'availability' && (
+              <>
+                <Clock className="w-4 h-4 text-amber-600" />
+                <span className="text-xs font-black uppercase text-slate-800 tracking-wider">Availability Mode</span>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
