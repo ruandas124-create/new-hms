@@ -125,7 +125,8 @@ const isDoctorAvailableOnDate = (doctor: any, dateString: string | undefined): b
 const getDoctorAvailabilityDetailed = (
   doctor: any, 
   dateString: string | undefined, 
-  allAppointments: Appointment[] = []
+  allAppointments: Appointment[] = [],
+  excludeAppointmentId?: string
 ): DoctorAvailabilityDetails | null => {
   if (!doctor) return null;
   if (!dateString) return null;
@@ -254,6 +255,7 @@ const getDoctorAvailabilityDetailed = (
   // 4. Find appointments booked for this doctor on this date
   const docAppointments = (allAppointments || []).filter(app => {
     if (!app || app.status === 'Cancelled' || app.status === 'Junk') return false;
+    if (excludeAppointmentId && app.id === excludeAppointmentId) return false;
     const appDate = (app.date || '').split('T')[0];
     if (appDate !== formattedDate) return false;
     const matchId = (app.assignedDoctorId && app.assignedDoctorId === doctor.id) ||
@@ -465,21 +467,8 @@ export const MasterScheduling: React.FC = () => {
   // View Appointment Modal State
   const [viewModalApp, setViewModalApp] = useState<Appointment | null>(null);
 
-  // Edit Appointment Modal State
-  const [editModalApp, setEditModalApp] = useState<Appointment | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editMobile, setEditMobile] = useState('');
-  const [editCondition, setEditCondition] = useState<Condition>(Condition.Other);
-  const [editDate, setEditDate] = useState('');
-  const [editTime, setEditTime] = useState('');
-  const [editAssignmentType, setEditAssignmentType] = useState<'doctor' | 'hospital'>('doctor');
-  const [editDoctorId, setEditDoctorId] = useState('');
-  const [editHospitalId, setEditHospitalId] = useState('');
-  const [editSource, setEditSource] = useState('');
-  const [editReferralPerson, setEditReferralPerson] = useState('');
-  const [editStatus, setEditStatus] = useState<string>('Scheduled');
-  const [editFormError, setEditFormError] = useState<string | null>(null);
-  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+  // Edit Appointment State (Reusing Book Master Appointment form)
+  const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);
 
   // View Patient Modal State
   const [viewPatientData, setViewPatientData] = useState<{
@@ -548,20 +537,26 @@ export const MasterScheduling: React.FC = () => {
   };
 
   const handleOpenEditModal = (app: Appointment) => {
-    setEditModalApp(app);
-    setEditName(app.name || '');
-    setEditMobile(app.mobile || '');
-    setEditCondition(app.condition || Condition.Other);
-    setEditDate(app.date || new Date().toISOString().split('T')[0]);
-    setEditTime(app.time || '10:00');
-    const resolvedType = app.assignment_type || (app.assignedDoctorId ? 'doctor' : 'hospital');
-    setEditAssignmentType(resolvedType);
-    setEditDoctorId(app.assignedDoctorId || app.doctor_id || '');
-    setEditHospitalId(app.hospital_id || '');
-    setEditSource(app.source || 'Other');
-    setEditReferralPerson(app.referral_person || '');
-    setEditStatus(app.status || 'Scheduled');
-    setEditFormError(null);
+    setEditingAppointmentId(app.id);
+    const resolvedType = app.assignment_type || (app.assignedDoctorId || app.doctor_id ? 'doctor' : 'hospital');
+    setAssignmentType(resolvedType);
+    setSelectedDoctorId(app.assignedDoctorId || app.doctor_id || '');
+    setSelectedHospitalId(app.hospital_id || '');
+    setDoctorSearch('');
+    setHospitalSearch('');
+    setPatientMode(app.patient_id ? 'existing' : 'new');
+    setSelectedPatientId(app.patient_id || '');
+    setPatientSearchTerm('');
+    setPatientName(app.name || '');
+    setMobile(app.mobile || '');
+    setCondition((app.condition as Condition) || Condition.Other);
+    setApptDate(app.date || new Date().toISOString().split('T')[0]);
+    setApptTime(app.time || '');
+    setIsTimeSelectorOpen(true);
+    setSource(app.source || '');
+    setReferralPerson(app.referral_person || '');
+    setFormError(null);
+    setShowBookModal(true);
   };
 
   const handleOpenPatientModal = (app: Appointment) => {
@@ -674,8 +669,8 @@ export const MasterScheduling: React.FC = () => {
 
   // Detailed Doctor Availability based on the existing Doctor Availability section (single source of truth)
   const doctorAvailabilityDetailed = useMemo(() => {
-    return getDoctorAvailabilityDetailed(activeSelectedDoctor, apptDate, appointments);
-  }, [activeSelectedDoctor, apptDate, appointments]);
+    return getDoctorAvailabilityDetailed(activeSelectedDoctor, apptDate, appointments, editingAppointmentId || undefined);
+  }, [activeSelectedDoctor, apptDate, appointments, editingAppointmentId]);
 
   // Available time slots (respects doctor shifts, breaks, and existing appointments)
   const availableTimeSlots = useMemo(() => {
@@ -879,37 +874,68 @@ export const MasterScheduling: React.FC = () => {
         }
       }
 
-      await addAppointment({
-        name: patientName.trim(),
-        mobile: mobile.trim(),
-        date: apptDate,
-        time: apptTime,
-        bookingType: 'Scheduled',
-        visit_type: acqureOpd,
-        condition: condition || Condition.Other,
-        source: source,
-        referral_person: source === 'Referral' ? referralPerson.trim() : null,
-        assignment_type: assignmentType,
-        doctor_id: finalDoctorId,
-        hospital_id: finalHospitalId,
-        hospitalName: finalHospitalName,
-        assignedDoctorId: finalDoctorId || undefined,
-        assignedDoctorName: finalDoctorName || undefined,
-        patient_id: selectedPatientId || null,
-        username: masterUsername
-      });
+      if (editingAppointmentId) {
+        const originalApp = appointments.find(a => a.id === editingAppointmentId);
+        await updateAppointment({
+          ...(originalApp || {}),
+          id: editingAppointmentId,
+          createdAt: originalApp?.createdAt || new Date().toISOString(),
+          name: patientName.trim(),
+          mobile: mobile.trim(),
+          date: apptDate,
+          time: apptTime,
+          bookingType: originalApp?.bookingType || 'Scheduled',
+          visit_type: originalApp?.visit_type || acqureOpd,
+          condition: condition || Condition.Other,
+          source: source,
+          referral_person: source === 'Referral' ? referralPerson.trim() : null,
+          assignment_type: assignmentType,
+          doctor_id: finalDoctorId,
+          hospital_id: finalHospitalId,
+          hospitalName: finalHospitalName,
+          assignedDoctorId: finalDoctorId || undefined,
+          assignedDoctorName: finalDoctorName || undefined,
+          patient_id: selectedPatientId || originalApp?.patient_id || null,
+          username: originalApp?.username || masterUsername,
+          status: originalApp?.status || 'Scheduled'
+        });
 
-      const confirmationMsg = assignmentType === 'doctor'
-        ? `Appointment confirmed & assigned to ${finalDoctorName}`
-        : (finalDoctorId 
-            ? `Appointment confirmed for ${finalHospitalName} with ${finalDoctorName}` 
-            : `Appointment confirmed & assigned to ${finalHospitalName} only`);
+        setToastMessage(`Appointment for ${patientName.trim()} updated successfully`);
+        setTimeout(() => setToastMessage(null), 3500);
+      } else {
+        await addAppointment({
+          name: patientName.trim(),
+          mobile: mobile.trim(),
+          date: apptDate,
+          time: apptTime,
+          bookingType: 'Scheduled',
+          visit_type: acqureOpd,
+          condition: condition || Condition.Other,
+          source: source,
+          referral_person: source === 'Referral' ? referralPerson.trim() : null,
+          assignment_type: assignmentType,
+          doctor_id: finalDoctorId,
+          hospital_id: finalHospitalId,
+          hospitalName: finalHospitalName,
+          assignedDoctorId: finalDoctorId || undefined,
+          assignedDoctorName: finalDoctorName || undefined,
+          patient_id: selectedPatientId || null,
+          username: masterUsername
+        });
 
-      setToastMessage(confirmationMsg);
-      setTimeout(() => setToastMessage(null), 3500);
+        const confirmationMsg = assignmentType === 'doctor'
+          ? `Appointment confirmed & assigned to ${finalDoctorName}`
+          : (finalDoctorId 
+              ? `Appointment confirmed for ${finalHospitalName} with ${finalDoctorName}` 
+              : `Appointment confirmed & assigned to ${finalHospitalName} only`);
+
+        setToastMessage(confirmationMsg);
+        setTimeout(() => setToastMessage(null), 3500);
+      }
       
       // Close modal & reset
       setShowBookModal(false);
+      setEditingAppointmentId(null);
       setPatientName('');
       setMobile('');
       setSelectedDoctorId('');
@@ -917,10 +943,13 @@ export const MasterScheduling: React.FC = () => {
       setSelectedPatientId('');
       setDoctorSearch('');
       setHospitalSearch('');
+      setApptDate(new Date().toISOString().split('T')[0]);
       setApptTime('');
       setIsTimeSelectorOpen(true);
       setSource('');
       setReferralPerson('');
+      setCondition(Condition.Other);
+      setPatientMode('new');
       setFormError(null);
     } catch (err) {
       console.error('Failed to book appointment:', err);
@@ -945,95 +974,6 @@ export const MasterScheduling: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to update status:', err);
-    }
-  };
-
-  const handleSaveEditAppointment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editModalApp) return;
-    setEditFormError(null);
-
-    if (!editName.trim()) {
-      setEditFormError('Patient Name is required');
-      return;
-    }
-    if (!editMobile.trim()) {
-      setEditFormError('Mobile Number is required');
-      return;
-    }
-    if (!editDate) {
-      setEditFormError('Appointment Date is required');
-      return;
-    }
-    if (!editTime) {
-      setEditFormError('Appointment Time is required');
-      return;
-    }
-    if (editAssignmentType === 'doctor' && !editDoctorId) {
-      setEditFormError('Please select a doctor');
-      return;
-    }
-    if (editAssignmentType === 'hospital' && !editHospitalId) {
-      setEditFormError('Please select a hospital facility');
-      return;
-    }
-
-    setIsEditSubmitting(true);
-    try {
-      let finalDoctorId = editDoctorId || null;
-      let finalDoctorName: string | null = null;
-      let finalHospitalId = editHospitalId || 'HOSP_12345';
-      let finalHospitalName: string | undefined = undefined;
-
-      if (editAssignmentType === 'doctor') {
-        const doc = doctorsWithAccess.find(d => d.id === editDoctorId);
-        finalDoctorName = doc?.name || null;
-        if (doc?.hospital_id) {
-          const hosp = hospitalsWithAccess.find(h => h.id === doc.hospital_id);
-          finalHospitalId = hosp?.id || doc.hospital_id;
-          finalHospitalName = hosp?.name || doc.hospitalName;
-        } else if (doc?.hospitalName) {
-          finalHospitalName = doc.hospitalName;
-        }
-      } else {
-        const hosp = hospitalsWithAccess.find(h => h.id === editHospitalId);
-        finalHospitalName = hosp?.name || 'Assigned Facility';
-        if (editDoctorId) {
-          const doc = doctorsWithAccess.find(d => d.id === editDoctorId);
-          finalDoctorName = doc?.name || null;
-        } else {
-          finalDoctorId = null;
-          finalDoctorName = null;
-        }
-      }
-
-      await updateAppointment({
-        ...editModalApp,
-        name: editName.trim(),
-        mobile: editMobile.trim(),
-        condition: editCondition,
-        date: editDate,
-        time: editTime,
-        assignment_type: editAssignmentType,
-        doctor_id: finalDoctorId,
-        assignedDoctorId: finalDoctorId || undefined,
-        assignedDoctorName: finalDoctorName || undefined,
-        hospital_id: finalHospitalId,
-        hospitalName: finalHospitalName,
-        source: editSource || editModalApp.source,
-        referral_person: editSource === 'Referral' ? editReferralPerson.trim() : null,
-        status: editStatus as any,
-        bookingType: editStatus === 'Follow Up' ? 'Follow Up' : 'Scheduled'
-      });
-
-      setToastMessage(`Appointment for ${editName} updated successfully`);
-      setTimeout(() => setToastMessage(null), 3000);
-      setEditModalApp(null);
-    } catch (err) {
-      console.error('Failed to update appointment:', err);
-      setEditFormError('Failed to save changes. Please try again.');
-    } finally {
-      setIsEditSubmitting(false);
     }
   };
 
@@ -1112,10 +1052,25 @@ export const MasterScheduling: React.FC = () => {
           <button
             type="button"
             onClick={() => {
+              setEditingAppointmentId(null);
+              setPatientName('');
+              setMobile('');
+              setSelectedDoctorId('');
+              setSelectedHospitalId('');
+              setSelectedPatientId('');
+              setDoctorSearch('');
+              setHospitalSearch('');
+              setApptDate(new Date().toISOString().split('T')[0]);
+              setApptTime('');
+              setIsTimeSelectorOpen(true);
+              setSource('');
+              setReferralPerson('');
+              setCondition(Condition.Other);
+              setPatientMode('new');
               setFormError(null);
               setShowBookModal(true);
             }}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-hospital-600 hover:bg-hospital-700 text-white rounded-2xl text-xs font-bold uppercase tracking-wider transition-all shadow-md shadow-hospital-200"
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-hospital-600 hover:bg-hospital-700 text-white rounded-2xl text-xs font-bold uppercase tracking-wider transition-all shadow-md shadow-hospital-200 cursor-pointer"
           >
             <Plus className="w-4 h-4" /> Book Master Appointment
           </button>
@@ -1508,10 +1463,12 @@ export const MasterScheduling: React.FC = () => {
                   Master Scheduling
                 </span>
                 <h2 className="text-3xl font-black mb-4 leading-tight">
-                  Book Master Appointment
+                  {editingAppointmentId ? 'Edit Master Appointment' : 'Book Master Appointment'}
                 </h2>
                 <p className="text-xs text-white/60 font-medium leading-relaxed mb-6">
-                  Assign appointments directly to verified doctors or hospitals configured through Access Management.
+                  {editingAppointmentId 
+                    ? 'Update appointment details, clinical complaints, doctor/hospital assignment, or scheduled time slot.'
+                    : 'Assign appointments directly to verified doctors or hospitals configured through Access Management.'}
                 </p>
 
                 <div className="p-3 bg-white/5 border border-white/10 rounded-2xl space-y-2">
@@ -1548,7 +1505,9 @@ export const MasterScheduling: React.FC = () => {
 
               <div className="md:hidden mb-6">
                 <span className="text-[10px] font-black uppercase tracking-widest text-hospital-600">Master Scheduling</span>
-                <h2 className="text-2xl font-black text-slate-900 leading-tight">Book Master Appointment</h2>
+                <h2 className="text-2xl font-black text-slate-900 leading-tight">
+                  {editingAppointmentId ? 'Edit Master Appointment' : 'Book Master Appointment'}
+                </h2>
               </div>
 
               {formError && (
@@ -2247,9 +2206,11 @@ export const MasterScheduling: React.FC = () => {
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="w-full py-4 bg-hospital-600 hover:bg-hospital-700 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:scale-[1.01] transition-all mt-6 disabled:opacity-50"
+                  className="w-full py-4 bg-hospital-600 hover:bg-hospital-700 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:scale-[1.01] transition-all mt-6 disabled:opacity-50 cursor-pointer"
                 >
-                  {isSubmitting ? 'Recording Master Appointment...' : 'Create Appointment'}
+                  {isSubmitting 
+                    ? (editingAppointmentId ? 'Saving Changes...' : 'Recording Master Appointment...') 
+                    : (editingAppointmentId ? 'Save & Update Appointment' : 'Create Appointment')}
                 </button>
               </form>
             </div>
@@ -2731,262 +2692,13 @@ export const MasterScheduling: React.FC = () => {
                     setViewModalApp(null);
                     handleOpenEditModal(target);
                   }}
-                  className="px-4 py-2 bg-hospital-600 hover:bg-hospital-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm"
+                  className="px-4 py-2 bg-hospital-600 hover:bg-hospital-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
                 >
                   <Pencil className="w-3.5 h-3.5 text-white" />
                   <span>Edit Appointment</span>
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Appointment Modal */}
-      {editModalApp && (
-        <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-xl rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center">
-                  <Pencil className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-slate-900">Edit Appointment</h3>
-                  <p className="text-[11px] text-slate-400 font-mono">ID: {editModalApp.id}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditModalApp(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEditAppointment} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
-              {editFormError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl flex items-center gap-2 text-xs font-bold">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{editFormError}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
-                    Patient Name <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-hospital-500 focus:bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
-                    Mobile Number <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    value={editMobile}
-                    onChange={(e) => setEditMobile(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-hospital-500 focus:bg-white"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
-                    Condition / Complaint <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={editCondition}
-                    onChange={(e) => setEditCondition(e.target.value as Condition)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-hospital-500 focus:bg-white"
-                  >
-                    {Object.values(Condition).map((cond) => (
-                      <option key={cond} value={cond}>{cond}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
-                    Status <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-hospital-500 focus:bg-white"
-                  >
-                    {STATUS_OPTIONS.map((st) => (
-                      <option key={st.label} value={st.label}>{st.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
-                    Appointment Date <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={editDate}
-                    onChange={(e) => setEditDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-hospital-500 focus:bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
-                    Time Slot <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="time"
-                    required
-                    value={editTime}
-                    onChange={(e) => setEditTime(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-hospital-500 focus:bg-white"
-                  />
-                </div>
-              </div>
-
-              {/* Assignment Type */}
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  Assign To
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditAssignmentType('doctor')}
-                    className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
-                      editAssignmentType === 'doctor'
-                        ? 'bg-white text-hospital-700 shadow-sm border border-slate-200'
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    <Stethoscope className="w-3.5 h-3.5" />
-                    <span>Doctor</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditAssignmentType('hospital')}
-                    className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
-                      editAssignmentType === 'hospital'
-                        ? 'bg-white text-hospital-700 shadow-sm border border-slate-200'
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    <Building2 className="w-3.5 h-3.5" />
-                    <span>Hospital</span>
-                  </button>
-                </div>
-
-                {editAssignmentType === 'doctor' ? (
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
-                      Select Doctor <span className="text-rose-500">*</span>
-                    </label>
-                    <select
-                      value={editDoctorId}
-                      onChange={(e) => setEditDoctorId(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-hospital-500"
-                    >
-                      <option value="">Select Doctor...</option>
-                      {doctorsWithAccess.map((doc) => (
-                        <option key={doc.id} value={doc.id}>
-                          {doc.name} {doc.hospitalName ? `(${doc.hospitalName})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
-                      Select Hospital / Facility <span className="text-rose-500">*</span>
-                    </label>
-                    <select
-                      value={editHospitalId}
-                      onChange={(e) => setEditHospitalId(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-hospital-500"
-                    >
-                      <option value="">Select Hospital Facility...</option>
-                      {hospitalsWithAccess.map((hosp) => (
-                        <option key={hosp.id} value={hosp.id}>
-                          {hosp.name} ({hosp.id})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              {/* Source & Referral */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
-                    Source
-                  </label>
-                  <select
-                    value={editSource}
-                    onChange={(e) => setEditSource(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-hospital-500 focus:bg-white"
-                  >
-                    <option value="Google">Google</option>
-                    <option value="Instagram">Instagram</option>
-                    <option value="Walking">Walking</option>
-                    <option value="Relatives / Friend">Relatives / Friend</option>
-                    <option value="Billboard">Billboard</option>
-                    <option value="Referral">Referral</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-
-                {editSource === 'Referral' && (
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-hospital-600 mb-1">
-                      Referral Person <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={editReferralPerson}
-                      onChange={(e) => setEditReferralPerson(e.target.value)}
-                      placeholder="Name of referrer"
-                      className="w-full px-3 py-2 bg-hospital-50/50 border border-hospital-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-hospital-500 focus:bg-white"
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditModalApp(null)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isEditSubmitting}
-                  className="px-5 py-2 bg-hospital-600 hover:bg-hospital-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm disabled:opacity-50"
-                >
-                  {isEditSubmitting ? 'Saving Changes...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
