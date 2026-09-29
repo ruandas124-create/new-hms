@@ -47,7 +47,7 @@ export const DoctorDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   
   // Tabs State
-  const [activeTab, setActiveTab] = useState<'patients' | 'appointments' | 'availability' | 'package'>('patients');
+  const [activeTab, setActiveTab] = useState<'patients' | 'appointments' | 'availability'>('patients');
 
   // Updated state for Date Range
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
@@ -453,20 +453,6 @@ export const DoctorDashboard: React.FC = () => {
           >
             <Calendar className="w-4 h-4" /> Availability Mode
           </button>
-          
-          {currentUserRole === 'DOCTOR' && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('package')}
-              className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-200 ${
-                activeTab === 'package'
-                  ? 'bg-white text-hospital-700 shadow'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Briefcase className="w-4 h-4" /> Package Management
-            </button>
-          )}
         </div>
       </div>
 
@@ -807,15 +793,6 @@ export const DoctorDashboard: React.FC = () => {
               </table>
             </div>
           )}
-        </div>
-      ) : activeTab === 'package' ? (
-        /* Package Management Content */
-        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm animate-in fade-in duration-300">
-          <h3 className="text-sm font-black uppercase text-slate-800 tracking-wider">Package Management</h3>
-          <p className="text-slate-500 text-xs mt-2">Manage package information for your patients.</p>
-          <div className="mt-6 text-center py-10 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 font-bold text-sm">
-            Package management features will be listed here.
-          </div>
         </div>
       ) : (
         /* Doctor Availability & Profile Photo settings view */
