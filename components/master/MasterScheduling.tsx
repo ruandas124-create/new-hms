@@ -316,6 +316,211 @@ const getDoctorAvailabilityDetailed = (
   };
 };
 
+export interface HospitalAvailabilityDetails {
+  isAvailableOnDate: boolean;
+  unavailabilityReason?: string;
+  hospitalName: string;
+  city?: string;
+  weekday: string;
+  formattedDate: string;
+  workingStartTime: string;
+  workingEndTime: string;
+  breaks: { startTime: string; endTime: string }[];
+  slots: DoctorSlotInfo[];
+  availableCount: number;
+  bookedCount: number;
+  regularDays: string[];
+}
+
+const getHospitalAvailabilityDetailed = (
+  hospital: any,
+  dateString: string | undefined,
+  allAppointments: Appointment[] = [],
+  excludeAppointmentId?: string
+): HospitalAvailabilityDetails | null => {
+  if (!hospital || !dateString) return null;
+
+  const dateObj = new Date(dateString + 'T00:00:00');
+  const weekday = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+  const formattedDate = dateString.split('T')[0];
+
+  const availability = hospital.availability || {};
+  const regularDays: string[] = availability.availableDays || [
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+  ];
+
+  // 1. Check blocked dates / unavailable dates
+  let isBlocked = false;
+  let blockReason = 'Hospital OPD facility is closed on this date.';
+  if (availability.blockedDates && Array.isArray(availability.blockedDates)) {
+    for (const b of availability.blockedDates) {
+      if (!b) continue;
+      if (typeof b === 'string' && b === formattedDate) {
+        isBlocked = true;
+        break;
+      }
+      if (b.date && b.date === formattedDate) {
+        isBlocked = true;
+        blockReason = b.reason ? `Hospital closed (${b.reason}).` : blockReason;
+        break;
+      }
+      const from = b.startDate || b.from;
+      const to = b.endDate || b.to;
+      if (from && to && formattedDate >= from && formattedDate <= to) {
+        isBlocked = true;
+        blockReason = b.reason ? `Hospital closed (${b.reason}).` : blockReason;
+        break;
+      }
+    }
+  }
+  if (!isBlocked && Array.isArray(availability.unavailableDates) && availability.unavailableDates.includes(formattedDate)) {
+    isBlocked = true;
+    blockReason = 'Hospital OPD facility is closed on this date.';
+  }
+
+  if (isBlocked) {
+    return {
+      isAvailableOnDate: false,
+      unavailabilityReason: blockReason,
+      hospitalName: hospital.name,
+      city: hospital.city,
+      weekday,
+      formattedDate,
+      workingStartTime: '',
+      workingEndTime: '',
+      breaks: [],
+      slots: [],
+      availableCount: 0,
+      bookedCount: 0,
+      regularDays
+    };
+  }
+
+  // 2. Check weekday schedule
+  let isDayAvailable = true;
+  let daySchedule: any = null;
+  if (Array.isArray(availability.daySchedules) && availability.daySchedules.length > 0) {
+    daySchedule = availability.daySchedules.find((ds: any) => ds.day?.toLowerCase() === weekday.toLowerCase());
+    if (daySchedule) {
+      if (daySchedule.status !== 'Available') {
+        isDayAvailable = false;
+      }
+    } else if (!regularDays.some(d => d.toLowerCase() === weekday.toLowerCase())) {
+      isDayAvailable = false;
+    }
+  } else {
+    if (!regularDays.some(d => d.toLowerCase() === weekday.toLowerCase())) {
+      isDayAvailable = false;
+    }
+  }
+
+  if (!isDayAvailable) {
+    return {
+      isAvailableOnDate: false,
+      unavailabilityReason: `Hospital facility OPD is not scheduled on ${weekday}s.`,
+      hospitalName: hospital.name,
+      city: hospital.city,
+      weekday,
+      formattedDate,
+      workingStartTime: '',
+      workingEndTime: '',
+      breaks: [],
+      slots: [],
+      availableCount: 0,
+      bookedCount: 0,
+      regularDays
+    };
+  }
+
+  // 3. Shift hours and breaks
+  const shiftStart = daySchedule?.startTime || availability.startTime || '09:00';
+  const shiftEnd = daySchedule?.endTime || availability.endTime || '17:00';
+  const breaksList: { startTime: string; endTime: string }[] = daySchedule?.breaks || [];
+
+  const [sh, sm] = shiftStart.split(':').map(Number);
+  const [eh, em] = shiftEnd.split(':').map(Number);
+  const startMinutes = (isNaN(sh) ? 9 : sh) * 60 + (isNaN(sm) ? 0 : sm);
+  const endMinutes = (isNaN(eh) ? 17 : eh) * 60 + (isNaN(em) ? 0 : em);
+
+  if (startMinutes >= endMinutes) {
+    return {
+      isAvailableOnDate: false,
+      unavailabilityReason: 'Facility hours are not configured for this day.',
+      hospitalName: hospital.name,
+      city: hospital.city,
+      weekday,
+      formattedDate,
+      workingStartTime: shiftStart,
+      workingEndTime: shiftEnd,
+      breaks: breaksList,
+      slots: [],
+      availableCount: 0,
+      bookedCount: 0,
+      regularDays
+    };
+  }
+
+  // 4. Appointments booked directly for this hospital
+  const hospAppointments = (allAppointments || []).filter(app => {
+    if (!app || app.status === 'Cancelled' || app.status === 'Junk') return false;
+    if (excludeAppointmentId && app.id === excludeAppointmentId) return false;
+    const appDate = (app.date || '').split('T')[0];
+    if (appDate !== formattedDate) return false;
+    const matchId = (app.hospital_id && app.hospital_id === hospital.id) ||
+                    (app.hospitalName && app.hospitalName.toLowerCase() === hospital.name.toLowerCase());
+    return matchId;
+  });
+
+  const slots: DoctorSlotInfo[] = [];
+  for (let min = startMinutes; min < endMinutes; min += 30) {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
+    // Respect breaks
+    const isInBreak = breaksList.some(br => {
+      if (!br.startTime || !br.endTime) return false;
+      const [bsh, bsm] = br.startTime.split(':').map(Number);
+      const [beh, bem] = br.endTime.split(':').map(Number);
+      const bsMin = bsh * 60 + bsm;
+      const beMin = beh * 60 + bem;
+      return min >= bsMin && min < beMin;
+    });
+
+    if (isInBreak) {
+      continue;
+    }
+
+    const matchingApp = hospAppointments.find(app => normalizeTimeSlot(app.time) === timeStr);
+
+    slots.push({
+      time: timeStr,
+      displayTime: formatDisplayTime(timeStr),
+      isBooked: !!matchingApp,
+      bookedPatientName: matchingApp ? matchingApp.name : undefined
+    });
+  }
+
+  const availableCount = slots.filter(s => !s.isBooked).length;
+  const bookedCount = slots.filter(s => s.isBooked).length;
+
+  return {
+    isAvailableOnDate: slots.length > 0,
+    unavailabilityReason: slots.length === 0 ? 'No facility slots available for this date.' : undefined,
+    hospitalName: hospital.name,
+    city: hospital.city,
+    weekday,
+    formattedDate,
+    workingStartTime: shiftStart,
+    workingEndTime: shiftEnd,
+    breaks: breaksList,
+    slots,
+    availableCount,
+    bookedCount,
+    regularDays
+  };
+};
+
 const defaultHospitalSlots: DoctorSlotInfo[] = [
   '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
   '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
@@ -437,7 +642,7 @@ export const MasterScheduling: React.FC = () => {
   const [showBookModal, setShowBookModal] = useState(false);
 
   // Assignment Form State
-  const [assignmentType, setAssignmentType] = useState<'doctor' | 'hospital'>('doctor');
+  const [assignmentType, setAssignmentType] = useState<'doctor' | 'hospital'>('hospital');
   const [selectedDoctorId, setSelectedDoctorId] = useState('');
   const [selectedHospitalId, setSelectedHospitalId] = useState('');
   const [doctorSearch, setDoctorSearch] = useState('');
@@ -672,16 +877,29 @@ export const MasterScheduling: React.FC = () => {
     return getDoctorAvailabilityDetailed(activeSelectedDoctor, apptDate, appointments, editingAppointmentId || undefined);
   }, [activeSelectedDoctor, apptDate, appointments, editingAppointmentId]);
 
-  // Available time slots (respects doctor shifts, breaks, and existing appointments)
-  const availableTimeSlots = useMemo(() => {
-    if (doctorAvailabilityDetailed && doctorAvailabilityDetailed.slots.length > 0) {
-      return doctorAvailabilityDetailed.slots.map(s => s.time);
-    }
-    return getAvailableSlotsForDoctorAndDate(activeSelectedDoctor, apptDate);
-  }, [doctorAvailabilityDetailed, activeSelectedDoctor, apptDate]);
+  // Detailed Hospital Availability based on hospital's configured schedule
+  const hospitalAvailabilityDetailed = useMemo(() => {
+    return getHospitalAvailabilityDetailed(activeSelectedHospital, apptDate, appointments, editingAppointmentId || undefined);
+  }, [activeSelectedHospital, apptDate, appointments, editingAppointmentId]);
 
-  // Automatically refresh Appt Time when Doctor or Appt Date changes:
-  // If previously selected time slot is invalid or booked for the newly selected doctor/date, clear it.
+  // Available time slots (respects doctor shifts, breaks, or hospital facility hours)
+  const availableTimeSlots = useMemo(() => {
+    if (activeSelectedDoctor) {
+      if (doctorAvailabilityDetailed && doctorAvailabilityDetailed.slots.length > 0) {
+        return doctorAvailabilityDetailed.slots.map(s => s.time);
+      }
+      return getAvailableSlotsForDoctorAndDate(activeSelectedDoctor, apptDate);
+    }
+    if (assignmentType === 'hospital' && activeSelectedHospital) {
+      if (hospitalAvailabilityDetailed && hospitalAvailabilityDetailed.slots.length > 0) {
+        return hospitalAvailabilityDetailed.slots.map(s => s.time);
+      }
+    }
+    return defaultHospitalSlots.map(s => s.time);
+  }, [doctorAvailabilityDetailed, hospitalAvailabilityDetailed, activeSelectedDoctor, activeSelectedHospital, assignmentType, apptDate]);
+
+  // Automatically refresh Appt Time when Doctor, Hospital, or Appt Date changes:
+  // Only clear if the selected time slot does not exist in the configured schedule
   useEffect(() => {
     if (activeSelectedDoctor) {
       if (!doctorAvailabilityDetailed || !doctorAvailabilityDetailed.isAvailableOnDate) {
@@ -690,12 +908,23 @@ export const MasterScheduling: React.FC = () => {
         const matchingSlot = doctorAvailabilityDetailed.slots.find(
           s => normalizeTimeSlot(s.time) === normalizeTimeSlot(apptTime)
         );
-        if (!matchingSlot || matchingSlot.isBooked) {
+        if (!matchingSlot) {
+          if (apptTime) setApptTime('');
+        }
+      }
+    } else if (assignmentType === 'hospital' && activeSelectedHospital) {
+      if (!hospitalAvailabilityDetailed || !hospitalAvailabilityDetailed.isAvailableOnDate) {
+        if (apptTime) setApptTime('');
+      } else {
+        const matchingSlot = hospitalAvailabilityDetailed.slots.find(
+          s => normalizeTimeSlot(s.time) === normalizeTimeSlot(apptTime)
+        );
+        if (!matchingSlot) {
           if (apptTime) setApptTime('');
         }
       }
     }
-  }, [selectedDoctorId, apptDate, doctorAvailabilityDetailed, activeSelectedDoctor]);
+  }, [selectedDoctorId, selectedHospitalId, assignmentType, apptDate, doctorAvailabilityDetailed, hospitalAvailabilityDetailed, activeSelectedDoctor, activeSelectedHospital]);
 
   // Filtered registered patients for search
   const filteredRegisteredPatients = useMemo(() => {
@@ -819,8 +1048,16 @@ export const MasterScheduling: React.FC = () => {
         setFormError("Selected time slot is outside the doctor's configured consultation hours.");
         return;
       }
-      if (chosenSlot.isBooked) {
-        setFormError(`The time slot ${formatDisplayTime(apptTime)} is already booked for this doctor. Please choose an available slot.`);
+    } else if (assignmentType === 'hospital' && activeSelectedHospital) {
+      if (!hospitalAvailabilityDetailed?.isAvailableOnDate) {
+        setFormError(`Hospital facility OPD is not scheduled on the selected date.`);
+        return;
+      }
+      const chosenSlot = hospitalAvailabilityDetailed.slots.find(
+        s => normalizeTimeSlot(s.time) === normalizeTimeSlot(apptTime)
+      );
+      if (!chosenSlot) {
+        setFormError("Selected time slot is outside the hospital facility's configured OPD hours.");
         return;
       }
     }
@@ -1519,67 +1756,72 @@ export const MasterScheduling: React.FC = () => {
 
               <form onSubmit={handleBookAppointment} className="space-y-6">
                 
-                {/* 1. Assignment Type: Doctor vs. Hospital */}
-                <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-100">
-                  <label className="block text-[10px] font-black uppercase text-slate-400 mb-2.5 tracking-widest">
-                    Assigned To <span className="text-red-500">*</span>
-                  </label>
-                  <div className="grid grid-cols-2 gap-3 p-1 bg-slate-200/60 rounded-2xl border border-slate-200/80">
-                    <button
-                      type="button"
-                      onClick={() => handleAssignmentTypeChange('doctor')}
-                      className={`flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-                        assignmentType === 'doctor'
-                          ? 'bg-white text-emerald-700 shadow-md border border-slate-200/60'
-                          : 'text-slate-500 hover:text-slate-800'
-                      }`}
-                    >
-                      <Stethoscope className="w-4 h-4" /> Doctor
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleAssignmentTypeChange('hospital')}
-                      className={`flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-                        assignmentType === 'hospital'
-                          ? 'bg-white text-indigo-700 shadow-md border border-slate-200/60'
-                          : 'text-slate-500 hover:text-slate-800'
-                      }`}
-                    >
-                      <Building2 className="w-4 h-4" /> Hospital
-                    </button>
-                  </div>
-                </div>
+                {/* Hospital Assignment Flow */}
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                        Select Hospital (Access Granted) <span className="text-red-500">*</span>
+                      </label>
+                      <span className="text-[10px] text-indigo-600 font-bold">
+                        {hospitalsWithAccess.length} active hospitals
+                      </span>
+                    </div>
 
-                {/* 2. Doctor Assignment Flow */}
-                {assignmentType === 'doctor' && (
-                  <div className="space-y-4 animate-in fade-in duration-200">
-                    <div>
+                    {/* Search box for hospitals */}
+                    {hospitalsWithAccess.length > 5 && (
+                      <div className="relative mb-2">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={hospitalSearch}
+                          onChange={e => setHospitalSearch(e.target.value)}
+                          placeholder="Search authorized hospital..."
+                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-hospital-500"
+                        />
+                      </div>
+                    )}
+
+                    <select
+                      id="hospital-assignment-select"
+                      required
+                      className="w-full border-b-2 border-slate-100 p-2 text-sm font-bold bg-white outline-none focus:border-hospital-500"
+                      value={selectedHospitalId}
+                      onChange={e => {
+                        handleHospitalChange(e.target.value);
+                        setIsTimeSelectorOpen(true);
+                      }}
+                    >
+                      <option value="">Select Hospital...</option>
+                      {filteredHospitalsWithAccess.map(hosp => (
+                        <option key={hosp.id} value={hosp.id}>
+                          {hosp.name} {hosp.city ? `(${hosp.city})` : ''}
+                        </option>
+                      ))}
+                    </select>
+
+                    {hospitalsWithAccess.length === 0 && (
+                      <p className="text-xs text-amber-600 mt-2 font-bold flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        No hospitals found with granted Access. Grant hospital access in Access Management first.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Hospital -> Doctor Selection (Optional) */}
+                  {selectedHospitalId && (
+                    <div className="pt-2">
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                          Select Doctor (Access Granted) <span className="text-red-500">*</span>
+                          Assign Doctor (Optional)
                         </label>
-                        <span className="text-[10px] text-emerald-600 font-bold">
-                          {doctorsWithAccess.length} active doctors
+                        <span className="text-[10px] text-slate-400 font-bold">
+                          {hospitalDoctors.length > 0 ? `${hospitalDoctors.length} doctors available` : 'Hospital-Only Assignment'}
                         </span>
                       </div>
 
-                      {/* Search box if list is large */}
-                      {doctorsWithAccess.length > 5 && (
-                        <div className="relative mb-2">
-                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="text"
-                            value={doctorSearch}
-                            onChange={e => setDoctorSearch(e.target.value)}
-                            placeholder="Search authorized doctor..."
-                            className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-hospital-500"
-                          />
-                        </div>
-                      )}
-
                       <select
-                        id="doctor-assignment-select"
-                        required
+                        id="hospital-doctor-assignment-select"
                         className="w-full border-b-2 border-slate-100 p-2 text-sm font-bold bg-white outline-none focus:border-hospital-500"
                         value={selectedDoctorId}
                         onChange={e => {
@@ -1588,144 +1830,29 @@ export const MasterScheduling: React.FC = () => {
                           setFormError(null);
                         }}
                       >
-                        <option value="">Select Doctor...</option>
-                        {filteredDoctorsWithAccess.map(doc => {
+                        <option value="">Not Selected (Hospital Only)</option>
+                        {hospitalDoctors.map(doc => {
                           const isAvailable = isDoctorAvailableOnDate(doc, apptDate);
                           return (
                             <option key={doc.id} value={doc.id}>
-                              {doc.name} {doc.specialization ? `(${doc.specialization})` : ''} {doc.hospitalName ? `— ${doc.hospitalName}` : ''} {!isAvailable ? '[Unavailable Date]' : ''}
+                              {doc.name} {doc.specialization ? `(${doc.specialization})` : ''} {!isAvailable ? '[Unavailable Date]' : ''}
                             </option>
                           );
                         })}
                       </select>
 
-                      {doctorsWithAccess.length === 0 && (
-                        <p className="text-xs text-amber-600 mt-2 font-bold flex items-center gap-1.5">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          No doctors found with granted Access. Grant doctor access in Access Management first.
+                      {hospitalDoctors.length === 0 ? (
+                        <p className="text-[11px] text-slate-500 mt-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                          ℹ️ No doctors currently linked to this hospital in Access Management. The appointment will be assigned to <strong>{activeSelectedHospital?.name}</strong> only.
                         </p>
-                      )}
-                    </div>
-
-                    {/* Show Doctor's Associated Hospital */}
-                    {activeSelectedDoctor && (
-                      <div className="p-3.5 bg-indigo-50/70 border border-indigo-100/80 rounded-2xl flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-700 shrink-0">
-                            <Building2 className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 block">
-                              Doctor's Associated Hospital
-                            </span>
-                            <span className="text-sm font-black text-slate-900">
-                              {doctorAssociatedHospital?.name || activeSelectedDoctor.hospitalName || 'General Facility'}
-                            </span>
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-black uppercase text-indigo-700 bg-white px-2.5 py-1 rounded-lg border border-indigo-200">
-                          Auto-Linked
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* 3. Hospital Assignment Flow */}
-                {assignmentType === 'hospital' && (
-                  <div className="space-y-4 animate-in fade-in duration-200">
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                          Select Hospital (Access Granted) <span className="text-red-500">*</span>
-                        </label>
-                        <span className="text-[10px] text-indigo-600 font-bold">
-                          {hospitalsWithAccess.length} active hospitals
-                        </span>
-                      </div>
-
-                      {/* Search box for hospitals */}
-                      {hospitalsWithAccess.length > 5 && (
-                        <div className="relative mb-2">
-                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="text"
-                            value={hospitalSearch}
-                            onChange={e => setHospitalSearch(e.target.value)}
-                            placeholder="Search authorized hospital..."
-                            className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-hospital-500"
-                          />
-                        </div>
-                      )}
-
-                      <select
-                        required
-                        className="w-full border-b-2 border-slate-100 p-2 text-sm font-bold bg-white outline-none focus:border-hospital-500"
-                        value={selectedHospitalId}
-                        onChange={e => handleHospitalChange(e.target.value)}
-                      >
-                        <option value="">Select Hospital...</option>
-                        {filteredHospitalsWithAccess.map(hosp => (
-                          <option key={hosp.id} value={hosp.id}>
-                            {hosp.name} {hosp.city ? `(${hosp.city})` : ''}
-                          </option>
-                        ))}
-                      </select>
-
-                      {hospitalsWithAccess.length === 0 && (
-                        <p className="text-xs text-amber-600 mt-2 font-bold flex items-center gap-1.5">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          No hospitals found with granted Access. Grant hospital access in Access Management first.
+                      ) : !selectedDoctorId ? (
+                        <p className="text-[11px] text-indigo-700 mt-2 bg-indigo-50/70 p-2.5 rounded-xl border border-indigo-100 font-medium">
+                          ✓ No doctor selected: Patient will be assigned to <strong>{activeSelectedHospital?.name}</strong> only.
                         </p>
-                      )}
+                      ) : null}
                     </div>
-
-                    {/* Hospital -> Doctor Selection (Optional) */}
-                    {selectedHospitalId && (
-                      <div className="pt-2">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                            Assign Doctor (Optional)
-                          </label>
-                          <span className="text-[10px] text-slate-400 font-bold">
-                            {hospitalDoctors.length > 0 ? `${hospitalDoctors.length} doctors available` : 'Hospital-Only Assignment'}
-                          </span>
-                        </div>
-
-                        <select
-                          id="hospital-doctor-assignment-select"
-                          className="w-full border-b-2 border-slate-100 p-2 text-sm font-bold bg-white outline-none focus:border-hospital-500"
-                          value={selectedDoctorId}
-                          onChange={e => {
-                            setSelectedDoctorId(e.target.value);
-                            setIsTimeSelectorOpen(true);
-                            setFormError(null);
-                          }}
-                        >
-                          <option value="">Not Selected (Hospital Only)</option>
-                          {hospitalDoctors.map(doc => {
-                            const isAvailable = isDoctorAvailableOnDate(doc, apptDate);
-                            return (
-                              <option key={doc.id} value={doc.id}>
-                                {doc.name} {doc.specialization ? `(${doc.specialization})` : ''} {!isAvailable ? '[Unavailable Date]' : ''}
-                              </option>
-                            );
-                          })}
-                        </select>
-
-                        {hospitalDoctors.length === 0 ? (
-                          <p className="text-[11px] text-slate-500 mt-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                            ℹ️ No doctors currently linked to this hospital in Access Management. The appointment will be assigned to <strong>{activeSelectedHospital?.name}</strong> only.
-                          </p>
-                        ) : !selectedDoctorId ? (
-                          <p className="text-[11px] text-indigo-700 mt-2 bg-indigo-50/70 p-2.5 rounded-xl border border-indigo-100 font-medium">
-                            ✓ No doctor selected: Patient will be assigned to <strong>{activeSelectedHospital?.name}</strong> only.
-                          </p>
-                        ) : null}
-                      </div>
-                    )}
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {/* 4. Patient Assignment Fields */}
                 <div className="space-y-4 pt-4 border-t border-slate-100">
@@ -1906,6 +2033,10 @@ export const MasterScheduling: React.FC = () => {
                             <div className="text-[11px] text-slate-500 font-medium">
                               {activeSelectedDoctor 
                                 ? `Attending: ${activeSelectedDoctor.name}` 
+                                : (assignmentType === 'hospital' && activeSelectedHospital)
+                                ? `Facility OPD: ${activeSelectedHospital.name}`
+                                : assignmentType === 'hospital'
+                                ? 'Select a hospital above to check facility availability'
                                 : 'Select a doctor above to check specific availability'}
                             </div>
                           </div>
@@ -1918,238 +2049,394 @@ export const MasterScheduling: React.FC = () => {
                         </div>
                       </button>
 
-                      {/* Doctor Availability & Time Slots Panel */}
+                      {/* Doctor / Hospital Availability & Time Slots Panel */}
                       {isTimeSelectorOpen && (
                         <div className="p-4 sm:p-5 bg-slate-50/90 rounded-2xl border border-slate-200/90 space-y-4 animate-in fade-in duration-200">
                           
-                          {/* 1. Doctor Availability Header */}
-                          <div>
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                          {/* ===================== DOCTOR AVAILABILITY MODE ===================== */}
+                          {(activeSelectedDoctor || assignmentType === 'doctor') && (
+                            <div className="space-y-4">
+                              {/* 1. Doctor Availability Header */}
                               <div>
-                                <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-hospital-600 mb-0.5">
-                                  <Clock className="w-3.5 h-3.5" />
-                                  <span>Doctor Availability</span>
-                                </div>
-                                {activeSelectedDoctor ? (
-                                  <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                                    <span className="text-sm font-black text-slate-900 flex items-center gap-1.5">
-                                      <Stethoscope className="w-4 h-4 text-emerald-600" />
-                                      {activeSelectedDoctor.name}
-                                    </span>
-                                    {activeSelectedDoctor.specialization && (
-                                      <span className="text-[11px] font-semibold text-slate-600">
-                                        • {activeSelectedDoctor.specialization}
-                                      </span>
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                                  <div>
+                                    <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-hospital-600 mb-0.5">
+                                      <Clock className="w-3.5 h-3.5" />
+                                      <span>Doctor Availability</span>
+                                    </div>
+                                    {activeSelectedDoctor ? (
+                                      <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                                        <span className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                                          <Stethoscope className="w-4 h-4 text-emerald-600" />
+                                          {activeSelectedDoctor.name}
+                                        </span>
+                                        {activeSelectedDoctor.specialization && (
+                                          <span className="text-[11px] font-semibold text-slate-600">
+                                            • {activeSelectedDoctor.specialization}
+                                          </span>
+                                        )}
+                                        {(activeSelectedDoctor.hospitalName || doctorAssociatedHospital?.name) && (
+                                          <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+                                            {doctorAssociatedHospital?.name || activeSelectedDoctor.hospitalName}
+                                          </span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="text-xs font-bold text-slate-500 mt-0.5">
+                                        No doctor selected
+                                      </div>
                                     )}
-                                    {(activeSelectedDoctor.hospitalName || doctorAssociatedHospital?.name) && (
-                                      <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
-                                        {doctorAssociatedHospital?.name || activeSelectedDoctor.hospitalName}
+                                  </div>
+
+                                  {/* Status Badge */}
+                                  {activeSelectedDoctor && (
+                                    doctorAvailabilityDetailed?.isAvailableOnDate ? (
+                                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200 self-start sm:self-auto">
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                        Available Today
                                       </span>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className="text-xs font-bold text-slate-500 mt-0.5">
-                                    No doctor selected
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Status Badge */}
-                              {activeSelectedDoctor && (
-                                doctorAvailabilityDetailed?.isAvailableOnDate ? (
-                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200 self-start sm:self-auto">
-                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                    Available Today
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200 self-start sm:self-auto">
-                                    <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                                    Unavailable
-                                  </span>
-                                )
-                              )}
-                            </div>
-
-                            {/* Doctor Working Hours & Breaks Summary */}
-                            {activeSelectedDoctor && doctorAvailabilityDetailed?.isAvailableOnDate && (
-                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2.5 text-xs text-slate-600 bg-white p-2.5 rounded-xl border border-slate-200/80">
-                                <div className="flex items-center gap-1.5 text-slate-600 font-bold">
-                                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                                  <span>{doctorAvailabilityDetailed.weekday}, {formatDisplayDate(apptDate).dateFormatted}</span>
-                                </div>
-                                <div className="flex items-center gap-1.5 text-slate-700 font-bold">
-                                  <Clock className="w-3.5 h-3.5 text-hospital-600" />
-                                  <span>Hours: <strong className="text-slate-900">{formatDisplayTime(doctorAvailabilityDetailed.workingStartTime)} – {formatDisplayTime(doctorAvailabilityDetailed.workingEndTime)}</strong></span>
-                                </div>
-                                {doctorAvailabilityDetailed.breaks && doctorAvailabilityDetailed.breaks.length > 0 && (
-                                  <div className="flex items-center gap-1.5 text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200 text-[11px] font-bold">
-                                    <Coffee className="w-3 h-3 text-amber-600" />
-                                    <span>
-                                      Break: {doctorAvailabilityDetailed.breaks.map(b => `${formatDisplayTime(b.startTime)} - ${formatDisplayTime(b.endTime)}`).join(', ')}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* 2. When No Doctor is Selected */}
-                          {!activeSelectedDoctor ? (
-                            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-3">
-                              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                              <div className="space-y-1 flex-1">
-                                <div className="font-black text-amber-950">
-                                  Please select a Doctor for this appointment
-                                </div>
-                                <p className="text-[11px] text-amber-800 leading-relaxed">
-                                  Appointment time slots are dynamically calculated based on the attending doctor's consultation roster, shift hours, and break schedules in <strong>Doctor Availability</strong>.
-                                </p>
-                                <div className="pt-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const el = document.getElementById('doctor-assignment-select') || document.getElementById('hospital-doctor-assignment-select');
-                                      if (el) {
-                                        el.focus();
-                                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                      }
-                                    }}
-                                    className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors"
-                                  >
-                                    Select Doctor Above
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ) : !doctorAvailabilityDetailed?.isAvailableOnDate ? (
-                            /* 3. Clearly show: "No availability for this doctor on the selected date." */
-                            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 space-y-2">
-                              <div className="flex items-start gap-2.5">
-                                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                                <div>
-                                  <div className="text-sm font-black text-rose-900">
-                                    No availability for this doctor on the selected date.
-                                  </div>
-                                  {doctorAvailabilityDetailed?.unavailabilityReason && (
-                                    <p className="text-xs text-rose-700 mt-0.5">
-                                      {doctorAvailabilityDetailed.unavailabilityReason}
-                                    </p>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200 self-start sm:self-auto">
+                                        <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                                        Unavailable
+                                      </span>
+                                    )
                                   )}
                                 </div>
-                              </div>
-                              {doctorAvailabilityDetailed?.regularDays && (
-                                <div className="text-[11px] text-rose-800 bg-white/80 p-2.5 rounded-lg border border-rose-200/70 flex items-center gap-2">
-                                  <Calendar className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                                  <span>
-                                    <strong>Regular Consulting Days:</strong> {doctorAvailabilityDetailed.regularDays.join(', ')}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            /* 4. Display available time slots as easy-to-click buttons/chips */
-                            <div className="space-y-2.5">
-                              <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-500">
-                                <span>Select Consultation Time Slot</span>
-                                <div className="flex items-center gap-3">
-                                  <span className="flex items-center gap-1 text-slate-600">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Available ({doctorAvailabilityDetailed.availableCount})
-                                  </span>
-                                  <span className="flex items-center gap-1 text-slate-400">
-                                    <span className="w-2 h-2 rounded-full bg-slate-300"></span> Booked ({doctorAvailabilityDetailed.bookedCount})
-                                  </span>
-                                </div>
-                              </div>
 
-                              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-52 overflow-y-auto p-1.5 bg-white rounded-xl border border-slate-200/90">
-                                {doctorAvailabilityDetailed.slots.map(slot => {
-                                  const isSelected = normalizeTimeSlot(apptTime) === normalizeTimeSlot(slot.time);
-
-                                  if (slot.isBooked) {
-                                    return (
-                                      <button
-                                        key={slot.time}
-                                        type="button"
-                                        disabled
-                                        title={`Slot ${slot.displayTime} is already booked${slot.bookedPatientName ? ` by ${slot.bookedPatientName}` : ''}`}
-                                        className="p-2 rounded-xl text-xs font-bold border border-slate-200 bg-slate-100 text-slate-400 line-through cursor-not-allowed opacity-70 flex flex-col items-center justify-center gap-0.5 select-none transition-none"
-                                      >
-                                        <span>{slot.displayTime}</span>
-                                        <span className="text-[8px] font-black uppercase tracking-tight text-slate-400 no-underline flex items-center gap-0.5">
-                                          <Lock className="w-2.5 h-2.5" /> Booked
+                                {/* Doctor Working Hours & Breaks Summary */}
+                                {activeSelectedDoctor && doctorAvailabilityDetailed?.isAvailableOnDate && (
+                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2.5 text-xs text-slate-600 bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                    <div className="flex items-center gap-1.5 text-slate-600 font-bold">
+                                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                      <span>{doctorAvailabilityDetailed.weekday}, {formatDisplayDate(apptDate).dateFormatted}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 text-slate-700 font-bold">
+                                      <Clock className="w-3.5 h-3.5 text-hospital-600" />
+                                      <span>Hours: <strong className="text-slate-900">{formatDisplayTime(doctorAvailabilityDetailed.workingStartTime)} – {formatDisplayTime(doctorAvailabilityDetailed.workingEndTime)}</strong></span>
+                                    </div>
+                                    {doctorAvailabilityDetailed.breaks && doctorAvailabilityDetailed.breaks.length > 0 && (
+                                      <div className="flex items-center gap-1.5 text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200 text-[11px] font-bold">
+                                        <Coffee className="w-3 h-3 text-amber-600" />
+                                        <span>
+                                          Break: {doctorAvailabilityDetailed.breaks.map(b => `${formatDisplayTime(b.startTime)} - ${formatDisplayTime(b.endTime)}`).join(', ')}
                                         </span>
-                                      </button>
-                                    );
-                                  }
-
-                                  return (
-                                    <button
-                                      key={slot.time}
-                                      type="button"
-                                      onClick={() => {
-                                        setApptTime(slot.time);
-                                        setFormError(null);
-                                      }}
-                                      className={`p-2 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
-                                        isSelected
-                                          ? 'bg-emerald-600 text-white border-2 border-emerald-600 shadow-md ring-2 ring-emerald-300 scale-[1.02]'
-                                          : 'bg-white hover:bg-emerald-50 hover:border-emerald-300 text-slate-800 border border-slate-200 shadow-sm active:scale-95'
-                                      }`}
-                                    >
-                                      <span className="flex items-center gap-1">
-                                        {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
-                                        {slot.displayTime}
-                                      </span>
-                                      <span className={`text-[8px] uppercase tracking-wider ${isSelected ? 'text-emerald-100' : 'text-emerald-600 font-bold'}`}>
-                                        Available
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-
-                              <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] text-slate-400 px-1">
-                                <span>• Slots outside shift hours and breaks are excluded automatically.</span>
-                                {apptTime && (
-                                  <span className="text-emerald-700 font-bold">
-                                    ✓ Chosen Time Slot: {formatDisplayTime(apptTime)}
-                                  </span>
+                                      </div>
+                                    )}
+                                  </div>
                                 )}
                               </div>
+
+                              {/* 2. When No Doctor is Selected */}
+                              {!activeSelectedDoctor ? (
+                                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-3">
+                                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                                  <div className="space-y-1 flex-1">
+                                    <div className="font-black text-amber-950">
+                                      Please select a Doctor for this appointment
+                                    </div>
+                                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                                      Appointment time slots are dynamically calculated based on the attending doctor's consultation roster, shift hours, and break schedules in <strong>Doctor Availability</strong>.
+                                    </p>
+                                    <div className="pt-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const el = document.getElementById('doctor-assignment-select') || document.getElementById('hospital-doctor-assignment-select');
+                                          if (el) {
+                                            el.focus();
+                                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                          }
+                                        }}
+                                        className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors cursor-pointer"
+                                      >
+                                        Select Doctor Above
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : !doctorAvailabilityDetailed?.isAvailableOnDate ? (
+                                /* 3. Clearly show: "No availability for this doctor on the selected date." */
+                                <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 space-y-2">
+                                  <div className="flex items-start gap-2.5">
+                                    <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                                    <div>
+                                      <div className="text-sm font-black text-rose-900">
+                                        No availability for this doctor on the selected date.
+                                      </div>
+                                      {doctorAvailabilityDetailed?.unavailabilityReason && (
+                                        <p className="text-xs text-rose-700 mt-0.5">
+                                          {doctorAvailabilityDetailed.unavailabilityReason}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {doctorAvailabilityDetailed?.regularDays && (
+                                    <div className="text-[11px] text-rose-800 bg-white/80 p-2.5 rounded-lg border border-rose-200/70 flex items-center gap-2">
+                                      <Calendar className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                                      <span>
+                                        <strong>Regular Consulting Days:</strong> {doctorAvailabilityDetailed.regularDays.join(', ')}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                /* 4. Display available time slots as easy-to-click buttons/chips (all selectable, even if previously booked) */
+                                <div className="space-y-2.5">
+                                  <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                    <span>Select Consultation Time Slot</span>
+                                    <div className="flex items-center gap-3">
+                                      <span className="flex items-center gap-1 text-slate-600">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Available ({doctorAvailabilityDetailed.availableCount})
+                                      </span>
+                                      {doctorAvailabilityDetailed.bookedCount > 0 && (
+                                        <span className="flex items-center gap-1 text-amber-700">
+                                          <span className="w-2 h-2 rounded-full bg-amber-400"></span> Booked ({doctorAvailabilityDetailed.bookedCount})
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-52 overflow-y-auto p-1.5 bg-white rounded-xl border border-slate-200/90">
+                                    {doctorAvailabilityDetailed.slots.map(slot => {
+                                      const isSelected = normalizeTimeSlot(apptTime) === normalizeTimeSlot(slot.time);
+
+                                      return (
+                                        <button
+                                          key={slot.time}
+                                          type="button"
+                                          onClick={() => {
+                                            setApptTime(slot.time);
+                                            setFormError(null);
+                                          }}
+                                          title={slot.isBooked ? `Slot ${slot.displayTime} already has booking${slot.bookedPatientName ? ` (${slot.bookedPatientName})` : ''} - Click to select` : `Select ${slot.displayTime}`}
+                                          className={`p-2 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                                            isSelected
+                                              ? 'bg-emerald-600 text-white border-2 border-emerald-600 shadow-md ring-2 ring-emerald-300 scale-[1.02]'
+                                              : slot.isBooked
+                                              ? 'bg-amber-50/80 hover:bg-amber-100/90 hover:border-amber-300 text-slate-800 border border-amber-200 shadow-xs active:scale-95'
+                                              : 'bg-white hover:bg-emerald-50 hover:border-emerald-300 text-slate-800 border border-slate-200 shadow-xs active:scale-95'
+                                          }`}
+                                        >
+                                          <span className="flex items-center gap-1">
+                                            {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                                            {slot.displayTime}
+                                          </span>
+                                          <span className={`text-[8px] uppercase tracking-wider ${
+                                            isSelected 
+                                              ? 'text-emerald-100 font-bold' 
+                                              : slot.isBooked 
+                                              ? 'text-amber-700 font-bold' 
+                                              : 'text-emerald-600 font-bold'
+                                          }`}>
+                                            {slot.isBooked ? 'Booked • Selectable' : 'Available'}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] text-slate-400 px-1">
+                                    <span>• Slots configured in Doctor Availability. Booked slots remain selectable.</span>
+                                    {apptTime && (
+                                      <span className="text-emerald-700 font-bold">
+                                        ✓ Chosen Time Slot: {formatDisplayTime(apptTime)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
 
-                          {/* Fallback for Hospital-Only booking (assignmentType is hospital with no doctor selected) */}
+                          {/* ===================== HOSPITAL AVAILABILITY MODE ===================== */}
                           {assignmentType === 'hospital' && !activeSelectedDoctor && (
-                            <div className="pt-2 border-t border-slate-200">
-                              <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2">
-                                Standard Hospital Facility OPD Hours
-                              </div>
-                              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-36 overflow-y-auto p-1.5 bg-white rounded-xl border border-slate-200">
-                                {defaultHospitalSlots.map(slot => {
-                                  const isSelected = normalizeTimeSlot(apptTime) === normalizeTimeSlot(slot.time);
-                                  return (
-                                    <button
-                                      key={slot.time}
-                                      type="button"
-                                      onClick={() => {
-                                        setApptTime(slot.time);
-                                        setFormError(null);
-                                      }}
-                                      className={`p-2 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center cursor-pointer ${
-                                        isSelected
-                                          ? 'bg-indigo-600 text-white border-2 border-indigo-600 shadow-md ring-2 ring-indigo-300'
-                                          : 'bg-white hover:bg-indigo-50 hover:border-indigo-200 text-slate-800 border border-slate-200'
-                                      }`}
-                                    >
-                                      <span className="flex items-center gap-1">
-                                        {isSelected && <Check className="w-3 h-3 text-white" />}
-                                        {slot.displayTime}
+                            <div className="space-y-4">
+                              {/* 1. Hospital Availability Header */}
+                              <div>
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                                  <div>
+                                    <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-indigo-600 mb-0.5">
+                                      <Building2 className="w-3.5 h-3.5" />
+                                      <span>Hospital Availability</span>
+                                    </div>
+                                    {activeSelectedHospital ? (
+                                      <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                                        <span className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                                          <Building2 className="w-4 h-4 text-indigo-600" />
+                                          {activeSelectedHospital.name}
+                                        </span>
+                                        {activeSelectedHospital.city && (
+                                          <span className="text-[11px] font-semibold text-slate-600">
+                                            • {activeSelectedHospital.city}
+                                          </span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="text-xs font-bold text-slate-500 mt-0.5">
+                                        No hospital selected
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Status Badge */}
+                                  {activeSelectedHospital && (
+                                    hospitalAvailabilityDetailed?.isAvailableOnDate ? (
+                                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-800 border border-indigo-200 self-start sm:self-auto">
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />
+                                        Facility Open Today
                                       </span>
-                                    </button>
-                                  );
-                                })}
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200 self-start sm:self-auto">
+                                        <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                                        Facility Closed
+                                      </span>
+                                    )
+                                  )}
+                                </div>
+
+                                {/* Hospital Facility Hours Summary */}
+                                {activeSelectedHospital && hospitalAvailabilityDetailed?.isAvailableOnDate && (
+                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2.5 text-xs text-slate-600 bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                    <div className="flex items-center gap-1.5 text-slate-600 font-bold">
+                                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                      <span>{hospitalAvailabilityDetailed.weekday}, {formatDisplayDate(apptDate).dateFormatted}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 text-slate-700 font-bold">
+                                      <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                                      <span>OPD Hours: <strong className="text-slate-900">{formatDisplayTime(hospitalAvailabilityDetailed.workingStartTime)} – {formatDisplayTime(hospitalAvailabilityDetailed.workingEndTime)}</strong></span>
+                                    </div>
+                                    {hospitalAvailabilityDetailed.breaks && hospitalAvailabilityDetailed.breaks.length > 0 && (
+                                      <div className="flex items-center gap-1.5 text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200 text-[11px] font-bold">
+                                        <Coffee className="w-3 h-3 text-amber-600" />
+                                        <span>
+                                          Break: {hospitalAvailabilityDetailed.breaks.map(b => `${formatDisplayTime(b.startTime)} - ${formatDisplayTime(b.endTime)}`).join(', ')}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
+
+                              {/* 2. When No Hospital is Selected */}
+                              {!activeSelectedHospital ? (
+                                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-3">
+                                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                                  <div className="space-y-1 flex-1">
+                                    <div className="font-black text-amber-950">
+                                      Please select a Hospital for this appointment
+                                    </div>
+                                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                                      Hospital booking does not require doctor-specific slots. Select an authorized hospital above to choose an available facility consultation slot.
+                                    </p>
+                                    <div className="pt-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const el = document.getElementById('hospital-assignment-select');
+                                          if (el) {
+                                            el.focus();
+                                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                          }
+                                        }}
+                                        className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors cursor-pointer"
+                                      >
+                                        Select Hospital Above
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : !hospitalAvailabilityDetailed?.isAvailableOnDate ? (
+                                /* 3. Hospital Unavailable on Date */
+                                <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 space-y-2">
+                                  <div className="flex items-start gap-2.5">
+                                    <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                                    <div>
+                                      <div className="text-sm font-black text-rose-900">
+                                        No facility availability on the selected date.
+                                      </div>
+                                      {hospitalAvailabilityDetailed?.unavailabilityReason && (
+                                        <p className="text-xs text-rose-700 mt-0.5">
+                                          {hospitalAvailabilityDetailed.unavailabilityReason}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {hospitalAvailabilityDetailed?.regularDays && (
+                                    <div className="text-[11px] text-rose-800 bg-white/80 p-2.5 rounded-lg border border-rose-200/70 flex items-center gap-2">
+                                      <Calendar className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                                      <span>
+                                        <strong>Regular Facility Days:</strong> {hospitalAvailabilityDetailed.regularDays.join(', ')}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                /* 4. Display Hospital Time Slots directly */
+                                <div className="space-y-2.5">
+                                  <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                    <span>Select Hospital Facility Time Slot</span>
+                                    <div className="flex items-center gap-3">
+                                      <span className="flex items-center gap-1 text-slate-600">
+                                        <span className="w-2 h-2 rounded-full bg-indigo-500"></span> Available ({hospitalAvailabilityDetailed.availableCount})
+                                      </span>
+                                      {hospitalAvailabilityDetailed.bookedCount > 0 && (
+                                        <span className="flex items-center gap-1 text-amber-700">
+                                          <span className="w-2 h-2 rounded-full bg-amber-400"></span> Booked ({hospitalAvailabilityDetailed.bookedCount})
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-52 overflow-y-auto p-1.5 bg-white rounded-xl border border-slate-200/90">
+                                    {hospitalAvailabilityDetailed.slots.map(slot => {
+                                      const isSelected = normalizeTimeSlot(apptTime) === normalizeTimeSlot(slot.time);
+
+                                      return (
+                                        <button
+                                          key={slot.time}
+                                          type="button"
+                                          onClick={() => {
+                                            setApptTime(slot.time);
+                                            setFormError(null);
+                                          }}
+                                          title={slot.isBooked ? `Slot ${slot.displayTime} already has booking - Click to select` : `Select ${slot.displayTime}`}
+                                          className={`p-2 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                                            isSelected
+                                              ? 'bg-indigo-600 text-white border-2 border-indigo-600 shadow-md ring-2 ring-indigo-300 scale-[1.02]'
+                                              : slot.isBooked
+                                              ? 'bg-amber-50/80 hover:bg-amber-100/90 hover:border-amber-300 text-slate-800 border border-amber-200 shadow-xs active:scale-95'
+                                              : 'bg-white hover:bg-indigo-50 hover:border-indigo-300 text-slate-800 border border-slate-200 shadow-xs active:scale-95'
+                                          }`}
+                                        >
+                                          <span className="flex items-center gap-1">
+                                            {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                                            {slot.displayTime}
+                                          </span>
+                                          <span className={`text-[8px] uppercase tracking-wider ${
+                                            isSelected 
+                                              ? 'text-indigo-100 font-bold' 
+                                              : slot.isBooked 
+                                              ? 'text-amber-700 font-bold' 
+                                              : 'text-indigo-600 font-bold'
+                                          }`}>
+                                            {slot.isBooked ? 'Booked • Selectable' : 'Available'}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] text-slate-400 px-1">
+                                    <span>• Direct hospital facility OPD availability. No doctor required.</span>
+                                    {apptTime && (
+                                      <span className="text-indigo-700 font-bold">
+                                        ✓ Chosen Time Slot: {formatDisplayTime(apptTime)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>

@@ -397,9 +397,15 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
   });
 
   const [activeDashboard, setActiveDashboardState] = useState<DashboardKey>(() => {
-    const locDash = getDashboardFromLocation();
-    if (locDash) return locDash;
     const savedRole = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_ROLE) : null;
+    const locDash = getDashboardFromLocation();
+    if (savedRole === 'MASTER') {
+      if (locDash && ['master_access', 'master_scheduling', 'master_availability', 'master_reports'].includes(locDash)) {
+        return locDash;
+      }
+      return 'master_access';
+    }
+    if (locDash) return locDash;
     return getDefaultDashboardForRole(savedRole as Role);
   });
 
@@ -498,7 +504,8 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         u.hospital_id === currentTenantId || 
         u.id === currentTenantId ||
         (u.role === 'DOCTOR' && u.hospital_id === currentTenantId) ||
-        (u.role === 'FRONT_OFFICE' && u.hospital_id === currentTenantId)
+        (u.role === 'FRONT_OFFICE' && u.hospital_id === currentTenantId) ||
+        ((u.role === 'PACKAGE' || u.role === 'PACKAGE_TEAM') && u.hospital_id === currentTenantId)
       );
     }
     return allStaffUsers;
@@ -812,15 +819,22 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
   useEffect(() => {
     if (currentUserRole && isStaffLoaded) {
       const user = staffUsers.find(s => s.id === (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') : null));
-      const isCurrentAllowed = checkPermission(currentUserRole, activeDashboard, dashboardPermissions, user);
-      if (!isCurrentAllowed) {
-        const primary = getDefaultDashboardForRole(currentUserRole, user);
-        setActiveDashboardState(primary);
-        const slug = DASHBOARD_TO_SLUG[primary] || primary;
-        window.location.hash = `#/${slug}`;
+      if (currentUserRole === 'MASTER') {
+        if (!['master_access', 'master_scheduling', 'master_availability', 'master_reports'].includes(activeDashboard)) {
+          setActiveDashboardState('master_access');
+          window.location.hash = `#/master-access`;
+        }
+      } else {
+        const isCurrentAllowed = checkPermission(currentUserRole, activeDashboard, dashboardPermissions, user);
+        if (!isCurrentAllowed) {
+          const primary = getDefaultDashboardForRole(currentUserRole, user);
+          setActiveDashboardState(primary);
+          const slug = DASHBOARD_TO_SLUG[primary] || primary;
+          window.location.hash = `#/${slug}`;
+        }
       }
     }
-  }, [currentUserRole, dashboardPermissions, isStaffLoaded, staffUsers]);
+  }, [currentUserRole, dashboardPermissions, isStaffLoaded, staffUsers, activeDashboard]);
 
   useEffect(() => {
     const savedRole = localStorage.getItem(STORAGE_KEY_ROLE);
@@ -879,14 +893,18 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
     setCurrentUserRoleState(role);
     if (role) {
       localStorage.setItem(STORAGE_KEY_ROLE, role);
-      // Auto-route to primary dashboard if not already permitted on active dashboard
       const user = staffUsers.find(s => s.id === (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') : null));
-      const isAllowed = checkPermission(role, activeDashboard, dashboardPermissions, user);
-      if (!isAllowed) {
+      if (role === 'MASTER') {
+        setActiveDashboardState('master_access');
+        window.location.hash = `#/master-access`;
+      } else {
         const primary = getDefaultDashboardForRole(role, user);
-        setActiveDashboardState(primary);
-        const slug = DASHBOARD_TO_SLUG[primary] || primary;
-        window.location.hash = `#/${slug}`;
+        const isAllowed = checkPermission(role, activeDashboard, dashboardPermissions, user);
+        if (!isAllowed) {
+          setActiveDashboardState(primary);
+          const slug = DASHBOARD_TO_SLUG[primary] || primary;
+          window.location.hash = `#/${slug}`;
+        }
       }
     } else {
       localStorage.removeItem(STORAGE_KEY_ROLE);
