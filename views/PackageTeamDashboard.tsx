@@ -539,6 +539,7 @@ export const PackageTeamDashboard: React.FC = () => {
                     <tr>
                       <th className="p-3.5 sm:p-4 whitespace-nowrap">PATIENT NAME</th>
                       <th className="p-3.5 sm:p-4 whitespace-nowrap">FILE ID</th>
+                      <th className="p-3.5 sm:p-4 whitespace-nowrap">SOURCE</th>
                       <th className="p-3.5 sm:p-4 whitespace-nowrap">DATE ARRIVED</th>
                       <th className="p-3.5 sm:p-4 whitespace-nowrap">CONSULTING DOCTOR</th>
                       <th className="p-3.5 sm:p-4 whitespace-nowrap">OUTCOME STATUS</th>
@@ -551,6 +552,11 @@ export const PackageTeamDashboard: React.FC = () => {
                       <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="p-3.5 sm:p-4 font-bold text-slate-900">{p.name}</td>
                         <td className="p-3.5 sm:p-4 font-mono text-xs text-slate-500">{p.id.split('_V')[0]}</td>
+                        <td className="p-3.5 sm:p-4 whitespace-nowrap">
+                          <span className="px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200 bg-slate-100 text-slate-700">
+                            {p.source || 'Other'}
+                          </span>
+                        </td>
                         <td className="p-3.5 sm:p-4 text-[11px] text-slate-500 font-bold font-mono uppercase">{formatToDDMMYYYY(p.entry_date)}</td>
                         <td className="p-3.5 sm:p-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">

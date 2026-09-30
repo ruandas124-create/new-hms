@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
 import { Appointment, Patient, SurgeonCode, Condition, Gender } from '../types';
+import { supabase } from '../services/supabaseClient';
 import { 
   TrendingUp, Calendar, Phone, Search, CheckCircle2, 
   Clock, Lock, ArrowRight, ArrowLeft, Filter,
   Building2, Stethoscope, Eye, Tag, X,
-  MessageSquare, Edit3, CalendarCheck, Check
+  MessageSquare, Edit3, CalendarCheck, Check,
+  Loader2, AlertCircle, RefreshCw
 } from 'lucide-react';
 
 const isDoctorAssociatedWithHospital = (doctor: any, hospital: any): boolean => {
@@ -108,10 +110,12 @@ const sourceConfig = [
   { name: 'Relatives / Friend' },
   { name: 'Hospital Billboards' },
   { name: 'Doctor Recommended' },
+  { name: 'Acquire OPD' },
   { name: 'Others' }
 ];
 
 const SOURCE_DISPLAY_MAP: Record<string, string> = {
+  'Acquire OPD': 'Acquire OPD',
   'Google': 'Google',
   'YouTube': 'YouTube',
   'Website': 'Website',
@@ -128,7 +132,8 @@ const SOURCE_DISPLAY_MAP: Record<string, string> = {
 };
 
 const getSourceDisplay = (source: string | undefined): string => {
-  if (!source) return 'Google';
+  if (!source) return 'Acquire OPD';
+  if (source === 'Acquire OPD') return 'Acquire OPD';
   if (source.startsWith('Other: ')) return 'Others';
   return SOURCE_DISPLAY_MAP[source] || source;
 };
@@ -280,6 +285,19 @@ export const SalesDashboard: React.FC = () => {
   const [followupDateInput, setFollowupDateInput] = useState('');
   const [followupStatusInput, setFollowupStatusInput] = useState<'Follow-up' | 'Scheduled'>('Follow-up');
   const [followupNotesInput, setFollowupNotesInput] = useState('');
+  const [followupHistoryList, setFollowupHistoryList] = useState<{
+    id: string;
+    leadId: string;
+    note: string;
+    author: string;
+    date: string;
+    time: string;
+    createdAt: string;
+    status?: string;
+  }[]>([]);
+  const [isLoadingFollowupHistory, setIsLoadingFollowupHistory] = useState(false);
+  const [isSavingFollowup, setIsSavingFollowup] = useState(false);
+  const [followupError, setFollowupError] = useState<string | null>(null);
 
   // Notes Modal state
   const [notesBooking, setNotesBooking] = useState<BookingRecord | null>(null);
@@ -292,7 +310,7 @@ export const SalesDashboard: React.FC = () => {
     condition: Condition.Other,
     date: new Date().toISOString().split('T')[0],
     time: '10:00',
-    source: 'Google',
+    source: 'Acquire OPD',
     referralPerson: '',
     sourceDoctorName: '',
     sourceOtherDetails: ''
@@ -567,8 +585,8 @@ export const SalesDashboard: React.FC = () => {
         condition: (booking.condition as Condition) || Condition.Other,
         date: booking.appointmentDate || new Date().toISOString().split('T')[0],
         time: booking.appointmentTime || '10:00',
-        source: booking.source || 'Google',
-        referralPerson: booking.referralPerson || '',
+        source: 'Acquire OPD',
+        referralPerson: '',
         sourceDoctorName: '',
         sourceOtherDetails: ''
       });
@@ -585,7 +603,7 @@ export const SalesDashboard: React.FC = () => {
         condition: Condition.Other,
         date: new Date().toISOString().split('T')[0],
         time: '10:00',
-        source: 'Google',
+        source: 'Acquire OPD',
         referralPerson: '',
         sourceDoctorName: '',
         sourceOtherDetails: ''
@@ -627,16 +645,6 @@ export const SalesDashboard: React.FC = () => {
       return;
     }
 
-    const displaySource = getSourceDisplay(bookingFormData.source);
-    if (displaySource === 'Doctor Recommended' && !bookingFormData.sourceDoctorName) {
-      alert('Please provide the Doctor Name.');
-      return;
-    }
-    if (displaySource === 'Others' && !bookingFormData.sourceOtherDetails) {
-      alert('Please provide source details.');
-      return;
-    }
-
     const activeUsername = localStorage.getItem('hms_hospital_name') || 
       localStorage.getItem('username') || 
       'Sales Executive';
@@ -669,17 +677,8 @@ export const SalesDashboard: React.FC = () => {
       finalHospitalName = doc?.hospitalName || 'Consulting Clinic';
     }
 
-    let sourceVal = bookingFormData.source;
-    let referralPersonVal: string | null = null;
-    let sourceDoctorNameVal: string | undefined = undefined;
-
-    if (displaySource === 'Doctor Recommended') {
-      sourceDoctorNameVal = bookingFormData.sourceDoctorName;
-    } else if (displaySource === 'Others') {
-      sourceVal = `Other: ${bookingFormData.sourceOtherDetails}`;
-    } else if (displaySource === 'Referral') {
-      referralPersonVal = bookingFormData.referralPerson;
-    }
+    // Source Rule: When Sales schedules/books an appointment, the system must automatically set source as Acquire OPD
+    const sourceVal = 'Acquire OPD';
 
     // Status is Scheduled by default for new bookings, or preserves Follow-up if editing a follow-up booking
     const assignedStatus = (bookingToEdit?.status === 'Follow-up' || bookingToEdit?.status === 'Follow Up') ? 'Follow-up' : 'Scheduled';
@@ -688,8 +687,8 @@ export const SalesDashboard: React.FC = () => {
       name: bookingFormData.name.trim(),
       mobile: bookingFormData.mobile.trim(),
       source: sourceVal,
-      sourceDoctorName: sourceDoctorNameVal,
-      referral_person: referralPersonVal,
+      sourceDoctorName: undefined,
+      referral_person: null,
       condition: bookingFormData.condition as Condition,
       date: bookingFormData.date,
       time: bookingFormData.time,
@@ -728,66 +727,241 @@ export const SalesDashboard: React.FC = () => {
     setSelectedDoctorId('');
   };
 
-  // Follow-up handler: Sales users can update booking status only to: Follow-up or Scheduled
-  const handleOpenFollowup = (booking: BookingRecord) => {
+  // Follow-up handler: Database-driven persistence for Follow-up remarks & history
+  const handleOpenFollowup = async (booking: BookingRecord) => {
     setFollowupBooking(booking);
     setFollowupDateInput(booking.followupDate || new Date().toISOString().split('T')[0]);
-    // Allowed values strictly 'Follow-up' or 'Scheduled'
     const initialStatus = normalizeProjectStatus(booking.status) === 'Scheduled' ? 'Scheduled' : 'Follow-up';
     setFollowupStatusInput(initialStatus);
-    setFollowupNotesInput(booking.followupNotes || '');
+    setFollowupNotesInput('');
+    setFollowupError(null);
+    setIsLoadingFollowupHistory(true);
+
+    const linkedAppt = appointments.find(a => (booking.appointmentId && a.id === booking.appointmentId) || (booking.mobile && a.mobile === booking.mobile));
+    const linkedPat = patients.find(p => (booking.patientId && p.id === booking.patientId) || (booking.mobile && p.mobile === booking.mobile));
+
+    const leadIds = Array.from(new Set([
+      booking.appointmentId, 
+      booking.patientId, 
+      booking.id,
+      linkedAppt?.id,
+      linkedPat?.id,
+      booking.patientId ? booking.patientId.split('_V')[0] : null,
+      linkedPat ? linkedPat.id.split('_V')[0] : null
+    ].filter(Boolean))) as string[];
+
+    // 1. Fetch notes from Supabase database table lead_notes
+    let dbNotesList: any[] = [];
+    try {
+      const { data, error } = await supabase
+        .from('lead_notes')
+        .select('*')
+        .in('lead_id', leadIds)
+        .order('created_at', { ascending: false });
+      if (!error && data) {
+        dbNotesList = data;
+      }
+    } catch (e) {
+      console.warn("Could not query lead_notes from database:", e);
+    }
+
+    // 2. Merge database lead_notes with appointment record's followupHistory & notes
+    const mergedMap = new Map<string, {
+      id: string;
+      leadId: string;
+      note: string;
+      author: string;
+      date: string;
+      time: string;
+      createdAt: string;
+      status?: string;
+    }>();
+
+    dbNotesList.forEach(item => {
+      mergedMap.set(item.id, {
+        id: item.id,
+        leadId: item.lead_id,
+        note: item.note,
+        author: item.created_by_name || 'Sales User',
+        date: item.created_date || (item.created_at ? new Date(item.created_at).toLocaleDateString('en-GB') : ''),
+        time: item.created_time || (item.created_at ? new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''),
+        createdAt: item.created_at || new Date().toISOString(),
+        status: ''
+      });
+    });
+
+    // Check booking followupHistory
+    (booking.followupHistory || []).forEach(item => {
+      if (item.notes && item.notes.trim()) {
+        const existing = mergedMap.get(item.id);
+        if (!existing) {
+          mergedMap.set(item.id, {
+            id: item.id,
+            leadId: booking.appointmentId || booking.id,
+            note: item.notes,
+            author: item.author || 'Sales User',
+            date: item.date || (item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-GB') : ''),
+            time: item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+            createdAt: item.createdAt || new Date().toISOString(),
+            status: item.status
+          });
+        }
+      }
+    });
+
+    // Check appointment in context for followup_history and followup_notes
+    if (booking.appointmentId) {
+      const appt = appointments.find(a => a.id === booking.appointmentId);
+      if (appt) {
+        (appt.followup_history || (appt as any).doctor_assessment?.followup_history || []).forEach((item: any) => {
+          if (item.notes && item.notes.trim()) {
+            const key = item.id || `appt_note_${item.notes.substring(0, 15)}_${item.createdAt}`;
+            if (!mergedMap.has(key)) {
+              mergedMap.set(key, {
+                id: key,
+                leadId: appt.id,
+                note: item.notes,
+                author: item.author || appt.username || 'Sales User',
+                date: item.date || (item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-GB') : ''),
+                time: item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+                createdAt: item.createdAt || appt.createdAt || new Date().toISOString(),
+                status: item.status
+              });
+            }
+          }
+        });
+
+        if (appt.followup_notes && appt.followup_notes.trim()) {
+          const key = `appt_followup_note_${appt.id}`;
+          if (!mergedMap.has(key) && !Array.from(mergedMap.values()).some(v => v.note === appt.followup_notes)) {
+            mergedMap.set(key, {
+              id: key,
+              leadId: appt.id,
+              note: appt.followup_notes,
+              author: appt.username || 'Sales User',
+              date: appt.followup_date || (appt.createdAt ? new Date(appt.createdAt).toLocaleDateString('en-GB') : ''),
+              time: appt.createdAt ? new Date(appt.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+              createdAt: appt.createdAt || new Date().toISOString(),
+              status: appt.status
+            });
+          }
+        }
+      }
+    }
+
+    // Chronological order with latest note clearly at the top
+    const sortedList = Array.from(mergedMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    setFollowupHistoryList(sortedList);
+    setIsLoadingFollowupHistory(false);
   };
 
   const handleSaveFollowup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!followupBooking) return;
+    if (!followupBooking || isSavingFollowup) return;
 
     // Sales users can update booking status only to: Follow-up or Scheduled
     const allowedStatus: 'Follow-up' | 'Scheduled' = (followupStatusInput === 'Scheduled') ? 'Scheduled' : 'Follow-up';
 
-    const activeUsername = localStorage.getItem('hms_hospital_name') || 
-      localStorage.getItem('username') || 
-      'Sales Executive';
+    setIsSavingFollowup(true);
+    setFollowupError(null);
 
-    const newHistoryItem = {
-      id: `fu_${Date.now()}`,
-      date: followupDateInput,
-      status: allowedStatus,
-      notes: followupNotesInput.trim(),
-      createdAt: new Date().toISOString(),
-      author: activeUsername
-    };
+    try {
+      const activeUsername = localStorage.getItem('hms_hospital_name') || 
+        localStorage.getItem('username') || 
+        'Sales Executive';
+      const activeUserId = localStorage.getItem('hms_hospital_id') || 'sales_user';
+      const leadId = followupBooking.appointmentId || followupBooking.patientId || followupBooking.id;
 
-    const existingHistory = followupBooking.followupHistory || [];
-    const updatedHistory = [newHistoryItem, ...existingHistory];
+      const nowIso = new Date().toISOString();
+      const nowDate = new Date().toISOString().split('T')[0];
+      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+      const newNoteText = followupNotesInput.trim();
 
-    if (followupBooking.appointmentId) {
-      const appt = appointments.find(a => a.id === followupBooking.appointmentId);
-      if (appt) {
-        await updateAppointment({
-          ...appt,
+      let updatedHistory = followupBooking.followupHistory || [];
+
+      // If remarks/notes entered, save permanently to database
+      if (newNoteText) {
+        const noteId = `fn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+        // 1. Permanent database insertion into lead_notes table
+        try {
+          const { error: dbError } = await supabase.from('lead_notes').insert({
+            id: noteId,
+            lead_id: leadId,
+            note: newNoteText,
+            created_at: nowIso,
+            created_date: nowDate,
+            created_time: nowTime,
+            created_by: activeUserId,
+            created_by_name: activeUsername
+          });
+          if (dbError) {
+            console.warn("Could not insert into lead_notes table:", dbError);
+          }
+        } catch (dbErr) {
+          console.warn("lead_notes insert exception:", dbErr);
+        }
+
+        const newHistoryItem = {
+          id: noteId,
+          date: followupDateInput || nowDate,
           status: allowedStatus,
-          bookingType: allowedStatus === 'Follow-up' ? 'Follow Up' : 'Scheduled',
-          followup_date: followupDateInput,
-          followup_notes: followupNotesInput.trim(),
-          followup_history: updatedHistory
-        });
-      }
-    }
+          notes: newNoteText,
+          createdAt: nowIso,
+          author: activeUsername
+        };
+        updatedHistory = [newHistoryItem, ...updatedHistory];
 
-    if (followupBooking.patientId) {
-      const pat = patients.find(p => p.id === followupBooking.patientId);
-      if (pat) {
-        await updatePatient(pat.id, {
-          ...pat,
-          followup_date: followupDateInput
-        } as any);
+        // Prepend to current modal history list so latest note appears clearly at the top
+        setFollowupHistoryList(prev => [{
+          id: noteId,
+          leadId: leadId,
+          note: newNoteText,
+          author: activeUsername,
+          date: nowDate,
+          time: nowTime,
+          createdAt: nowIso,
+          status: allowedStatus
+        }, ...prev]);
       }
-    }
 
-    setFollowupBooking(null);
-    setStatusUpdateSuccessMessage(`Follow-up saved and status updated to "${allowedStatus}"`);
-    setTimeout(() => setStatusUpdateSuccessMessage(null), 3000);
+      // 2. Permanent database update to appointment record
+      if (followupBooking.appointmentId) {
+        const appt = appointments.find(a => a.id === followupBooking.appointmentId);
+        if (appt) {
+          await updateAppointment({
+            ...appt,
+            status: allowedStatus,
+            bookingType: allowedStatus === 'Follow-up' ? 'Follow Up' : 'Scheduled',
+            followup_date: followupDateInput,
+            followup_notes: newNoteText || appt.followup_notes,
+            followup_history: updatedHistory
+          });
+        }
+      }
+
+      if (followupBooking.patientId) {
+        const pat = patients.find(p => p.id === followupBooking.patientId);
+        if (pat) {
+          await updatePatient(pat.id, {
+            ...pat,
+            followup_date: followupDateInput
+          } as any);
+        }
+      }
+
+      setFollowupNotesInput('');
+      setStatusUpdateSuccessMessage(`Follow-up saved permanently to database (Status: "${allowedStatus}")`);
+      setTimeout(() => setStatusUpdateSuccessMessage(null), 3500);
+      setFollowupBooking(null);
+    } catch (err: any) {
+      setFollowupError(err.message || 'Failed to save follow-up to database.');
+    } finally {
+      setIsSavingFollowup(false);
+    }
   };
 
   // Notes handler
@@ -1651,20 +1825,20 @@ export const SalesDashboard: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">
-                          Lead Source *
+                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest flex items-center justify-between">
+                          <span>Lead Source</span>
+                          <span className="text-[9px] font-black uppercase text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                            Auto: Acquire OPD
+                          </span>
                         </label>
-                        <select 
-                          required 
-                          className="w-full border-b-2 border-slate-100 p-2 text-sm font-bold bg-white" 
-                          value={getSourceDisplay(bookingFormData.source)} 
-                          onChange={e => setBookingFormData({ ...bookingFormData, source: e.target.value })}
-                        >
-                          <option value="">Select Source</option>
-                          {sourceConfig.map(s => (
-                            <option key={s.name} value={s.name}>{s.name}</option>
-                          ))}
-                        </select>
+                        <input 
+                          type="text" 
+                          readOnly 
+                          disabled
+                          value="Acquire OPD" 
+                          className="w-full border-b-2 border-slate-200 p-2 text-sm font-bold bg-slate-100 text-slate-700 outline-none cursor-not-allowed select-none rounded-t" 
+                          title="Appointments scheduled by Sales are automatically set to Acquire OPD"
+                        />
                       </div>
 
                       {getSourceDisplay(bookingFormData.source) === 'Doctor Recommended' && (
@@ -1792,6 +1966,13 @@ export const SalesDashboard: React.FC = () => {
                 </p>
               </div>
 
+              {followupError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{followupError}</span>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[10px] font-black uppercase text-slate-500 mb-1.5 tracking-wider">
                   Follow-Up Remarks / Conversation Notes
@@ -1805,37 +1986,85 @@ export const SalesDashboard: React.FC = () => {
                 />
               </div>
 
-              {/* Previous Follow-Up History */}
-              {followupBooking.followupHistory && followupBooking.followupHistory.length > 0 && (
-                <div className="space-y-2 pt-2 border-t">
-                  <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Previous Follow-Ups</div>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {followupBooking.followupHistory.map(item => (
-                      <div key={item.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs">
-                        <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
-                          <span>{item.date} • {item.status}</span>
-                          <span className="font-mono text-slate-400">{item.author}</span>
+              {/* Complete Follow-Up Remarks / Conversation Notes History */}
+              <div className="space-y-2 pt-2 border-t">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                    Follow-Up Remarks / Conversation Notes History
+                  </span>
+                  {followupHistoryList.length > 0 && (
+                    <span className="text-[10px] font-bold text-slate-400 font-mono">
+                      {followupHistoryList.length} {followupHistoryList.length === 1 ? 'note' : 'notes'}
+                    </span>
+                  )}
+                </div>
+
+                {isLoadingFollowupHistory ? (
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                    <span>Loading follow-up history from database...</span>
+                  </div>
+                ) : followupHistoryList.length === 0 ? (
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-center text-xs text-slate-400 italic">
+                    No previous follow-up notes
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                    {followupHistoryList.map((item, idx) => (
+                      <div 
+                        key={item.id || idx} 
+                        className={`p-3 rounded-xl border text-xs transition-all ${
+                          idx === 0 
+                            ? 'bg-amber-50/50 border-amber-200 shadow-xs' 
+                            : 'bg-slate-50 border-slate-100'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] mb-1.5">
+                          <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                            {idx === 0 && (
+                              <span className="px-1.5 py-0.2 rounded-md bg-amber-200 text-amber-900 font-black text-[9px] uppercase tracking-wider">
+                                Latest Note
+                              </span>
+                            )}
+                            <span>Added by: <strong className="text-slate-900">{item.author || 'Sales User'}</strong></span>
+                          </span>
+                          <span className="font-mono text-slate-500 font-semibold flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-slate-400" />
+                            <span>{item.date || '---'}</span>
+                            {item.time && <span>• {item.time}</span>}
+                          </span>
                         </div>
-                        {item.notes && <p className="text-slate-700 mt-1">{item.notes}</p>}
+                        <p className="text-slate-800 whitespace-pre-wrap leading-relaxed text-xs">
+                          {item.note}
+                        </p>
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t">
                 <button
                   type="button"
+                  disabled={isSavingFollowup}
                   onClick={() => setFollowupBooking(null)}
-                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95"
+                  disabled={isSavingFollowup}
+                  className="px-6 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 disabled:opacity-50 flex items-center gap-2"
                 >
-                  Save Follow-Up
+                  {isSavingFollowup ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Note...</span>
+                    </>
+                  ) : (
+                    <span>Save Follow-Up</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -2054,19 +2283,32 @@ export const SalesDashboard: React.FC = () => {
               >
                 Close
               </button>
-              {hasSchedulingAccess && (
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
                     const b = selectedBookingForDetail;
                     setSelectedBookingForDetail(null);
-                    handleOpenScheduleModal(b);
+                    handleOpenFollowup(b);
                   }}
-                  className="px-5 py-2 text-xs font-black uppercase tracking-wider bg-rose-600 text-white rounded-xl hover:bg-rose-500 shadow-md shadow-rose-900/30 flex items-center gap-1.5"
+                  className="px-4 py-2 text-xs font-black uppercase tracking-wider bg-amber-600 text-white rounded-xl hover:bg-amber-500 shadow-md flex items-center gap-1.5"
                 >
-                  <Edit3 className="w-3.5 h-3.5" /> Edit Booking
+                  <CalendarCheck className="w-3.5 h-3.5" /> Follow-Up
                 </button>
-              )}
+                {hasSchedulingAccess && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const b = selectedBookingForDetail;
+                      setSelectedBookingForDetail(null);
+                      handleOpenScheduleModal(b);
+                    }}
+                    className="px-5 py-2 text-xs font-black uppercase tracking-wider bg-rose-600 text-white rounded-xl hover:bg-rose-500 shadow-md shadow-rose-900/30 flex items-center gap-1.5"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" /> Edit Booking
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

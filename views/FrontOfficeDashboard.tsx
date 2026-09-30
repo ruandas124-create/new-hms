@@ -25,6 +25,7 @@ const formatDate = (dateString: string | undefined | null): string => {
 };
 
 const SOURCE_DISPLAY_MAP: Record<string, string> = {
+  'Acquire OPD': 'Acquire OPD',
   'Google': 'Google / YouTube / Website',
   'YouTube': 'Google / YouTube / Website',
   'Website': 'Google / YouTube / Website',
@@ -217,6 +218,7 @@ export const FrontOfficeDashboard: React.FC = () => {
     { name: "Friend + Online", icon: <Share2 className="w-4 h-4 text-indigo-500" /> },
     { name: "Hospital Billboards", icon: <Tag className="w-4 h-4 text-slate-500" /> },
     { name: "Doctor Recommended", icon: <Stethoscope className="w-4 h-4 text-teal-500" /> },
+    { name: "Acquire OPD", icon: <FileText className="w-4 h-4 text-hospital-500" /> },
     { name: "Others", icon: <PlusCircle className="w-4 h-4 text-slate-400" /> }
   ];
 
@@ -441,11 +443,20 @@ export const FrontOfficeDashboard: React.FC = () => {
     
     if (editingId) { 
       const originalPatient = patients.find(p => p.id === editingId); 
+      if (originalPatient?.source === 'Acquire OPD') {
+        dataToSave.source = 'Acquire OPD';
+      }
       if (originalPatient) await updatePatient(editingId, { ...originalPatient, ...dataToSave as Patient }); 
     }
     else { 
       if (patients.some(p => p.id === formData.id)) return alert("File Number already exists."); 
-      if (originatingAppointmentId) await convertAppointment(originatingAppointmentId, dataToSave as any); 
+      if (originatingAppointmentId) {
+        const origAppt = appointments.find(a => a.id === originatingAppointmentId);
+        if (origAppt?.source === 'Acquire OPD') {
+          dataToSave.source = 'Acquire OPD';
+        }
+        await convertAppointment(originatingAppointmentId, dataToSave as any); 
+      }
       else await addPatient(dataToSave as any); 
     }
     setShowForm(false); resetForm();
@@ -843,6 +854,7 @@ export const FrontOfficeDashboard: React.FC = () => {
               <tr>
                 <th className="p-5 whitespace-nowrap">{activeTab === 'APPOINTMENTS' ? 'APPT TIME' : 'FILE ID / DATE'}</th>
                 <th className="p-5 whitespace-nowrap">PATIENT DETAILS</th>
+                <th className="p-5 whitespace-nowrap">SOURCE</th>
                 <th className="p-5 whitespace-nowrap">CONTACT</th>
                 {(activeTab === 'REGISTRATION' || activeTab === 'GLOBAL_SEARCH') && <th className="p-5 whitespace-nowrap">VISIT TYPE</th>}
                 <th className="p-5 whitespace-nowrap">CONSULTING DOCTOR</th>
@@ -876,6 +888,11 @@ export const FrontOfficeDashboard: React.FC = () => {
                       {(item.age || item.gender) && item.source ? ' • ' : ''}
                       {item.source === 'Doctor Recommended' ? `Dr. ${item.sourceDoctorName || 'Recommended'}` : item.source}
                     </div>
+                  </td>
+                  <td className="p-5 whitespace-nowrap">
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200 bg-slate-100 text-slate-700">
+                      {getSourceDisplay(item.source)}
+                    </span>
                   </td>
                   <td className="p-5 text-sm font-medium text-slate-400 whitespace-nowrap flex items-center gap-2"><Phone className="w-3.5 h-3.5" /> {item.mobile}</td>
                   {(activeTab === 'REGISTRATION' || activeTab === 'GLOBAL_SEARCH') && (
@@ -1124,7 +1141,29 @@ export const FrontOfficeDashboard: React.FC = () => {
                               );
                             })}</select>
                        </div>
-                       <div><label className="block text-[10px] font-black uppercase text-slate-500 mb-2">How did you hear about us?</label><select className="w-full border-b-2 border-slate-100 p-2 bg-white" value={getSourceDisplay(formData.source) || ''} onChange={e => setFormData({...formData, source: e.target.value})}><option value="">Select...</option>{sourceConfig.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}</select></div>
+                       <div>
+                         <label className="block text-[10px] font-black uppercase text-slate-500 mb-2">How did you hear about us?</label>
+                         {formData.source === 'Acquire OPD' ? (
+                           <div className="flex items-center gap-2">
+                             <input 
+                               type="text" 
+                               readOnly 
+                               disabled 
+                               value="Acquire OPD" 
+                               className="w-full border-b-2 border-slate-200 p-2 text-sm font-bold bg-slate-100 text-slate-700 outline-none cursor-not-allowed select-none rounded-t" 
+                               title="Source is set to Acquire OPD and cannot be changed"
+                             />
+                             <span className="text-[9px] font-black uppercase text-rose-600 bg-rose-50 px-2 py-1 rounded-md border border-rose-200 whitespace-nowrap">
+                               Locked
+                             </span>
+                           </div>
+                         ) : (
+                           <select className="w-full border-b-2 border-slate-100 p-2 bg-white" value={getSourceDisplay(formData.source) || ''} onChange={e => setFormData({...formData, source: e.target.value})}>
+                             <option value="">Select...</option>
+                             {sourceConfig.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                           </select>
+                         )}
+                       </div>
                        <div><label className="block text-[10px] font-black uppercase text-slate-500 mb-2">Insurance</label><div className="flex gap-2 p-1 bg-slate-100 rounded-xl">{['Yes', 'No'].map(v => (<button key={v} type="button" onClick={() => setFormData({...formData, hasInsurance: v as any})} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${formData.hasInsurance === v ? 'bg-hospital-600 text-white shadow' : 'text-slate-500'}`}>{v}</button>))}</div></div>
                        {formData.hasInsurance === 'Yes' && (<div className="animate-in slide-in-from-top-2 duration-300"><label className="block text-[10px] font-black uppercase text-hospital-600 mb-2 tracking-widest">Insurance Name</label><input required className="w-full text-lg font-bold border-b-2 border-hospital-100 p-2 outline-none focus:border-hospital-500 placeholder-slate-200" value={formData.insuranceName || ''} onChange={e => setFormData({...formData, insuranceName: e.target.value})} placeholder="Enter Insurance Provider" /></div>)}
                        {getSourceDisplay(formData.source) === 'Doctor Recommended' && (

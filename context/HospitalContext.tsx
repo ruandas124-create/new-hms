@@ -344,7 +344,9 @@ const mapRowToPatient = (row: any): Patient => {
     packageProposal: uiProposal,
     doctorAssessment: uiAssessment,
     surgery_date: row.surgery_date || '',
-    followup_date: row.followup_date || '',
+    followup_date: row.followup_date || row.follow_up_date || row.doctor_assessment?.followup_date || '',
+    followup_notes: row.doctor_assessment?.followup_notes || '',
+    followup_history: row.doctor_assessment?.followup_history || [],
     surgery_lost_date: row.surgery_lost_date || '',
     completed_surgery: row.completed_surgery || '',
     sourceTable: APPOINTMENTS_TABLE as any
@@ -1058,7 +1060,12 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           assignment_type: r.doctor_assessment?.assignment_type || (r.doctor_assessment?.assignedDoctorId ? 'doctor' : 'hospital'),
           doctor_id: r.doctor_assessment?.doctor_id || r.doctor_assessment?.assignedDoctorId || null,
           patient_id: r.doctor_assessment?.patient_id || null,
-          hospitalName: r.doctor_assessment?.hospitalName || undefined
+          hospitalName: r.doctor_assessment?.hospitalName || undefined,
+          followup_date: r.followup_date || r.doctor_assessment?.followup_date || '',
+          followup_notes: r.doctor_assessment?.followup_notes || '',
+          followup_history: r.doctor_assessment?.followup_history || [],
+          notes: r.doctor_assessment?.notes || r.notes || '',
+          notes_list: r.doctor_assessment?.notes_list || []
         }));
       setAllAppointments(appointmentLeads as Appointment[]);
 
@@ -1161,7 +1168,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
     try {
       const existingPatient = patients.find(p => p.id === targetId);
       let dbPackageProposal = null;
-      let followUpDateVal = null;
+      let followUpDateVal = patient.followup_date || (patient as any).follow_up_date || existingPatient?.followup_date || null;
       let surgeryDateVal = null;
       let surgeryLostDateVal = null;
       let completedSurgeryVal = null;
@@ -1211,10 +1218,25 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         };
       }
 
-      // Sync internal patient_id with potential new primary ID
-      const updatedAssessment = patient.doctorAssessment ? {
-        ...patient.doctorAssessment,
-        patient_id: patient.id
+      // Sync internal patient_id with potential new primary ID & preserve follow-up notes/history
+      const existingAssessment = (existingPatient?.doctorAssessment || {}) as any;
+      const patientAssessment = (patient.doctorAssessment || {}) as any;
+
+      const resolvedFollowupNotes = (patient as any).followup_notes !== undefined 
+        ? (patient as any).followup_notes 
+        : (patientAssessment.followup_notes || existingAssessment.followup_notes || null);
+
+      const resolvedFollowupHistory = (patient as any).followup_history !== undefined 
+        ? (patient as any).followup_history 
+        : (patientAssessment.followup_history || existingAssessment.followup_history || []);
+
+      const updatedAssessment = (patient.doctorAssessment || resolvedFollowupNotes || (resolvedFollowupHistory && resolvedFollowupHistory.length > 0)) ? {
+        ...(existingAssessment || {}),
+        ...(patient.doctorAssessment || {}),
+        patient_id: patient.id,
+        followup_notes: resolvedFollowupNotes,
+        followup_history: resolvedFollowupHistory,
+        followup_date: followUpDateVal || existingAssessment.followup_date || null
       } : null;
 
       const updateData = {
@@ -1225,7 +1247,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         gender: patient.gender,
         mobile: patient.mobile,
         occupation: patient.occupation,
-        source: patient.source,
+        source: (existingPatient?.source === 'Acquire OPD' || patient.source === 'Acquire OPD') ? 'Acquire OPD' : (patient.source || 'Other'),
         condition: patient.condition,
         is_follow_up: patient.visitType === 'Follow Up',
         visit_type: patient.visit_type || existingPatient?.visit_type || '',
@@ -1277,6 +1299,9 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
     setSaveStatus('saving');
     try {
         const originalAppt = allAppointments.find(a => a.id === appointmentId);
+        const resolvedSource = (originalAppt?.source === 'Acquire OPD' || patientData.source === 'Acquire OPD') 
+          ? 'Acquire OPD' 
+          : (patientData.source || 'Other');
         const assignedDocId = patientData.doctorAssessment?.assignedDoctorId || (patientData as any).assignedDoctorId || originalAppt?.assignedDoctorId;
         const assignedDocName = patientData.doctorAssessment?.assignedDoctorName || (patientData as any).assignedDoctorName || originalAppt?.assignedDoctorName;
 
@@ -1284,6 +1309,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           ...(patientData.doctorAssessment || {}),
           assignedDoctorId: assignedDocId || undefined,
           assignedDoctorName: assignedDocName || undefined,
+          source: resolvedSource
         } : null;
 
         const dbRecord = {
@@ -1294,7 +1320,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
             age: patientData.age,
             mobile: patientData.mobile,
             occupation: patientData.occupation,
-            source: patientData.source,
+            source: resolvedSource,
             source_doctor_name: patientData.sourceDoctorName,
             condition: patientData.condition,
             is_follow_up: patientData.visitType === 'Follow Up',
@@ -1378,8 +1404,8 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       const resolvedHospitalName = appointmentData.hospitalName || null;
       const resolvedPatientId = appointmentData.patient_id || null;
 
-      // Only Master Admin and Sales Lead can record Source and Referral Person
-      const resolvedSource = isRoleMasterOrSales ? (appointmentData.source || 'Other') : (appointmentData.source || 'Other');
+      // Source Rule: When Master Admin or Sales schedules/books an appointment, the system must automatically set the source as: Acquire OPD
+      const resolvedSource = isRoleMasterOrSales ? 'Acquire OPD' : (appointmentData.source || 'Other');
       const resolvedReferralPerson = isRoleMasterOrSales && appointmentData.source === 'Referral'
         ? (appointmentData.referral_person?.trim() || null)
         : null;
@@ -1398,6 +1424,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         visit_type: (appointmentData as any).visit_type || '',
         hospital_id: resolvedHospitalId,
         remarks: activeUsername,
+        followup_date: appointmentData.followup_date || null,
         updated_at: new Date().toISOString(),
         doctor_assessment: {
           assignedDoctorId: resolvedDoctorId,
@@ -1411,7 +1438,12 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           appointment_date: appointmentData.date,
           appointment_time: appointmentData.time,
           source: resolvedSource,
-          referral_person: resolvedReferralPerson
+          referral_person: resolvedReferralPerson,
+          followup_date: appointmentData.followup_date || null,
+          followup_notes: appointmentData.followup_notes || null,
+          followup_history: appointmentData.followup_history || [],
+          notes: appointmentData.notes || null,
+          notes_list: appointmentData.notes_list || []
         }
       };
       const { error } = await supabase.from(APPOINTMENTS_TABLE).insert(dbRecord);
@@ -1444,13 +1476,37 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       const resolvedHospitalName = appointment.hospitalName || null;
       const resolvedPatientId = appointment.patient_id || null;
 
-      const resolvedSource = isRoleMasterOrSales 
-        ? appointment.source 
-        : (existingAppt?.source || 'Other');
+      // Source rule: If booking was scheduled by Master Admin or Sales, source is Acquire OPD and locked.
+      const isOriginalAcquireOpd = existingAppt?.source === 'Acquire OPD' || appointment.source === 'Acquire OPD';
+      const resolvedSource = isOriginalAcquireOpd
+        ? 'Acquire OPD'
+        : (isRoleMasterOrSales 
+            ? (appointment.source || 'Acquire OPD') 
+            : (existingAppt?.source || 'Other'));
       
       const resolvedReferralPerson = isRoleMasterOrSales
         ? (appointment.source === 'Referral' ? (appointment.referral_person?.trim() || null) : null)
         : (existingAppt?.referral_person || null);
+
+      const resolvedFollowupDate = appointment.followup_date !== undefined 
+        ? appointment.followup_date 
+        : (existingAppt?.followup_date || null);
+
+      const resolvedFollowupNotes = appointment.followup_notes !== undefined 
+        ? appointment.followup_notes 
+        : (existingAppt?.followup_notes || null);
+
+      const resolvedFollowupHistory = appointment.followup_history !== undefined 
+        ? appointment.followup_history 
+        : (existingAppt?.followup_history || []);
+
+      const resolvedNotes = appointment.notes !== undefined 
+        ? appointment.notes 
+        : (existingAppt?.notes || null);
+
+      const resolvedNotesList = appointment.notes_list !== undefined 
+        ? appointment.notes_list 
+        : (existingAppt?.notes_list || []);
 
       const updateData: any = {
         name: appointment.name,
@@ -1465,6 +1521,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         visit_type: appointment.visit_type || '',
         hospital_id: resolvedHospitalId,
         remarks: activeUsername,
+        followup_date: resolvedFollowupDate || null,
         updated_at: new Date().toISOString(),
         doctor_assessment: {
           assignedDoctorId: resolvedDoctorId,
@@ -1478,7 +1535,12 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           appointment_date: appointment.date,
           appointment_time: appointment.time,
           source: resolvedSource,
-          referral_person: resolvedReferralPerson
+          referral_person: resolvedReferralPerson,
+          followup_date: resolvedFollowupDate || null,
+          followup_notes: resolvedFollowupNotes || null,
+          followup_history: resolvedFollowupHistory,
+          notes: resolvedNotes || null,
+          notes_list: resolvedNotesList
         }
       };
       const { error } = await supabase.from(APPOINTMENTS_TABLE).update(updateData).eq('id', appointment.id);

@@ -659,7 +659,7 @@ export const MasterScheduling: React.FC = () => {
   const [apptTime, setApptTime] = useState('');
   const [isTimeSelectorOpen, setIsTimeSelectorOpen] = useState(true);
   const acqureOpd = 'OPD'; // Read-only / unchangeable
-  const [source, setSource] = useState('');
+  const [source, setSource] = useState('Acquire OPD');
   const [referralPerson, setReferralPerson] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1062,16 +1062,6 @@ export const MasterScheduling: React.FC = () => {
       }
     }
 
-    if (!source) {
-      setFormError('Source is required. Please select a source.');
-      return;
-    }
-
-    if (source === 'Referral' && !referralPerson.trim()) {
-      setFormError('Referral Person is required when Source is Referral.');
-      return;
-    }
-
     setIsSubmitting(true);
     try {
       const masterUsername = localStorage.getItem('username') || 'Master Admin';
@@ -1124,8 +1114,8 @@ export const MasterScheduling: React.FC = () => {
           bookingType: originalApp?.bookingType || 'Scheduled',
           visit_type: originalApp?.visit_type || acqureOpd,
           condition: condition || Condition.Other,
-          source: source,
-          referral_person: source === 'Referral' ? referralPerson.trim() : null,
+          source: 'Acquire OPD',
+          referral_person: null,
           assignment_type: assignmentType,
           doctor_id: finalDoctorId,
           hospital_id: finalHospitalId,
@@ -1148,8 +1138,8 @@ export const MasterScheduling: React.FC = () => {
           bookingType: 'Scheduled',
           visit_type: acqureOpd,
           condition: condition || Condition.Other,
-          source: source,
-          referral_person: source === 'Referral' ? referralPerson.trim() : null,
+          source: 'Acquire OPD',
+          referral_person: null,
           assignment_type: assignmentType,
           doctor_id: finalDoctorId,
           hospital_id: finalHospitalId,
@@ -2443,49 +2433,23 @@ export const MasterScheduling: React.FC = () => {
                       )}
                     </div>
 
-                    {/* Source */}
+                    {/* Source: Automatically set as Acquire OPD for Master Admin bookings */}
                     <div>
-                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">
-                        Source <span className="text-red-500">*</span>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest flex items-center justify-between">
+                        <span>Source</span>
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-hospital-700 bg-hospital-50 px-2 py-0.5 rounded-full border border-hospital-200">
+                          <Lock className="w-2.5 h-2.5" /> Auto: Acquire OPD
+                        </span>
                       </label>
-                      <select 
-                        required
-                        className="w-full border-b-2 border-slate-100 p-2 text-sm font-bold bg-white outline-none focus:border-hospital-500" 
-                        value={source} 
-                        onChange={e => {
-                          const val = e.target.value;
-                          setSource(val);
-                          if (val !== 'Referral') {
-                            setReferralPerson('');
-                          }
-                        }}
-                      >
-                        <option value="">Select Source...</option>
-                        <option value="Google">Google</option>
-                        <option value="Instagram">Instagram</option>
-                        <option value="Walking">Walking</option>
-                        <option value="Relatives / Friend">Relatives / Friend</option>
-                        <option value="Billboard">Billboard</option>
-                        <option value="Referral">Referral</option>
-                      </select>
+                      <input 
+                        type="text" 
+                        readOnly 
+                        disabled
+                        value="Acquire OPD" 
+                        className="w-full border-b-2 border-slate-200 p-2 text-sm font-bold bg-slate-100 text-slate-700 outline-none cursor-not-allowed select-none rounded-t" 
+                        title="Bookings scheduled by Master Admin automatically set Source to Acquire OPD"
+                      />
                     </div>
-
-                    {/* Dynamic Referral Person when Source = Referral */}
-                    {source === 'Referral' && (
-                      <div className="md:col-span-2 animate-in slide-in-from-top-2 duration-300">
-                        <label className="block text-[10px] font-black uppercase text-hospital-600 mb-2 tracking-widest">
-                          Referral Person <span className="text-red-500">*</span>
-                        </label>
-                        <input 
-                          required 
-                          type="text"
-                          className="w-full text-base font-bold border-b-2 border-hospital-200 p-2 outline-none focus:border-hospital-500 placeholder-slate-400 bg-white" 
-                          value={referralPerson} 
-                          onChange={e => setReferralPerson(e.target.value)} 
-                          placeholder="Enter referral person name" 
-                        />
-                      </div>
-                    )}
                   </div>
                 </div>
 

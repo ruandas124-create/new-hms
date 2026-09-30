@@ -779,9 +779,11 @@ export const DoctorDashboard: React.FC = () => {
                       <td className="p-4 text-slate-600">
                         {appt.hospitalName || 'Consulting Clinic'}
                       </td>
-                      <td className="p-4 text-slate-500">
-                        {appt.source}
-                        {appt.referral_person && ` (${appt.referral_person})`}
+                      <td className="p-4 whitespace-nowrap">
+                        <span className="px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200 bg-slate-100 text-slate-700">
+                          {appt.source || 'Other'}
+                        </span>
+                        {appt.referral_person && <span className="text-[10px] text-slate-400 ml-1">({appt.referral_person})</span>}
                       </td>
                       <td className="p-4">
                         <span className="px-2.5 py-1 rounded-md text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">

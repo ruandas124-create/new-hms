@@ -175,6 +175,8 @@ export interface Patient {
   // Counseling Sub-table Native Fields
   surgery_date?: string;
   followup_date?: string;
+  followup_notes?: string;
+  followup_history?: { id: string; date: string; status: string; notes?: string; createdAt: string; author: string }[];
   surgery_lost_date?: string;
   completed_surgery?: string;
   
@@ -282,7 +284,7 @@ export interface AnalyticsAccountHierarchy {
   appointmentCount: number;
 }
 
-export const HOSPITAL_LOGO_URL = "https://aeghhbrvlefahqdbnudc.supabase.co/storage/v1/object/public/IMG/ChatGPT%20Image%20Sep%2028,%202026,%2001_57_44%20PM.png";
+export const HOSPITAL_LOGO_URL = "https://aeghhbrvlefahqdbnudc.supabase.co/storage/v1/object/public/IMG/Untitled_design__3_-removebg-preview.png";
 
 export interface DashboardStats {
   totalPatients: number;
