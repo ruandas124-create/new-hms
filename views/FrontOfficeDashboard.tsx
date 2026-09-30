@@ -61,7 +61,7 @@ const getHistoryStatus = (p: Patient): string => {
   if (p.doctorAssessment) {
     if (p.doctorAssessment.quickCode === SurgeonCode.S1) return 'Package Proposal';
     if (p.doctorAssessment.quickCode === SurgeonCode.M1) return 'Medication Done';
-    return 'Doctor Done';
+    // Removed automatic 'Doctor Done' status
   }
 
   // Priority 3: Specific manual status from Front Office (if updated via Edit)
@@ -179,8 +179,8 @@ export const FrontOfficeDashboard: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [opdStartDate, setOpdStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [opdEndDate, setOpdEndDate] = useState(new Date().toISOString().split('T')[0]);
-  const [apptStartDate, setApptStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [apptEndDate, setApptEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [apptStartDate, setApptStartDate] = useState('');
+  const [apptEndDate, setApptEndDate] = useState('');
   const [opdDoctorFilter, setOpdDoctorFilter] = useState('ALL');
 
   const [historyFilters, setHistoryFilters] = useState({
@@ -477,11 +477,19 @@ export const FrontOfficeDashboard: React.FC = () => {
   }).sort((a, b) => (b.entry_date || '').localeCompare(a.entry_date || ''));
 
   const filteredAppointments = appointments.filter(a => { 
-    const sTerm = searchTerm.toLowerCase(); 
+    const sTerm = searchTerm.toLowerCase().trim(); 
     const aDate = a.date || '';
     if (apptStartDate && aDate < apptStartDate) return false;
     if (apptEndDate && aDate > apptEndDate) return false;
-    return (a.name.toLowerCase().includes(sTerm) || a.mobile.includes(sTerm)); 
+    return !sTerm || 
+      a.name.toLowerCase().includes(sTerm) || 
+      a.mobile.includes(sTerm) ||
+      (a.id && a.id.toLowerCase().includes(sTerm)) ||
+      (a.source && a.source.toLowerCase().includes(sTerm)) ||
+      (a.condition && a.condition.toLowerCase().includes(sTerm)) ||
+      (a.status && a.status.toLowerCase().includes(sTerm)) ||
+      (a.assignedDoctorName && a.assignedDoctorName.toLowerCase().includes(sTerm)) ||
+      (a.hospitalName && a.hospitalName.toLowerCase().includes(sTerm)); 
   }).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 
   const combinedHistoryData = [
@@ -493,7 +501,7 @@ export const FrontOfficeDashboard: React.FC = () => {
       displayStatus: getHistoryStatus(p) 
     })),
     ...appointments.map(a => ({ 
-      id: '---', 
+      id: a.id, 
       name: a.name, 
       mobile: a.mobile, 
       condition: a.condition, 
@@ -505,34 +513,58 @@ export const FrontOfficeDashboard: React.FC = () => {
       recordType: 'Appointment' as const, 
       displayDate: a.date + 'T' + (a.time || '00:00') + ':00', 
       displayEntryDate: a.date, 
-      displayStatus: a.status || (a.visit_type === 'Revisit' ? 'Revisit' : a.bookingType),
+      displayStatus: a.status || (a.visit_type === 'Revisit' ? 'Revisit' : a.bookingType || 'Scheduled'),
       age: undefined as any,
       gender: undefined as any,
       visit_type: a.visit_type || '',
-      doctorAssessment: undefined as any
+      hospital_id: a.hospital_id,
+      hospitalName: a.hospitalName,
+      assignedDoctorId: a.assignedDoctorId,
+      assignedDoctorName: a.assignedDoctorName,
+      doctorAssessment: (a.assignedDoctorId || a.assignedDoctorName) ? {
+        assignedDoctorId: a.assignedDoctorId,
+        assignedDoctorName: a.assignedDoctorName
+      } : undefined
     }))
   ].filter(item => {
-    const sTerm = searchTerm.toLowerCase();
-    const matches = item.name.toLowerCase().includes(sTerm) || 
-                    (item.id && item.id.toLowerCase().includes(sTerm)) || 
-                    item.mobile.includes(sTerm) ||
-                    (item.doctorAssessment?.assignedDoctorName && item.doctorAssessment.assignedDoctorName.toLowerCase().includes(sTerm));
+    const sTerm = searchTerm.toLowerCase().trim();
+    const hospName = ((item as any).hospitalName || (item as any).doctorAssessment?.hospitalName || '');
+    const assignedDocName = ((item as any).assignedDoctorName || (item as any).doctorAssessment?.assignedDoctorName || '');
+
+    const matches = !sTerm || 
+      item.name.toLowerCase().includes(sTerm) || 
+      (item.id && item.id.toLowerCase().includes(sTerm)) || 
+      item.mobile.includes(sTerm) ||
+      (item.source && item.source.toLowerCase().includes(sTerm)) ||
+      (item.condition && item.condition.toLowerCase().includes(sTerm)) ||
+      (item.displayStatus && item.displayStatus.toLowerCase().includes(sTerm)) ||
+      (item.displayEntryDate && item.displayEntryDate.includes(sTerm)) ||
+      hospName.toLowerCase().includes(sTerm) ||
+      assignedDocName.toLowerCase().includes(sTerm);
+
     if (!matches) return false;
     if (activeTab === 'GLOBAL_SEARCH') {
       if (historyFilters.type !== 'ALL' && item.recordType !== historyFilters.type) return false;
-      if (historyFilters.startDate || historyFilters.endDate) { const itemDate = item.displayEntryDate || ''; if (historyFilters.startDate && itemDate < historyFilters.startDate) return false; if (historyFilters.endDate && itemDate > historyFilters.endDate) return false; }
+      if (historyFilters.startDate || historyFilters.endDate) { 
+        const itemDate = item.displayEntryDate || ''; 
+        if (historyFilters.startDate && itemDate < historyFilters.startDate) return false; 
+        if (historyFilters.endDate && itemDate > historyFilters.endDate) return false; 
+      }
       if (historyFilters.source && getSourceDisplay(item.source) !== historyFilters.source) return false;
       if (historyFilters.visitType !== 'ALL' && calculateVisitType(item, patients) !== historyFilters.visitType) return false;
       if (historyFilters.status && item.displayStatus !== historyFilters.status) return false;
       if (historyFilters.condition && item.condition !== historyFilters.condition) return false;
-      if (historyFilters.doctor !== 'ALL' && item.doctorAssessment?.assignedDoctorId !== historyFilters.doctor) return false;
+      if (historyFilters.doctor !== 'ALL') {
+        const docId = (item as any).doctorAssessment?.assignedDoctorId || (item as any).assignedDoctorId;
+        if (docId !== historyFilters.doctor) return false;
+      }
     }
     return true;
   }).sort((a, b) => new Date(b.displayDate).getTime() - new Date(a.displayDate).getTime());
 
   const handleExportFilteredCSV = () => {
     const headers = ['Type', 'File ID', 'Date', 'Name', 'Age', 'Gender', 'Mobile', 'Source', 'Condition', 'Visit Type', 'Status'];
-    const rows = combinedHistoryData.map(item => [item.recordType, item.id === '---' ? 'N/A' : item.id.split('_V')[0], formatDate(item.displayEntryDate), item.name, item.age || '', item.gender || '', item.mobile, item.source, item.condition, calculateVisitType(item, patients), item.displayStatus].map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','));
+    const rows = combinedHistoryData.map(item => [item.recordType, (item.id || 'N/A').split('_V')[0], formatDate(item.displayEntryDate), item.name, item.age || '', item.gender || '', item.mobile, item.source, item.condition, calculateVisitType(item, patients), item.displayStatus].map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','));
     const csvContent = [headers.join(','), ...rows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -868,7 +900,17 @@ export const FrontOfficeDashboard: React.FC = () => {
                 <tr key={item.id + (item.updated_at || item.registeredAt || item.displayDate)} className="hover:bg-slate-50/50 transition-colors">
                   <td className="p-5 whitespace-nowrap">
                     {activeTab === 'APPOINTMENTS' ? (
-                      <div className="font-mono font-black text-slate-500 flex items-center gap-2"><Clock className="w-4 h-4 text-hospital-400" /> {item.time}</div>
+                      <div className="flex flex-col">
+                        <div className="font-mono font-black text-slate-800 flex items-center gap-1.5 text-xs">
+                          <Clock className="w-3.5 h-3.5 text-hospital-600" /> {item.time || '10:00'}
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase mt-1 flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-slate-400" /> {formatDate(item.date || item.entry_date)}
+                        </span>
+                        <span className="text-[9px] font-mono text-slate-400 font-bold mt-0.5">
+                          {item.id}
+                        </span>
+                      </div>
                     ) : (
                       <div className="flex flex-col">
                         <button 
@@ -937,6 +979,11 @@ export const FrontOfficeDashboard: React.FC = () => {
                         <span className="font-bold text-xs text-slate-700 leading-tight">
                           {item.doctorAssessment?.assignedDoctorName || item.assignedDoctorName || 'Not Assigned'}
                         </span>
+                        {(item.hospitalName || item.doctorAssessment?.hospitalName) && (
+                          <span className="text-[9px] text-slate-400 font-bold mt-0.5">
+                            {item.hospitalName || item.doctorAssessment?.hospitalName}
+                          </span>
+                        )}
                         {item.assignedDoctorId && (
                           <span className="text-[7px] text-slate-400 font-black uppercase tracking-tighter mt-0.5">APPTS BOOKED</span>
                         )}
@@ -957,7 +1004,7 @@ export const FrontOfficeDashboard: React.FC = () => {
                         <button onClick={() => handleRevisitClick(item)} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-[9px] font-black uppercase hover:bg-indigo-100 transition-all flex items-center gap-1.5 shadow-sm border border-indigo-100"><History className="w-3.5 h-3.5" /> Revisit</button>
                       )}
                       {activeTab === 'APPOINTMENTS' && (
-                        <button onClick={() => handleArrived(item)} className="px-5 py-2.5 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-600 shadow-md transition-all flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5" /> Arrived</button>
+                        <button onClick={() => handleArrived(item)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase shadow-sm transition-all flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5" /> Arrived & Register</button>
                       )}
                       <button onClick={() => handleEdit(item)} className="p-2 text-slate-300 hover:text-blue-600 transition-colors"><Pencil className="w-4 h-4" /></button>
                       {item.id !== '---' && activeTab === 'APPOINTMENTS' && (

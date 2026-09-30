@@ -43,7 +43,6 @@ const getStatusLabel = (p: Patient): string => {
   if (p.doctorAssessment) {
     if (p.doctorAssessment.quickCode === SurgeonCode.S1) return 'Package Proposal';
     if (p.doctorAssessment.quickCode === SurgeonCode.M1) return 'Medication Done';
-    return 'Doctor Done';
   }
   
   // Registration stage status

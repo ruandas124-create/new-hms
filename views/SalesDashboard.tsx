@@ -266,6 +266,7 @@ export const SalesDashboard: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [dateFilter, setDateFilter] = useState<string>(''); // Date filter state
   const [selectedHospitalFilter, setSelectedHospitalFilter] = useState<string>('ALL');
   const [selectedDoctorFilter, setSelectedDoctorFilter] = useState<string>('ALL');
   const [statusUpdateSuccessMessage, setStatusUpdateSuccessMessage] = useState<string | null>(null);
@@ -374,7 +375,7 @@ export const SalesDashboard: React.FC = () => {
         } else if (matchingPatient.doctorAssessment) {
           if (matchingPatient.doctorAssessment.quickCode === SurgeonCode.S1) resolvedStatus = 'Package Proposal';
           else if (matchingPatient.doctorAssessment.quickCode === SurgeonCode.M1) resolvedStatus = 'Medication Done';
-          else resolvedStatus = 'Doctor Done';
+          // Removed automatic 'Doctor Done' status
         } else if (matchingPatient.status && matchingPatient.status !== 'Scheduled') {
           resolvedStatus = matchingPatient.status;
         }
@@ -432,7 +433,7 @@ export const SalesDashboard: React.FC = () => {
       } else if (p.doctorAssessment) {
         if (p.doctorAssessment.quickCode === SurgeonCode.S1) pStatus = 'Package Proposal';
         else if (p.doctorAssessment.quickCode === SurgeonCode.M1) pStatus = 'Medication Done';
-        else pStatus = 'Doctor Done';
+        // Never automatically set Doctor Done
       }
 
       list.push({
@@ -521,10 +522,11 @@ export const SalesDashboard: React.FC = () => {
 
       const matchesHospital = selectedHospitalFilter === 'ALL' || booking.assignedHospitalId === selectedHospitalFilter;
       const matchesDoctor = selectedDoctorFilter === 'ALL' || booking.assignedDoctorId === selectedDoctorFilter;
+      const matchesDate = !dateFilter || booking.appointmentDate === dateFilter;
 
-      return matchesSearch && matchesStatus && matchesHospital && matchesDoctor;
+      return matchesSearch && matchesStatus && matchesHospital && matchesDoctor && matchesDate;
     });
-  }, [patientBookings, searchTerm, statusFilter, selectedHospitalFilter, selectedDoctorFilter]);
+  }, [patientBookings, searchTerm, statusFilter, selectedHospitalFilter, selectedDoctorFilter, dateFilter]);
 
   // Metric counts
   const totalBookingsCount = patientBookings.length;
@@ -1222,6 +1224,24 @@ export const SalesDashboard: React.FC = () => {
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
               </select>
+
+              <div className="relative">
+                <input
+                  type="date"
+                  value={dateFilter}
+                  onChange={e => setDateFilter(e.target.value)}
+                  className="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500 shadow-xs"
+                  title="Filter by appointment date"
+                />
+                {dateFilter && (
+                   <button 
+                     onClick={() => setDateFilter('')}
+                     className="absolute right-2 top-2.5 text-slate-400 hover:text-rose-500"
+                   >
+                     <X className="w-3 h-3" />
+                   </button>
+                )}
+              </div>
             </div>
           </div>
 

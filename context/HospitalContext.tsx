@@ -496,10 +496,13 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       );
     }
     if (currentTenantId) {
-      return allAppointments.filter(a => a.hospital_id === currentTenantId);
+      return allAppointments.filter(a => 
+        a.hospital_id === currentTenantId ||
+        (a.assignedDoctorId && allStaffUsers.find(u => u.id === a.assignedDoctorId)?.hospital_id === currentTenantId)
+      );
     }
     return allAppointments;
-  }, [allAppointments, currentUserRole, selectedTenantFilter, currentTenantId, currentDoctorId, currentUserStaff]);
+  }, [allAppointments, currentUserRole, selectedTenantFilter, currentTenantId, currentDoctorId, currentUserStaff, allStaffUsers]);
 
   const staffUsers = useMemo(() => {
     if (currentUserRole === 'MASTER' || currentUserRole === 'SALES') {
@@ -1021,53 +1024,72 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       const metadataRows = combinedApptRows.filter((r: any) => r.id && r.id.startsWith('doctor_metadata_'));
 
+      // 1. SCHEDULED / APPOINTMENT LEADS (Scheduled Roster)
+      // Any record that has booking_status as 'Scheduled' or 'Follow Up' and has not arrived/registered
+      const appointmentLeads = combinedApptRows
+        .filter((r: any) => {
+          if (!r.id || r.id.startsWith('doctor_metadata_')) return false;
+          // Must be an active scheduled / follow-up booking
+          if (r.booking_status === 'Scheduled' || r.booking_status === 'Follow Up') return true;
+          // Or unarrived appointment with booking_time
+          if (!r.booking_status && r.booking_time && !r.arrival_time) return true;
+          return false;
+        })
+        .map((r: any) => {
+          const assignedDoc = (staffData || []).find((u: any) => u.id === (r.doctor_assessment?.assignedDoctorId || r.doctor_assessment?.doctor_id));
+          const resolvedHospId = r.hospital_id || r.doctor_assessment?.hospital_id || assignedDoc?.hospital_id || '';
+          const resolvedHospName = r.doctor_assessment?.hospitalName || (staffData || []).find((u: any) => u.id === resolvedHospId)?.name || '';
+
+          return {
+            id: r.id || '',
+            hospital_id: resolvedHospId,
+            name: r.name || '',
+            source: r.source || r.doctor_assessment?.source || '',
+            sourceDoctorName: r.source_doctor_name || '',
+            referral_person: r.doctor_assessment?.referral_person || (r.source === 'Referral' ? r.source_doctor_name : null) || null,
+            condition: (r.condition || Condition.Other) as Condition,
+            mobile: r.mobile || '',
+            date: r.entry_date || '',
+            time: r.booking_time || '',
+            status: r.booking_status || 'Scheduled',
+            bookingType: r.booking_status === 'Follow Up' ? 'Follow Up' : 'Scheduled',
+            visit_type: r.visit_type || '',
+            createdAt: r.created_at || new Date().toISOString(),
+            assignedDoctorId: r.doctor_assessment?.assignedDoctorId || r.doctor_assessment?.doctor_id || undefined,
+            assignedDoctorName: r.doctor_assessment?.assignedDoctorName || assignedDoc?.name || undefined,
+            username: r.doctor_assessment?.username || r.remarks || 'Master Admin',
+            assignment_type: r.doctor_assessment?.assignment_type || (r.doctor_assessment?.assignedDoctorId ? 'doctor' : 'hospital'),
+            doctor_id: r.doctor_assessment?.doctor_id || r.doctor_assessment?.assignedDoctorId || null,
+            patient_id: r.doctor_assessment?.patient_id || null,
+            hospitalName: resolvedHospName,
+            followup_date: r.followup_date || r.doctor_assessment?.followup_date || '',
+            followup_notes: r.doctor_assessment?.followup_notes || '',
+            followup_history: r.doctor_assessment?.followup_history || [],
+            notes: r.doctor_assessment?.notes || r.notes || '',
+            notes_list: r.doctor_assessment?.notes_list || []
+          };
+        });
+
+      setAllAppointments(appointmentLeads as Appointment[]);
+
+      // 2. REGISTERED OPD PATIENTS (OPD Registry)
+      // Only patients who have arrived, registered in OPD, or proceeded through clinical stages
       const consolidatedPatients = combinedApptRows
-        .filter((r: any) => 
-          (r.booking_status === 'Arrived' || 
-          (r.doctor_assessment !== null && (r.doctor_assessment.quickCode !== undefined || r.doctor_assessment.notes !== undefined)) || 
-          r.package_proposal !== null) &&
-          !(r.id && r.id.startsWith('doctor_metadata_'))
-        )
+        .filter((r: any) => {
+          if (!r.id || r.id.startsWith('doctor_metadata_')) return false;
+          // Never include scheduled/unregistered appointments in OPD Registry
+          if (r.booking_status === 'Scheduled' || r.booking_status === 'Follow Up') return false;
+          if (!r.booking_status && r.booking_time && !r.arrival_time) return false;
+
+          return r.booking_status === 'Arrived' || 
+                 r.booking_status === 'Revisit' ||
+                 r.package_proposal !== null ||
+                 (r.doctor_assessment !== null && r.doctor_assessment.quickCode !== undefined) ||
+                 Boolean(r.arrival_time);
+        })
         .map((row: any) => mapRowToPatient(row));
       
       setAllPatients(consolidatedPatients);
-      
-      const appointmentLeads = combinedApptRows
-        .filter((r: any) => 
-          ['Scheduled', 'Follow Up'].includes(r.booking_status) && 
-          (r.doctor_assessment === null || (r.doctor_assessment.quickCode === undefined && r.doctor_assessment.notes === undefined)) &&
-          r.package_proposal === null &&
-          !(r.id && r.id.startsWith('doctor_metadata_'))
-        )
-        .map((r: any) => ({
-          id: r.id || '',
-          hospital_id: r.doctor_assessment?.hospital_id || r.hospital_id || '',
-          name: r.name || '',
-          source: r.source || r.doctor_assessment?.source || '',
-          sourceDoctorName: r.source_doctor_name || '',
-          referral_person: r.doctor_assessment?.referral_person || (r.source === 'Referral' ? r.source_doctor_name : null) || null,
-          condition: (r.condition || Condition.Other) as Condition,
-          mobile: r.mobile || '',
-          date: r.entry_date || '',
-          time: r.booking_time || '',
-          status: r.booking_status || 'Scheduled',
-          bookingType: r.booking_status === 'Follow Up' ? 'Follow Up' : 'Scheduled',
-          visit_type: r.visit_type || '',
-          createdAt: r.created_at || new Date().toISOString(),
-          assignedDoctorId: r.doctor_assessment?.assignedDoctorId || r.doctor_assessment?.doctor_id || undefined,
-          assignedDoctorName: r.doctor_assessment?.assignedDoctorName || undefined,
-          username: r.doctor_assessment?.username || r.remarks || 'Master Admin',
-          assignment_type: r.doctor_assessment?.assignment_type || (r.doctor_assessment?.assignedDoctorId ? 'doctor' : 'hospital'),
-          doctor_id: r.doctor_assessment?.doctor_id || r.doctor_assessment?.assignedDoctorId || null,
-          patient_id: r.doctor_assessment?.patient_id || null,
-          hospitalName: r.doctor_assessment?.hospitalName || undefined,
-          followup_date: r.followup_date || r.doctor_assessment?.followup_date || '',
-          followup_notes: r.doctor_assessment?.followup_notes || '',
-          followup_history: r.doctor_assessment?.followup_history || [],
-          notes: r.doctor_assessment?.notes || r.notes || '',
-          notes_list: r.doctor_assessment?.notes_list || []
-        }));
-      setAllAppointments(appointmentLeads as Appointment[]);
 
       const staffMap = new Map<string, any>();
       DEFAULT_STAFF_SEEDS.forEach(s => staffMap.set(s.id, s));
@@ -1305,15 +1327,26 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         const assignedDocId = patientData.doctorAssessment?.assignedDoctorId || (patientData as any).assignedDoctorId || originalAppt?.assignedDoctorId;
         const assignedDocName = patientData.doctorAssessment?.assignedDoctorName || (patientData as any).assignedDoctorName || originalAppt?.assignedDoctorName;
 
-        const finalAssessment = (patientData.doctorAssessment || assignedDocId) ? {
+        const targetId = patientData.id?.trim() || appointmentId;
+
+        const finalAssessment = {
+          ...((originalAppt as any)?.doctor_assessment || {}),
           ...(patientData.doctorAssessment || {}),
           assignedDoctorId: assignedDocId || undefined,
           assignedDoctorName: assignedDocName || undefined,
-          source: resolvedSource
-        } : null;
+          source: resolvedSource,
+          original_appointment_id: appointmentId,
+          scheduled_date: originalAppt?.date,
+          scheduled_time: originalAppt?.time,
+          scheduled_by: (originalAppt as any)?.username,
+          followup_notes: (patientData as any).followup_notes || (originalAppt as any)?.followup_notes || null,
+          followup_history: (patientData as any).followup_history || (originalAppt as any)?.followup_history || [],
+          notes: (patientData as any).notes || (originalAppt as any)?.notes || null,
+          notes_list: (patientData as any).notes_list || (originalAppt as any)?.notes_list || []
+        };
 
         const dbRecord = {
-            id: patientData.id,
+            id: targetId,
             name: patientData.name,
             dob: nullify(patientData.dob),
             gender: patientData.gender,
@@ -1321,10 +1354,10 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
             mobile: patientData.mobile,
             occupation: patientData.occupation,
             source: resolvedSource,
-            source_doctor_name: patientData.sourceDoctorName,
+            source_doctor_name: patientData.sourceDoctorName || originalAppt?.sourceDoctorName,
             condition: patientData.condition,
             is_follow_up: patientData.visitType === 'Follow Up',
-            visit_type: patientData.visit_type || '',
+            visit_type: patientData.visit_type || (originalAppt as any)?.visit_type || 'New',
             has_insurance: patientData.hasInsurance,
             insurance_name: patientData.insuranceName,
             booking_status: 'Arrived',
@@ -1337,15 +1370,26 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
             updated_at: new Date().toISOString()
         };
         
-        const { error: insertError } = await supabase.from(APPOINTMENTS_TABLE).insert(dbRecord);
-        if (insertError) throw insertError;
-        const { error: deleteError } = await supabase.from(APPOINTMENTS_TABLE).delete().eq('id', appointmentId);
+        if (targetId === appointmentId) {
+          const { error: updateError } = await supabase.from(APPOINTMENTS_TABLE).update(dbRecord).eq('id', appointmentId);
+          if (updateError) throw updateError;
+        } else {
+          const { error: insertError } = await supabase.from(APPOINTMENTS_TABLE).insert(dbRecord);
+          if (insertError) throw insertError;
+          await supabase.from(APPOINTMENTS_TABLE).delete().eq('id', appointmentId);
+          try {
+            await supabase.from('lead_notes').update({ lead_id: targetId }).eq('lead_id', appointmentId);
+          } catch (e) {
+            console.warn('Could not re-link lead notes:', e);
+          }
+        }
         
         syncToSheets({ ...patientData, registeredAt: dbRecord.updated_at, status: 'Arrived', doctorAssessment: finalAssessment as any });
         await refreshData();
         setSaveStatus('saved');
         setLastSavedAt(new Date());
     } catch (err) {
+        console.error('convertAppointment error:', err);
         setSaveStatus('error');
     }
   };
