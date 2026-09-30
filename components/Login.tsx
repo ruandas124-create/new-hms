@@ -112,7 +112,7 @@ export const Login: React.FC = () => {
           <div className="flex items-center justify-center">
             <img 
               src={HOSPITAL_LOGO_URL} 
-              alt="Patient Scheduling Softwer" 
+              alt="Patient Scheduling Software" 
               className="h-16 sm:h-20 w-auto object-contain max-w-[260px] sm:max-w-[300px]"
               onError={(e) => {
                 (e.currentTarget as HTMLElement).style.display = 'none';
@@ -121,7 +121,7 @@ export const Login: React.FC = () => {
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-              Patient Scheduling Softwer
+              Patient Scheduling Software
             </h1>
           </div>
         </div>

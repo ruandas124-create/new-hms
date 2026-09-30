@@ -249,7 +249,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           <div className="flex items-center gap-2.5 truncate min-w-0">
             <img 
               src={HOSPITAL_LOGO_URL} 
-              alt="Patient Scheduling Softwer" 
+              alt="Patient Scheduling Software" 
               className="h-8 max-w-[130px] sm:max-w-[160px] w-auto object-contain shrink-0"
               onError={(e) => {
                 // If remote logo fails, hide and show clean text mark
@@ -257,7 +257,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               }}
             />
             <span className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-tight truncate hidden xs:inline">
-              Patient Scheduling Softwer
+              Patient Scheduling Software
             </span>
           </div>
         </div>
@@ -297,7 +297,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <div className="shrink-0 flex items-center justify-center">
                 <img 
                   src={HOSPITAL_LOGO_URL} 
-                  alt="Patient Scheduling Softwer" 
+                  alt="Patient Scheduling Software" 
                   className="h-8 w-auto object-contain max-w-[110px]"
                   onError={(e) => {
                     (e.currentTarget as HTMLElement).style.display = 'none';
@@ -306,7 +306,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-black text-white tracking-wide truncate">
-                  Patient Scheduling Softwer
+                  Patient Scheduling Software
                 </div>
               </div>
             </div>
@@ -463,7 +463,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             )}
             <div>
               <div className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <span>Patient Scheduling Softwer</span>
+                <span>Patient Scheduling Software</span>
                 <span>/</span>
                 <span className="text-hospital-600 font-extrabold">{activeItemLabel}</span>
               </div>
