@@ -252,6 +252,15 @@ export interface BookingRecord {
   followupHistory?: { id: string; date: string; status: string; notes?: string; createdAt: string; author: string }[];
   assignmentType?: 'doctor' | 'hospital';
 }
+ 
+// Helper to get today's date in local YYYY-MM-DD format
+const getTodayLocalDate = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export const SalesDashboard: React.FC = () => {
   const { 
@@ -266,7 +275,7 @@ export const SalesDashboard: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [dateFilter, setDateFilter] = useState<string>(''); // Date filter state
+  const [dateFilter, setDateFilter] = useState<string>(() => getTodayLocalDate()); // Default to current local date
   const [selectedHospitalFilter, setSelectedHospitalFilter] = useState<string>('ALL');
   const [selectedDoctorFilter, setSelectedDoctorFilter] = useState<string>('ALL');
   const [statusUpdateSuccessMessage, setStatusUpdateSuccessMessage] = useState<string | null>(null);
@@ -522,7 +531,8 @@ export const SalesDashboard: React.FC = () => {
 
       const matchesHospital = selectedHospitalFilter === 'ALL' || booking.assignedHospitalId === selectedHospitalFilter;
       const matchesDoctor = selectedDoctorFilter === 'ALL' || booking.assignedDoctorId === selectedDoctorFilter;
-      const matchesDate = !dateFilter || booking.appointmentDate === dateFilter;
+      const bookingDate = (booking.appointmentDate || '').split('T')[0].trim();
+      const matchesDate = !dateFilter || bookingDate === dateFilter;
 
       return matchesSearch && matchesStatus && matchesHospital && matchesDoctor && matchesDate;
     });
@@ -1225,21 +1235,35 @@ export const SalesDashboard: React.FC = () => {
                 ))}
               </select>
 
-              <div className="relative">
-                <input
-                  type="date"
-                  value={dateFilter}
-                  onChange={e => setDateFilter(e.target.value)}
-                  className="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500 shadow-xs"
-                  title="Filter by appointment date"
-                />
-                {dateFilter && (
-                   <button 
-                     onClick={() => setDateFilter('')}
-                     className="absolute right-2 top-2.5 text-slate-400 hover:text-rose-500"
-                   >
-                     <X className="w-3 h-3" />
-                   </button>
+              <div className="flex items-center gap-1.5">
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={dateFilter}
+                    onChange={e => setDateFilter(e.target.value)}
+                    className="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500 shadow-xs"
+                    title="Filter by appointment date"
+                  />
+                  {dateFilter && (
+                     <button 
+                       type="button"
+                       onClick={() => setDateFilter('')}
+                       className="absolute right-2 top-2.5 text-slate-400 hover:text-rose-500 cursor-pointer"
+                       title="Clear date filter to show all dates"
+                     >
+                       <X className="w-3.5 h-3.5" />
+                     </button>
+                  )}
+                </div>
+                {dateFilter !== getTodayLocalDate() && (
+                  <button
+                    type="button"
+                    onClick={() => setDateFilter(getTodayLocalDate())}
+                    className="px-2.5 py-2.5 text-xs font-bold text-slate-600 hover:text-rose-600 bg-white border border-slate-200 hover:border-rose-300 rounded-xl shadow-xs transition-colors cursor-pointer"
+                    title="Reset date filter to current date"
+                  >
+                    Today
+                  </button>
                 )}
               </div>
             </div>
