@@ -60,6 +60,17 @@ const CHART_COLORS = [
 
 const getSourceDisplay = (source: string | undefined): string => {
   if (!source) return 'Others';
+  const clean = source.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (
+    clean === 'acquire opd' || 
+    clean === 'acqure opd' || 
+    clean === 'acquire_opd' || 
+    clean === 'acqure_opd' || 
+    clean === 'acquireopd' || 
+    clean === 'acqureopd'
+  ) {
+    return 'Acquire OPD';
+  }
   if (source.startsWith('Other: ')) return 'Others';
   return SOURCE_DISPLAY_MAP[source] || source;
 };

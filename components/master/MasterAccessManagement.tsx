@@ -53,6 +53,7 @@ export const MasterAccessManagement: React.FC = () => {
   const [showModalPassword, setShowModalPassword] = useState(false);
   const [showTeamModalPassword, setShowTeamModalPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
 
   // Main list accounts (Hospitals and Sales)
@@ -236,9 +237,18 @@ export const MasterAccessManagement: React.FC = () => {
   };
 
   const handleToggleAccess = async (user: StaffUser) => {
-    await updateStaff(user.id, { 
-      accessStatus: user.accessStatus === 'Active' ? 'Revoked' : 'Active' 
-    });
+    if (togglingUserId) return;
+    setTogglingUserId(user.id);
+    try {
+      await updateStaff(user.id, { 
+        accessStatus: user.accessStatus === 'Active' ? 'Revoked' : 'Active' 
+      });
+    } catch (err) {
+      console.error('Failed to update access status:', err);
+      alert('Failed to update access status. Please try again.');
+    } finally {
+      setTogglingUserId(null);
+    }
   };
 
   return (
@@ -425,10 +435,10 @@ export const MasterAccessManagement: React.FC = () => {
                   type="submit"
                   form="hospital-access-form"
                   disabled={isSubmitting}
-                  className="px-6 py-2.5 text-xs sm:text-sm font-extrabold text-white rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 cursor-pointer"
+                  className="px-6 py-2.5 text-xs sm:text-sm font-extrabold text-white rounded-xl transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 cursor-pointer"
                 >
                   {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Grant Hospital Access
+                  {isSubmitting ? 'Granting Access...' : 'Grant Hospital Access'}
                 </button>
               </div>
             </div>
@@ -717,13 +727,13 @@ export const MasterAccessManagement: React.FC = () => {
                       <button
                         type="submit"
                         disabled={isSubmitting}
-                        className={`px-5 py-2 text-xs font-extrabold text-white rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer ${
+                        className={`px-5 py-2 text-xs font-extrabold text-white rounded-xl transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
                           internalFormType === 'Doctor' ? 'bg-emerald-600 hover:bg-emerald-700' :
                           internalFormType === 'FrontOffice' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-purple-600 hover:bg-purple-700'
                         }`}
                       >
                         {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                        Grant {internalFormType === 'Doctor' ? 'Doctor' : internalFormType === 'FrontOffice' ? 'Front Office' : 'Package'} Access
+                        {isSubmitting ? 'Granting Access...' : `Grant ${internalFormType === 'Doctor' ? 'Doctor' : internalFormType === 'FrontOffice' ? 'Front Office' : 'Package'} Access`}
                       </button>
                     </div>
                   </form>
@@ -817,14 +827,16 @@ export const MasterAccessManagement: React.FC = () => {
                             </td>
                             <td className="py-2.5 px-4 text-right">
                               <button
+                                disabled={togglingUserId === member.id}
                                 onClick={() => handleToggleAccess(member)}
-                                className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                                className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 ${
                                   member.accessStatus === 'Active' 
                                     ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200'
                                     : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200'
                                 }`}
                               >
-                                {member.accessStatus === 'Active' ? 'Revoke' : 'Restore'}
+                                {togglingUserId === member.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                                {togglingUserId === member.id ? 'Updating...' : (member.accessStatus === 'Active' ? 'Revoke' : 'Restore')}
                               </button>
                             </td>
                           </tr>
@@ -1025,14 +1037,16 @@ export const MasterAccessManagement: React.FC = () => {
                             </button>
                           )}
                           <button
+                            disabled={togglingUserId === user.id}
                             onClick={() => handleToggleAccess(user)}
-                            className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                            className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 ${
                               user.accessStatus === 'Active' 
                                 ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200'
                                 : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200'
                             }`}
                           >
-                            {user.accessStatus === 'Active' ? 'Revoke' : 'Restore'}
+                            {togglingUserId === user.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                            {togglingUserId === user.id ? 'Updating...' : (user.accessStatus === 'Active' ? 'Revoke' : 'Restore')}
                           </button>
                         </div>
                       </td>

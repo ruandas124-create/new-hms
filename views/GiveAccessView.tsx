@@ -34,6 +34,7 @@ export const GiveAccessView: React.FC = () => {
   
   const [formType, setFormType] = useState<AccessFormType>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [viewingUser, setViewingUser] = useState<StaffUser | null>(null);
@@ -160,6 +161,8 @@ export const GiveAccessView: React.FC = () => {
   };
 
   const handleToggleAccess = async (user: StaffUser) => {
+    if (togglingUserId) return;
+    setTogglingUserId(user.id);
     const newStatus = user.accessStatus === 'Active' ? 'Revoked' : 'Active';
     try {
       await updateStaff(user.id, { accessStatus: newStatus });
@@ -168,6 +171,9 @@ export const GiveAccessView: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to toggle status:', err);
+      alert('Failed to update access status. Please try again.');
+    } finally {
+      setTogglingUserId(null);
     }
   };
 
@@ -440,14 +446,16 @@ export const GiveAccessView: React.FC = () => {
                             View / Manage
                           </button>
                           <button
+                            disabled={togglingUserId === user.id}
                             onClick={() => handleToggleAccess(user)}
-                            className={`text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all cursor-pointer ${
+                            className={`text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 ${
                               user.accessStatus === 'Active' 
                                 ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200'
                                 : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200'
                             }`}
                           >
-                            {user.accessStatus === 'Active' ? 'Revoke' : 'Restore'}
+                            {togglingUserId === user.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                            {togglingUserId === user.id ? 'Updating...' : (user.accessStatus === 'Active' ? 'Revoke' : 'Restore')}
                           </button>
                         </div>
                       </td>
@@ -611,14 +619,14 @@ export const GiveAccessView: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className={`px-5 py-2.5 text-xs font-extrabold text-white rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-2 cursor-pointer ${
+                  className={`px-5 py-2.5 text-xs font-extrabold text-white rounded-xl transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer ${
                     formType === 'Doctor' ? 'bg-emerald-600 hover:bg-emerald-700' :
                     formType === 'FrontOffice' ? 'bg-blue-600 hover:bg-blue-700' :
                     'bg-purple-600 hover:bg-purple-700'
                   }`}
                 >
                   {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Create & Grant Access
+                  {isSubmitting ? 'Granting Access...' : 'Create & Grant Access'}
                 </button>
               </div>
             </form>
@@ -693,14 +701,16 @@ export const GiveAccessView: React.FC = () => {
 
             <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-2">
               <button
+                disabled={togglingUserId === viewingUser.id}
                 onClick={() => handleToggleAccess(viewingUser)}
-                className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all cursor-pointer ${
+                className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5 ${
                   viewingUser.accessStatus === 'Active' 
                     ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200' 
                     : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200'
                 }`}
               >
-                {viewingUser.accessStatus === 'Active' ? 'Revoke Access' : 'Restore Access'}
+                {togglingUserId === viewingUser.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {togglingUserId === viewingUser.id ? 'Updating...' : (viewingUser.accessStatus === 'Active' ? 'Revoke Access' : 'Restore Access')}
               </button>
               <button
                 onClick={() => setViewingUser(null)}

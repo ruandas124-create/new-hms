@@ -261,14 +261,16 @@ export const MasterReportAccess: React.FC = () => {
                     <td className="py-3.5 pr-2 text-right">
                       <button
                         type="button"
+                        disabled={updatingKey === rep.key}
                         onClick={() => handleToggle(rep.key)}
-                        className={`px-3 py-1 rounded-xl text-[11px] font-bold uppercase transition-all ${
+                        className={`px-3 py-1 rounded-xl text-[11px] font-bold uppercase transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer ${
                           isGranted 
                             ? 'text-rose-600 hover:bg-rose-50 border border-rose-200' 
                             : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                         }`}
                       >
-                        {isGranted ? 'Turn OFF' : 'Turn ON'}
+                        {updatingKey === rep.key && <Loader2 className="w-3 h-3 animate-spin" />}
+                        {updatingKey === rep.key ? 'Updating...' : (isGranted ? 'Turn OFF' : 'Turn ON')}
                       </button>
                     </td>
                   </tr>

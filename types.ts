@@ -292,3 +292,19 @@ export interface DashboardStats {
   pendingPackage: number;
   readyForSurgery: number;
 }
+
+export const normalizeSource = (source?: string | null): string => {
+  if (!source) return 'Other';
+  const clean = source.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (
+    clean === 'acquire opd' || 
+    clean === 'acqure opd' || 
+    clean === 'acquire_opd' || 
+    clean === 'acqure_opd' || 
+    clean === 'acquireopd' || 
+    clean === 'acqureopd'
+  ) {
+    return 'Acquire OPD';
+  }
+  return source.trim();
+};

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
 import { SurgeonCode, PainSeverity, Affordability, ConversionReadiness, Patient, DoctorAssessment, Appointment } from '../types';
-import { Stethoscope, Check, ChevronRight, User, Calendar, Save, Briefcase, CreditCard, Activity, Tag, FileText, Database, Clock, Share2, ShieldCheck, Search, Filter, History, ClipboardList, RefreshCcw, Upload, Trash2 } from 'lucide-react';
+import { Stethoscope, Check, ChevronRight, User, Calendar, Save, Briefcase, CreditCard, Activity, Tag, FileText, Database, Clock, Share2, ShieldCheck, Search, Filter, History, ClipboardList, RefreshCcw, Upload, Trash2, Loader2 } from 'lucide-react';
 
 const PROCEDURES = [
   "Lap Cholecystectomy",
@@ -49,6 +49,7 @@ export const DoctorDashboard: React.FC = () => {
     updateStaff, 
     schedulingPermissions, 
     appointments, 
+    updateAppointment,
     currentUserRole,
     activeDashboard,
     setActiveDashboard
@@ -112,6 +113,9 @@ export const DoctorDashboard: React.FC = () => {
   const [unavailableDates, setUnavailableDates] = useState<string[]>([]);
   const [newLeaveDate, setNewLeaveDate] = useState('');
   const [photoError, setPhotoError] = useState('');
+  const [isSavingAssessment, setIsSavingAssessment] = useState(false);
+  const [isSavingAvailability, setIsSavingAvailability] = useState(false);
+  const [updatingApptId, setUpdatingApptId] = useState<string | null>(null);
 
   const [daySchedules, setDaySchedules] = useState<any[]>(DEFAULT_DAY_SCHEDULES);
   const [blockedDates, setBlockedDates] = useState<any[]>([]);
@@ -147,9 +151,9 @@ export const DoctorDashboard: React.FC = () => {
     }
   }, [selectedPatient]);
   
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPatient) return;
+    if (!selectedPatient || isSavingAssessment) return;
 
     const { quickCode, doctorSignature, painSeverity, affordability, conversionReadiness, surgeryProcedure, otherSurgeryName } = formState;
 
@@ -169,8 +173,24 @@ export const DoctorDashboard: React.FC = () => {
       }
     }
 
-    updateDoctorAssessment(selectedPatient.id, formState);
-    setSelectedPatient(null);
+    let customStatus: string | undefined = undefined;
+    if (formState.quickCode === ('Doctor Done' as any)) {
+      customStatus = 'Doctor Done';
+    } else if (formState.quickCode === SurgeonCode.M1) {
+      customStatus = 'Medication Done';
+    } else if (formState.quickCode === SurgeonCode.S1) {
+      customStatus = 'Package Proposal';
+    }
+
+    setIsSavingAssessment(true);
+    try {
+      await updateDoctorAssessment(selectedPatient.id, formState, customStatus);
+      setSelectedPatient(null);
+    } catch (err) {
+      alert("Failed to save assessment. Please try again.");
+    } finally {
+      setIsSavingAssessment(false);
+    }
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -198,6 +218,8 @@ export const DoctorDashboard: React.FC = () => {
   };
 
   const handleSaveAvailability = async () => {
+    if (isSavingAvailability) return;
+    setIsSavingAvailability(true);
     try {
       await updateStaff(loggedInDoctor.id, {
         availability: {
@@ -212,6 +234,8 @@ export const DoctorDashboard: React.FC = () => {
       alert('Availability schedule saved successfully!');
     } catch (err) {
       alert('Failed to save availability schedule.');
+    } finally {
+      setIsSavingAvailability(false);
     }
   };
 
@@ -312,8 +336,20 @@ export const DoctorDashboard: React.FC = () => {
         }
       }
 
+      // Helper to check if clinical assessment has actually been conducted by doctor
+      const isAssessmentCompleted = (patientItem: Patient): boolean => {
+        return Boolean(
+          patientItem.doctorAssessment?.quickCode || 
+          patientItem.doctorAssessment?.assessedAt || 
+          patientItem.doctorAssessment?.doctorSignature ||
+          patientItem.status === 'Doctor Done' ||
+          patientItem.status === 'Medication Done' ||
+          patientItem.status === 'Package Proposal'
+        );
+      };
+
       // Base visibility: Must be arrived or have an assessment
-      const isVisible = p.status === 'Arrived' || p.doctorAssessment !== undefined;
+      const isVisible = p.status === 'Arrived' || isAssessmentCompleted(p);
       
       // Date range filter: Check if entry_date is within [startDate, endDate]
       const entryDateStr = p.entry_date || '';
@@ -322,15 +358,34 @@ export const DoctorDashboard: React.FC = () => {
       return isVisible && inRange;
     })
     .sort((a, b) => {
+      const isAssessmentDone = (pt: Patient) => Boolean(
+        pt.doctorAssessment?.quickCode || 
+        pt.doctorAssessment?.assessedAt || 
+        pt.doctorAssessment?.doctorSignature ||
+        pt.status === 'Doctor Done' ||
+        pt.status === 'Medication Done' ||
+        pt.status === 'Package Proposal'
+      );
       // Sort: Pending first, then by time DESC
-      const aIsPending = a.status === 'Arrived' && !a.doctorAssessment;
-      const bIsPending = b.status === 'Arrived' && !b.doctorAssessment;
+      const aIsPending = !isAssessmentDone(a);
+      const bIsPending = !isAssessmentDone(b);
       if (aIsPending && !bIsPending) return -1;
       if (!aIsPending && bIsPending) return 1;
       const timeA = new Date(a.registeredAt).getTime();
       const timeB = new Date(b.registeredAt).getTime();
       return timeB - timeA;
     });
+
+  const isAssessmentCompleted = (p: Patient): boolean => {
+    return Boolean(
+      p.doctorAssessment?.quickCode || 
+      p.doctorAssessment?.assessedAt || 
+      p.doctorAssessment?.doctorSignature ||
+      p.status === 'Doctor Done' ||
+      p.status === 'Medication Done' ||
+      p.status === 'Package Proposal'
+    );
+  };
 
   const filteredDirectoryPatients = allPatients.filter(p => {
     const s = searchTerm.toLowerCase();
@@ -340,11 +395,11 @@ export const DoctorDashboard: React.FC = () => {
   });
 
   // Derived lists for Pending and Done sections
-  const pendingPatients = filteredDirectoryPatients.filter(p => !p.doctorAssessment);
-  const donePatients = filteredDirectoryPatients.filter(p => !!p.doctorAssessment);
+  const pendingPatients = filteredDirectoryPatients.filter(p => !isAssessmentCompleted(p));
+  const donePatients = filteredDirectoryPatients.filter(p => isAssessmentCompleted(p));
 
-  const pendingCount = allPatients.filter(p => p.status === 'Arrived' && !p.doctorAssessment).length;
-  const doneCount = allPatients.filter(p => !!p.doctorAssessment).length;
+  const pendingCount = allPatients.filter(p => p.status === 'Arrived' && !isAssessmentCompleted(p)).length;
+  const doneCount = allPatients.filter(p => isAssessmentCompleted(p)).length;
 
   const doctorAppointments = useMemo(() => {
     return (appointments || []).filter(a => {
@@ -366,7 +421,7 @@ export const DoctorDashboard: React.FC = () => {
       className={`p-4 rounded-xl border cursor-pointer hover:shadow-md transition-all ${
         selectedPatient?.id === p.id 
           ? 'border-hospital-500 bg-hospital-50 shadow-sm' 
-          : p.doctorAssessment 
+          : isAssessmentCompleted(p) 
             ? 'border-gray-100 bg-gray-50' 
             : 'border-slate-100 bg-white'
       }`}
@@ -387,7 +442,7 @@ export const DoctorDashboard: React.FC = () => {
             </div>
           )}
         </div>
-        {p.doctorAssessment ? (
+        {isAssessmentCompleted(p) ? (
           <Check className="w-5 h-5 text-green-500 bg-green-100 rounded-full p-1" />
         ) : (
           <ChevronRight className="w-4 h-4 text-gray-300" />
@@ -617,14 +672,18 @@ export const DoctorDashboard: React.FC = () => {
 
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-3">Quick Code Assessment</label>
-                    <div className="flex flex-col sm:flex-row gap-4">
-                      <button type="button" onClick={() => setFormState(s => ({...s, quickCode: SurgeonCode.M1}))} className={`flex-1 p-4 rounded-lg border-2 text-left transition-all ${formState.quickCode === SurgeonCode.M1 ? 'bg-blue-50 border-blue-500' : 'bg-white border-gray-200 hover:border-blue-300'}`}>
-                        <div className="font-bold">{SurgeonCode.M1}</div>
-                        <div className="text-xs text-gray-600">Patient requires medication only.</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <button type="button" onClick={() => setFormState(s => ({...s, quickCode: SurgeonCode.M1}))} className={`p-4 rounded-xl border-2 text-left transition-all ${formState.quickCode === SurgeonCode.M1 ? 'bg-blue-50 border-blue-500 shadow-xs' : 'bg-white border-gray-200 hover:border-blue-300'}`}>
+                        <div className="font-bold text-sm text-slate-800">{SurgeonCode.M1}</div>
+                        <div className="text-xs text-slate-500 mt-1">Patient requires medication only.</div>
                       </button>
-                      <button type="button" onClick={() => setFormState(s => ({...s, quickCode: SurgeonCode.S1}))} className={`flex-1 p-4 rounded-lg border-2 text-left transition-all ${formState.quickCode === SurgeonCode.S1 ? 'bg-green-50 border-green-500' : 'bg-white border-gray-200 hover:border-green-300'}`}>
-                        <div className="font-bold">{SurgeonCode.S1}</div>
-                        <div className="text-xs text-gray-600">Patient candidate for surgery.</div>
+                      <button type="button" onClick={() => setFormState(s => ({...s, quickCode: SurgeonCode.S1}))} className={`p-4 rounded-xl border-2 text-left transition-all ${formState.quickCode === SurgeonCode.S1 ? 'bg-emerald-50 border-emerald-500 shadow-xs' : 'bg-white border-gray-200 hover:border-emerald-300'}`}>
+                        <div className="font-bold text-sm text-slate-800">{SurgeonCode.S1}</div>
+                        <div className="text-xs text-slate-500 mt-1">Patient candidate for surgery.</div>
+                      </button>
+                      <button type="button" onClick={() => setFormState(s => ({...s, quickCode: 'Doctor Done' as any}))} className={`p-4 rounded-xl border-2 text-left transition-all ${formState.quickCode === ('Doctor Done' as any) ? 'bg-teal-50 border-teal-500 shadow-xs' : 'bg-white border-gray-200 hover:border-teal-300'}`}>
+                        <div className="font-bold text-sm text-slate-800">Doctor Done</div>
+                        <div className="text-xs text-slate-500 mt-1">Consultation completed. No further procedure.</div>
                       </button>
                     </div>
                   </div>
@@ -714,8 +773,22 @@ export const DoctorDashboard: React.FC = () => {
 
                 </div>
                 <div className="p-6 border-t bg-gray-50 flex justify-end shrink-0">
-                  <button type="submit" className="w-full sm:w-auto bg-hospital-600 text-white px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-hospital-700 transition-all">
-                    <Save className="w-5 h-5" /> Save Assessment
+                  <button 
+                    type="submit" 
+                    disabled={isSavingAssessment}
+                    className="w-full sm:w-auto bg-hospital-600 text-white px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-hospital-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md"
+                  >
+                    {isSavingAssessment ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Saving Assessment...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-5 h-5" />
+                        <span>Save Assessment</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </form>
@@ -759,6 +832,7 @@ export const DoctorDashboard: React.FC = () => {
                     <th className="p-4">Facility / Route</th>
                     <th className="p-4">Source</th>
                     <th className="p-4">Status</th>
+                    <th className="p-4 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
@@ -786,9 +860,53 @@ export const DoctorDashboard: React.FC = () => {
                         {appt.referral_person && <span className="text-[10px] text-slate-400 ml-1">({appt.referral_person})</span>}
                       </td>
                       <td className="p-4">
-                        <span className="px-2.5 py-1 rounded-md text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase border ${
+                          appt.status === 'Doctor Done'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                            : 'bg-blue-50 text-blue-700 border-blue-200'
+                        }`}>
                           {appt.status || 'Scheduled'}
                         </span>
+                      </td>
+                      <td className="p-4 text-center whitespace-nowrap">
+                        {appt.status === 'Doctor Done' ? (
+                          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 inline-flex items-center gap-1">
+                            <Check className="w-3 h-3 text-emerald-600" /> Doctor Done
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={updatingApptId === appt.id}
+                            onClick={async () => {
+                              if (updatingApptId) return;
+                              setUpdatingApptId(appt.id);
+                              try {
+                                await updateAppointment({
+                                  ...appt,
+                                  status: 'Doctor Done'
+                                });
+                              } catch (err) {
+                                alert("Failed to update appointment status.");
+                              } finally {
+                                setUpdatingApptId(null);
+                              }
+                            }}
+                            className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 hover:border-emerald-600 rounded-lg text-[11px] font-bold transition-all shadow-xs inline-flex items-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Mark appointment as Doctor Done"
+                          >
+                            {updatingApptId === appt.id ? (
+                              <>
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                <span>Updating...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Check className="w-3 h-3" />
+                                <span>Mark Doctor Done</span>
+                              </>
+                            )}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -1054,10 +1172,21 @@ export const DoctorDashboard: React.FC = () => {
 
             <button 
               type="button" 
+              disabled={isSavingAvailability}
               onClick={handleSaveAvailability}
-              className="w-full py-3 bg-hospital-600 text-white rounded-xl font-bold text-xs uppercase shadow-lg hover:bg-hospital-700 transform hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2"
+              className="w-full py-3 bg-hospital-600 text-white rounded-xl font-bold text-xs uppercase shadow-lg hover:bg-hospital-700 disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <Save className="w-4 h-4" /> Save Advanced Schedule Setting
+              {isSavingAvailability ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving Schedule...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Save Advanced Schedule Setting</span>
+                </>
+              )}
             </button>
           </div>
         </div>

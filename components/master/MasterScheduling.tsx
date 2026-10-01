@@ -6,7 +6,7 @@ import {
   Plus, AlertCircle, RefreshCw, BarChart3, Activity, Target, Check, 
   ChevronRight, Phone, Stethoscope, FileText, UserCheck, Shield,
   Building2, ArrowLeft, X, CheckCircle, ChevronDown, Sparkles, Lock,
-  Eye, Pencil, Trash2, MapPin, Tag, CreditCard, Info, Coffee
+  Eye, Pencil, Trash2, MapPin, Tag, CreditCard, Info, Coffee, Loader2
 } from 'lucide-react';
 
 const STATUS_OPTIONS: { label: string; dotClass: string }[] = [
@@ -658,11 +658,12 @@ export const MasterScheduling: React.FC = () => {
   const [apptDate, setApptDate] = useState(new Date().toISOString().split('T')[0]);
   const [apptTime, setApptTime] = useState('');
   const [isTimeSelectorOpen, setIsTimeSelectorOpen] = useState(true);
-  const acqureOpd = 'OPD'; // Read-only / unchangeable
+  const acquireOpd = 'OPD'; // Read-only / unchangeable
   const [source, setSource] = useState('Acquire OPD');
   const [referralPerson, setReferralPerson] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [updatingStatusAppId, setUpdatingStatusAppId] = useState<string | null>(null);
 
   // Actions Dropdown & Modals State
   const [activeDropdownApp, setActiveDropdownApp] = useState<Appointment | null>(null);
@@ -758,8 +759,8 @@ export const MasterScheduling: React.FC = () => {
     setApptDate(app.date || new Date().toISOString().split('T')[0]);
     setApptTime(app.time || '');
     setIsTimeSelectorOpen(true);
-    setSource(app.source || '');
-    setReferralPerson(app.referral_person || '');
+    setSource('Acquire OPD');
+    setReferralPerson('');
     setFormError(null);
     setShowBookModal(true);
   };
@@ -1112,7 +1113,7 @@ export const MasterScheduling: React.FC = () => {
           date: apptDate,
           time: apptTime,
           bookingType: originalApp?.bookingType || 'Scheduled',
-          visit_type: originalApp?.visit_type || acqureOpd,
+          visit_type: originalApp?.visit_type || acquireOpd,
           condition: condition || Condition.Other,
           source: 'Acquire OPD',
           referral_person: null,
@@ -1136,7 +1137,7 @@ export const MasterScheduling: React.FC = () => {
           date: apptDate,
           time: apptTime,
           bookingType: 'Scheduled',
-          visit_type: acqureOpd,
+          visit_type: acquireOpd,
           condition: condition || Condition.Other,
           source: 'Acquire OPD',
           referral_person: null,
@@ -1173,7 +1174,7 @@ export const MasterScheduling: React.FC = () => {
       setApptDate(new Date().toISOString().split('T')[0]);
       setApptTime('');
       setIsTimeSelectorOpen(true);
-      setSource('');
+      setSource('Acquire OPD');
       setReferralPerson('');
       setCondition(Condition.Other);
       setPatientMode('new');
@@ -1188,6 +1189,8 @@ export const MasterScheduling: React.FC = () => {
 
   // Quick status update
   const handleUpdateStatus = async (appId: string, status: string) => {
+    if (updatingStatusAppId) return;
+    setUpdatingStatusAppId(appId);
     try {
       const appToUpdate = appointments.find(a => a.id === appId);
       if (appToUpdate) {
@@ -1201,6 +1204,9 @@ export const MasterScheduling: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to update status:', err);
+      alert('Failed to update status. Please try again.');
+    } finally {
+      setUpdatingStatusAppId(null);
     }
   };
 
@@ -1290,7 +1296,7 @@ export const MasterScheduling: React.FC = () => {
               setApptDate(new Date().toISOString().split('T')[0]);
               setApptTime('');
               setIsTimeSelectorOpen(true);
-              setSource('');
+              setSource('Acquire OPD');
               setReferralPerson('');
               setCondition(Condition.Other);
               setPatientMode('new');
@@ -1968,10 +1974,10 @@ export const MasterScheduling: React.FC = () => {
                       />
                     </div>
 
-                    {/* Acqure OPD (Read-only / Locked) */}
+                    {/* Acquire OPD (Read-only / Locked) */}
                     <div>
                       <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest flex items-center justify-between">
-                        <span>Acqure OPD</span>
+                        <span>Acquire OPD</span>
                         <span className="inline-flex items-center gap-1 text-[9px] font-bold text-slate-400">
                           <Lock className="w-2.5 h-2.5" /> Locked
                         </span>
@@ -1980,9 +1986,9 @@ export const MasterScheduling: React.FC = () => {
                         type="text" 
                         readOnly 
                         disabled
-                        value={acqureOpd} 
+                        value={acquireOpd} 
                         className="w-full border-b-2 border-slate-200 p-2 text-sm font-bold bg-slate-100 text-slate-600 outline-none cursor-not-allowed select-none rounded-t" 
-                        title="Acqure OPD is read-only and unchangeable"
+                        title="Acquire OPD is read-only and unchangeable"
                       />
                     </div>
 
@@ -2457,11 +2463,16 @@ export const MasterScheduling: React.FC = () => {
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="w-full py-4 bg-hospital-600 hover:bg-hospital-700 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:scale-[1.01] transition-all mt-6 disabled:opacity-50 cursor-pointer"
+                  className="w-full py-4 bg-hospital-600 hover:bg-hospital-700 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:scale-[1.01] transition-all mt-6 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  {isSubmitting 
-                    ? (editingAppointmentId ? 'Saving Changes...' : 'Recording Master Appointment...') 
-                    : (editingAppointmentId ? 'Save & Update Appointment' : 'Create Appointment')}
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>{editingAppointmentId ? 'Saving Changes...' : 'Scheduling Patient...'}</span>
+                    </>
+                  ) : (
+                    <span>{editingAppointmentId ? 'Save & Update Appointment' : 'Create Appointment'}</span>
+                  )}
                 </button>
               </form>
             </div>
@@ -3141,14 +3152,14 @@ export const MasterScheduling: React.FC = () => {
                     type="button"
                     onClick={handleSaveNote}
                     disabled={!newNoteContent.trim() || isSavingNote}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-colors shadow-2xs"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl transition-colors shadow-2xs cursor-pointer"
                   >
                     {isSavingNote ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                     ) : (
                       <Plus className="w-3.5 h-3.5" />
                     )}
-                    <span>Save Note</span>
+                    <span>{isSavingNote ? 'Saving Note...' : 'Save Note'}</span>
                   </button>
                 </div>
               </div>

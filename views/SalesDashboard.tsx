@@ -133,7 +133,17 @@ const SOURCE_DISPLAY_MAP: Record<string, string> = {
 
 const getSourceDisplay = (source: string | undefined): string => {
   if (!source) return 'Acquire OPD';
-  if (source === 'Acquire OPD') return 'Acquire OPD';
+  const clean = source.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (
+    clean === 'acquire opd' || 
+    clean === 'acqure opd' || 
+    clean === 'acquire_opd' || 
+    clean === 'acqure_opd' || 
+    clean === 'acquireopd' || 
+    clean === 'acqureopd'
+  ) {
+    return 'Acquire OPD';
+  }
   if (source.startsWith('Other: ')) return 'Others';
   return SOURCE_DISPLAY_MAP[source] || source;
 };
@@ -288,6 +298,9 @@ export const SalesDashboard: React.FC = () => {
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
   const [bookingToEdit, setBookingToEdit] = useState<BookingRecord | null>(null);
   const [selectedBookingForDetail, setSelectedBookingForDetail] = useState<BookingRecord | null>(null);
+  const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [updatingStatusBookingId, setUpdatingStatusBookingId] = useState<string | null>(null);
 
   // Follow-up Modal state
   // Sales users can update booking status only to: Follow-up or Scheduled
@@ -384,8 +397,10 @@ export const SalesDashboard: React.FC = () => {
         } else if (matchingPatient.doctorAssessment) {
           if (matchingPatient.doctorAssessment.quickCode === SurgeonCode.S1) resolvedStatus = 'Package Proposal';
           else if (matchingPatient.doctorAssessment.quickCode === SurgeonCode.M1) resolvedStatus = 'Medication Done';
-          // Removed automatic 'Doctor Done' status
-        } else if (matchingPatient.status && matchingPatient.status !== 'Scheduled') {
+          else if (matchingPatient.status === 'Doctor Done' && (matchingPatient.doctorAssessment.assessedAt || matchingPatient.doctorAssessment.doctorSignature || matchingPatient.doctorAssessment.quickCode)) {
+            resolvedStatus = 'Doctor Done';
+          }
+        } else if (matchingPatient.status && matchingPatient.status !== 'Scheduled' && matchingPatient.status !== 'Doctor Done') {
           resolvedStatus = matchingPatient.status;
         }
       }
@@ -442,7 +457,11 @@ export const SalesDashboard: React.FC = () => {
       } else if (p.doctorAssessment) {
         if (p.doctorAssessment.quickCode === SurgeonCode.S1) pStatus = 'Package Proposal';
         else if (p.doctorAssessment.quickCode === SurgeonCode.M1) pStatus = 'Medication Done';
-        // Never automatically set Doctor Done
+        else if (p.status === 'Doctor Done' && (p.doctorAssessment.assessedAt || p.doctorAssessment.doctorSignature || p.doctorAssessment.quickCode)) {
+          pStatus = 'Doctor Done';
+        }
+      } else if (p.status && p.status !== 'Scheduled' && p.status !== 'Doctor Done') {
+        pStatus = p.status;
       }
 
       list.push({
@@ -551,6 +570,7 @@ export const SalesDashboard: React.FC = () => {
 
   // Status Update Permission: Sales users can update a booking status only to: Follow-up or Scheduled
   const handleQuickUpdateStatus = async (booking: BookingRecord, newStatus: string) => {
+    if (updatingStatusBookingId) return;
     if (newStatus !== 'Scheduled' && newStatus !== 'Follow-up') {
       alert("Permission notice: Sales users can only update status to 'Follow-up' or 'Scheduled'.");
       return;
@@ -563,14 +583,21 @@ export const SalesDashboard: React.FC = () => {
     const appt = appointments.find(a => a.id === booking.appointmentId);
     if (!appt) return;
 
-    await updateAppointment({
-      ...appt,
-      status: newStatus,
-      bookingType: newStatus === 'Follow-up' ? 'Follow Up' : 'Scheduled'
-    });
+    setUpdatingStatusBookingId(booking.id);
+    try {
+      await updateAppointment({
+        ...appt,
+        status: newStatus,
+        bookingType: newStatus === 'Follow-up' ? 'Follow Up' : 'Scheduled'
+      });
 
-    setStatusUpdateSuccessMessage(`Status updated to "${newStatus}" for ${booking.name}`);
-    setTimeout(() => setStatusUpdateSuccessMessage(null), 3000);
+      setStatusUpdateSuccessMessage(`Status updated to "${newStatus}" for ${booking.name}`);
+      setTimeout(() => setStatusUpdateSuccessMessage(null), 3000);
+    } catch (err) {
+      alert("Failed to update status. Please try again.");
+    } finally {
+      setUpdatingStatusBookingId(null);
+    }
   };
 
   // Initiate booking or scheduling for a new patient or edit existing booking
@@ -647,6 +674,7 @@ export const SalesDashboard: React.FC = () => {
   // Submit appointment booking / scheduling
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingBooking) return;
     if (!hasSchedulingAccess) {
       alert('Scheduling access is currently disabled by Master Admin.');
       return;
@@ -657,86 +685,93 @@ export const SalesDashboard: React.FC = () => {
       return;
     }
 
-    const activeUsername = localStorage.getItem('hms_hospital_name') || 
-      localStorage.getItem('username') || 
-      'Sales Executive';
+    setIsSubmittingBooking(true);
+    try {
+      const activeUsername = localStorage.getItem('hms_hospital_name') || 
+        localStorage.getItem('username') || 
+        'Sales Executive';
 
-    let finalHospitalId: string | undefined = undefined;
-    let finalHospitalName: string | undefined = undefined;
-    let finalDoctorId: string | undefined = undefined;
-    let finalDoctorName: string | undefined = undefined;
-    let assignmentType: 'hospital' | 'doctor' = 'hospital';
+      let finalHospitalId: string | undefined = undefined;
+      let finalHospitalName: string | undefined = undefined;
+      let finalDoctorId: string | undefined = undefined;
+      let finalDoctorName: string | undefined = undefined;
+      let assignmentType: 'hospital' | 'doctor' = 'hospital';
 
-    if (selectedRoute === 'HOSPITAL') {
-      const hosp = hospitals.find(h => h.id === selectedHospitalId);
-      finalHospitalId = hosp?.hospital_id || hosp?.id || selectedHospitalId;
-      finalHospitalName = hosp?.hospitalName || hosp?.name || 'Hospital Facility';
+      if (selectedRoute === 'HOSPITAL') {
+        const hosp = hospitals.find(h => h.id === selectedHospitalId);
+        finalHospitalId = hosp?.hospital_id || hosp?.id || selectedHospitalId;
+        finalHospitalName = hosp?.hospitalName || hosp?.name || 'Hospital Facility';
 
-      if (selectedDoctorId) {
+        if (selectedDoctorId) {
+          const doc = doctors.find(d => d.id === selectedDoctorId);
+          finalDoctorId = doc?.id;
+          finalDoctorName = doc?.name;
+          assignmentType = 'doctor';
+        } else {
+          assignmentType = 'hospital';
+        }
+      } else if (selectedRoute === 'DOCTOR') {
         const doc = doctors.find(d => d.id === selectedDoctorId);
         finalDoctorId = doc?.id;
         finalDoctorName = doc?.name;
         assignmentType = 'doctor';
-      } else {
-        assignmentType = 'hospital';
+        finalHospitalId = doc?.hospital_id || 'independent';
+        finalHospitalName = doc?.hospitalName || 'Consulting Clinic';
       }
-    } else if (selectedRoute === 'DOCTOR') {
-      const doc = doctors.find(d => d.id === selectedDoctorId);
-      finalDoctorId = doc?.id;
-      finalDoctorName = doc?.name;
-      assignmentType = 'doctor';
-      finalHospitalId = doc?.hospital_id || 'independent';
-      finalHospitalName = doc?.hospitalName || 'Consulting Clinic';
-    }
 
-    // Source Rule: When Sales schedules/books an appointment, the system must automatically set source as Acquire OPD
-    const sourceVal = 'Acquire OPD';
+      // Source Rule: When Sales schedules/books an appointment, the system must automatically set source as Acquire OPD
+      const sourceVal = 'Acquire OPD';
 
-    // Status is Scheduled by default for new bookings, or preserves Follow-up if editing a follow-up booking
-    const assignedStatus = (bookingToEdit?.status === 'Follow-up' || bookingToEdit?.status === 'Follow Up') ? 'Follow-up' : 'Scheduled';
+      // Status is Scheduled by default for new bookings, or preserves Follow-up if editing a follow-up booking
+      const assignedStatus = (bookingToEdit?.status === 'Follow-up' || bookingToEdit?.status === 'Follow Up') ? 'Follow-up' : 'Scheduled';
 
-    const payload: any = {
-      name: bookingFormData.name.trim(),
-      mobile: bookingFormData.mobile.trim(),
-      source: sourceVal,
-      sourceDoctorName: undefined,
-      referral_person: null,
-      condition: bookingFormData.condition as Condition,
-      date: bookingFormData.date,
-      time: bookingFormData.time,
-      assignedDoctorId: finalDoctorId,
-      assignedDoctorName: finalDoctorName,
-      doctor_id: finalDoctorId || null,
-      hospital_id: finalHospitalId,
-      hospitalName: finalHospitalName,
-      assignment_type: assignmentType,
-      bookingType: assignedStatus === 'Follow-up' ? 'Follow Up' : 'Scheduled',
-      status: assignedStatus,
-      visit_type: 'OPD',
-      username: activeUsername,
-      patient_id: bookingToEdit?.patientId || null
-    };
+      const payload: any = {
+        name: bookingFormData.name.trim(),
+        mobile: bookingFormData.mobile.trim(),
+        source: sourceVal,
+        sourceDoctorName: undefined,
+        referral_person: null,
+        condition: bookingFormData.condition as Condition,
+        date: bookingFormData.date,
+        time: bookingFormData.time,
+        assignedDoctorId: finalDoctorId,
+        assignedDoctorName: finalDoctorName,
+        doctor_id: finalDoctorId || null,
+        hospital_id: finalHospitalId,
+        hospitalName: finalHospitalName,
+        assignment_type: assignmentType,
+        bookingType: assignedStatus === 'Follow-up' ? 'Follow Up' : 'Scheduled',
+        status: assignedStatus,
+        visit_type: 'OPD',
+        username: activeUsername,
+        patient_id: bookingToEdit?.patientId || null
+      };
 
-    if (bookingToEdit?.appointmentId) {
-      const existing = appointments.find(a => a.id === bookingToEdit.appointmentId);
-      if (existing) {
-        await updateAppointment({
-          ...existing,
-          ...payload
-        });
+      if (bookingToEdit?.appointmentId) {
+        const existing = appointments.find(a => a.id === bookingToEdit.appointmentId);
+        if (existing) {
+          await updateAppointment({
+            ...existing,
+            ...payload
+          });
+        } else {
+          await addAppointment(payload);
+        }
       } else {
         await addAppointment(payload);
       }
-    } else {
-      await addAppointment(payload);
-    }
 
-    setShowScheduleModal(false);
-    setScheduleStep('ROUTE_SELECTION');
-    setBookingToEdit(null);
-    setSelectedRoute(null);
-    setSelectedHospitalId('');
-    setSelectedDoctorId('');
+      setShowScheduleModal(false);
+      setScheduleStep('ROUTE_SELECTION');
+      setBookingToEdit(null);
+      setSelectedRoute(null);
+      setSelectedHospitalId('');
+      setSelectedDoctorId('');
+    } catch (err) {
+      alert('Failed to save booking. Please try again.');
+    } finally {
+      setIsSubmittingBooking(false);
+    }
   };
 
   // Follow-up handler: Database-driven persistence for Follow-up remarks & history
@@ -984,53 +1019,60 @@ export const SalesDashboard: React.FC = () => {
 
   const handleAddNote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!notesBooking || !newNoteInput.trim()) return;
+    if (!notesBooking || !newNoteInput.trim() || isSavingNote) return;
 
-    const activeUsername = localStorage.getItem('hms_hospital_name') || 
-      localStorage.getItem('username') || 
-      'Sales Executive';
+    setIsSavingNote(true);
+    try {
+      const activeUsername = localStorage.getItem('hms_hospital_name') || 
+        localStorage.getItem('username') || 
+        'Sales Executive';
 
-    const newNoteObj = {
-      id: `note_${Date.now()}`,
-      text: newNoteInput.trim(),
-      date: new Date().toISOString(),
-      author: activeUsername
-    };
+      const newNoteObj = {
+        id: `note_${Date.now()}`,
+        text: newNoteInput.trim(),
+        date: new Date().toISOString(),
+        author: activeUsername
+      };
 
-    const existingList = notesBooking.notesList || [];
-    const updatedList = [newNoteObj, ...existingList];
-    const combinedNotesStr = `${newNoteObj.text} (${newNoteObj.author} - ${new Date().toLocaleDateString()})\n${notesBooking.notes || ''}`.trim();
+      const existingList = notesBooking.notesList || [];
+      const updatedList = [newNoteObj, ...existingList];
+      const combinedNotesStr = `${newNoteObj.text} (${newNoteObj.author} - ${new Date().toLocaleDateString()})\n${notesBooking.notes || ''}`.trim();
 
-    if (notesBooking.appointmentId) {
-      const appt = appointments.find(a => a.id === notesBooking.appointmentId);
-      if (appt) {
-        await updateAppointment({
-          ...appt,
-          notes: combinedNotesStr,
-          notes_list: updatedList
-        });
+      if (notesBooking.appointmentId) {
+        const appt = appointments.find(a => a.id === notesBooking.appointmentId);
+        if (appt) {
+          await updateAppointment({
+            ...appt,
+            notes: combinedNotesStr,
+            notes_list: updatedList
+          });
+        }
       }
-    }
 
-    if (notesBooking.patientId) {
-      const pat = patients.find(p => p.id === notesBooking.patientId);
-      if (pat) {
-        await updatePatient(pat.id, {
-          ...pat,
-          doctorAssessment: {
-            ...pat.doctorAssessment,
-            notes: combinedNotesStr
-          }
-        } as any);
+      if (notesBooking.patientId) {
+        const pat = patients.find(p => p.id === notesBooking.patientId);
+        if (pat) {
+          await updatePatient(pat.id, {
+            ...pat,
+            doctorAssessment: {
+              ...pat.doctorAssessment,
+              notes: combinedNotesStr
+            }
+          } as any);
+        }
       }
-    }
 
-    setNewNoteInput('');
-    setNotesBooking({
-      ...notesBooking,
-      notes: combinedNotesStr,
-      notesList: updatedList
-    });
+      setNewNoteInput('');
+      setNotesBooking({
+        ...notesBooking,
+        notes: combinedNotesStr,
+        notesList: updatedList
+      });
+    } catch (err) {
+      alert("Failed to save note. Please try again.");
+    } finally {
+      setIsSavingNote(false);
+    }
   };
 
   return (
@@ -1947,9 +1989,17 @@ export const SalesDashboard: React.FC = () => {
                       </button>
                       <button 
                         type="submit" 
-                        className="py-3.5 px-8 bg-rose-600 hover:bg-rose-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-xl shadow-rose-900/30 hover:scale-[1.02] active:scale-98 transition-all"
+                        disabled={isSubmittingBooking}
+                        className="py-3.5 px-8 bg-rose-600 hover:bg-rose-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-xl shadow-rose-900/30 hover:scale-[1.02] active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all flex items-center justify-center gap-2 cursor-pointer"
                       >
-                        {bookingToEdit?.appointmentId ? 'Update Booking' : 'Confirm & Schedule Patient'}
+                        {isSubmittingBooking ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>{bookingToEdit?.appointmentId ? 'Updating Booking...' : 'Scheduling Patient...'}</span>
+                          </>
+                        ) : (
+                          <span>{bookingToEdit?.appointmentId ? 'Update Booking' : 'Confirm & Schedule Patient'}</span>
+                        )}
                       </button>
                     </div>
                   </form>
@@ -2152,9 +2202,20 @@ export const SalesDashboard: React.FC = () => {
               <div className="flex justify-end">
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center gap-1.5"
+                  disabled={isSavingNote || !newNoteInput.trim()}
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center gap-1.5 cursor-pointer"
                 >
-                  <MessageSquare className="w-3.5 h-3.5" /> Save Note
+                  {isSavingNote ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Note...</span>
+                    </>
+                  ) : (
+                    <>
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>Save Note</span>
+                    </>
+                  )}
                 </button>
               </div>
 

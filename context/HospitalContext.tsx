@@ -5,7 +5,7 @@ import {
   Condition, SurgeonCode, PainSeverity, Affordability, ConversionReadiness, 
   ProposalOutcome, Gender, DashboardKey, DashboardPermission,
   SchedulingTarget, SchedulingPermissionsState, ReportPermissionsState,
-  AnalyticsAccountHierarchy
+  AnalyticsAccountHierarchy, normalizeSource
 } from '../types';
 import { supabase } from '../services/supabaseClient';
 
@@ -52,7 +52,7 @@ interface HospitalContextType {
   updatePatient: (targetId: string, patient: Patient) => Promise<void>;
   deletePatient: (id: string) => Promise<void>;
   convertAppointment: (appointmentId: string, patientData: Omit<Patient, 'registeredAt' | 'hospital_id'>) => Promise<void>;
-  updateDoctorAssessment: (patientId: string, assessment: Partial<DoctorAssessment>) => Promise<void>;
+  updateDoctorAssessment: (patientId: string, assessment: Partial<DoctorAssessment>, customStatus?: string) => Promise<void>;
   updatePackageProposal: (patientId: string, proposal: PackageProposal) => Promise<void>;
   getPatientById: (id: string) => Patient | undefined;
   fetchFilteredPatients: (filters: PatientFilters, page: number, pageSize: number) => Promise<{ data: Patient[], count: number }>;
@@ -319,6 +319,17 @@ const mapRowToPatient = (row: any): Patient => {
     };
   }
 
+  const isAcquireOpd = normalizeSource(row.source) === 'Acquire OPD' || 
+    normalizeSource(row.doctor_assessment?.source) === 'Acquire OPD' ||
+    row.doctor_assessment?.scheduled_by === 'Sales Executive' ||
+    row.doctor_assessment?.scheduled_by === 'Master Admin' ||
+    row.doctor_assessment?.username === 'Sales Executive' ||
+    row.doctor_assessment?.username === 'Master Admin' ||
+    row.remarks === 'Sales Executive' ||
+    row.remarks === 'Master Admin';
+
+  const resolvedSource = isAcquireOpd ? 'Acquire OPD' : normalizeSource(row.source || row.doctor_assessment?.source || 'Other');
+
   return {
     id: row.id || '',
     hospital_id: row.hospital_id || '',
@@ -330,8 +341,8 @@ const mapRowToPatient = (row: any): Patient => {
     occupation: row.occupation || '',
     hasInsurance: row.has_insurance || 'No',
     insuranceName: row.insurance_name || '',
-    source: row.source || 'Other',
-    sourceDoctorName: row.source_doctor_name || '',
+    source: resolvedSource,
+    sourceDoctorName: resolvedSource === 'Acquire OPD' ? '' : (row.source_doctor_name || ''),
     condition: (row.condition || Condition.Other) as Condition,
     visitType: row.is_follow_up ? 'Follow Up' : 'OPD',
     visit_type: row.visit_type || '',
@@ -340,7 +351,9 @@ const mapRowToPatient = (row: any): Patient => {
     status_updated_at: row.status_updated_at || null,
     entry_date: row.entry_date || '',
     arrivalTime: row.arrival_time || '',
-    status: row.booking_status || 'Arrived',
+    status: (row.booking_status === 'Doctor Done' && (!row.doctor_assessment?.quickCode && !row.doctor_assessment?.assessedAt && !row.doctor_assessment?.doctorSignature))
+      ? (row.arrival_time ? 'Arrived' : 'Scheduled')
+      : (row.booking_status || 'Arrived'),
     packageProposal: uiProposal,
     doctorAssessment: uiAssessment,
     surgery_date: row.surgery_date || '',
@@ -1040,19 +1053,35 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           const resolvedHospId = r.hospital_id || r.doctor_assessment?.hospital_id || assignedDoc?.hospital_id || '';
           const resolvedHospName = r.doctor_assessment?.hospitalName || (staffData || []).find((u: any) => u.id === resolvedHospId)?.name || '';
 
+          const isAcquireOpd = normalizeSource(r.source) === 'Acquire OPD' || 
+            normalizeSource(r.doctor_assessment?.source) === 'Acquire OPD' ||
+            r.doctor_assessment?.scheduled_by === 'Sales Executive' ||
+            r.doctor_assessment?.scheduled_by === 'Master Admin' ||
+            r.doctor_assessment?.username === 'Sales Executive' ||
+            r.doctor_assessment?.username === 'Master Admin' ||
+            r.remarks === 'Sales Executive' ||
+            r.remarks === 'Master Admin';
+
+          const resolvedSource = isAcquireOpd ? 'Acquire OPD' : normalizeSource(r.source || r.doctor_assessment?.source || 'Other');
+
+          let apptStatus = r.booking_status || 'Scheduled';
+          if (apptStatus === 'Doctor Done' && (!r.doctor_assessment?.quickCode && !r.doctor_assessment?.assessedAt && !r.doctor_assessment?.doctorSignature)) {
+            apptStatus = 'Scheduled';
+          }
+
           return {
             id: r.id || '',
             hospital_id: resolvedHospId,
             name: r.name || '',
-            source: r.source || r.doctor_assessment?.source || '',
-            sourceDoctorName: r.source_doctor_name || '',
-            referral_person: r.doctor_assessment?.referral_person || (r.source === 'Referral' ? r.source_doctor_name : null) || null,
+            source: resolvedSource,
+            sourceDoctorName: resolvedSource === 'Acquire OPD' ? '' : (r.source_doctor_name || ''),
+            referral_person: resolvedSource === 'Acquire OPD' ? null : (r.doctor_assessment?.referral_person || (r.source === 'Referral' ? r.source_doctor_name : null) || null),
             condition: (r.condition || Condition.Other) as Condition,
             mobile: r.mobile || '',
             date: r.entry_date || '',
             time: r.booking_time || '',
-            status: r.booking_status || 'Scheduled',
-            bookingType: r.booking_status === 'Follow Up' ? 'Follow Up' : 'Scheduled',
+            status: apptStatus,
+            bookingType: apptStatus === 'Follow Up' ? 'Follow Up' : 'Scheduled',
             visit_type: r.visit_type || '',
             createdAt: r.created_at || new Date().toISOString(),
             assignedDoctorId: r.doctor_assessment?.assignedDoctorId || r.doctor_assessment?.doctor_id || undefined,
@@ -1083,6 +1112,13 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
 
           return r.booking_status === 'Arrived' || 
                  r.booking_status === 'Revisit' ||
+                 r.booking_status === 'Doctor Done' ||
+                 r.booking_status === 'Medication Done' ||
+                 r.booking_status === 'Package Proposal' ||
+                 r.booking_status === 'Surgery Scheduled' ||
+                 r.booking_status === 'Follow-Up Surgery' ||
+                 r.booking_status === 'Surgery Lost' ||
+                 r.booking_status === 'Surgery Completed' ||
                  r.package_proposal !== null ||
                  (r.doctor_assessment !== null && r.doctor_assessment.quickCode !== undefined) ||
                  Boolean(r.arrival_time);
@@ -1269,7 +1305,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         gender: patient.gender,
         mobile: patient.mobile,
         occupation: patient.occupation,
-        source: (existingPatient?.source === 'Acquire OPD' || patient.source === 'Acquire OPD') ? 'Acquire OPD' : (patient.source || 'Other'),
+        source: (normalizeSource(existingPatient?.source) === 'Acquire OPD' || normalizeSource(patient.source) === 'Acquire OPD') ? 'Acquire OPD' : normalizeSource(patient.source || 'Other'),
         condition: patient.condition,
         is_follow_up: patient.visitType === 'Follow Up',
         visit_type: patient.visit_type || existingPatient?.visit_type || '',
@@ -1321,9 +1357,9 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
     setSaveStatus('saving');
     try {
         const originalAppt = allAppointments.find(a => a.id === appointmentId);
-        const resolvedSource = (originalAppt?.source === 'Acquire OPD' || patientData.source === 'Acquire OPD') 
+        const resolvedSource = (normalizeSource(originalAppt?.source) === 'Acquire OPD' || normalizeSource(patientData.source) === 'Acquire OPD') 
           ? 'Acquire OPD' 
-          : (patientData.source || 'Other');
+          : normalizeSource(patientData.source || 'Other');
         const assignedDocId = patientData.doctorAssessment?.assignedDoctorId || (patientData as any).assignedDoctorId || originalAppt?.assignedDoctorId;
         const assignedDocName = patientData.doctorAssessment?.assignedDoctorName || (patientData as any).assignedDoctorName || originalAppt?.assignedDoctorName;
 
@@ -1394,7 +1430,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
 
-  const updateDoctorAssessment = async (patientId: string, assessmentData: Partial<DoctorAssessment>) => {
+  const updateDoctorAssessment = async (patientId: string, assessmentData: Partial<DoctorAssessment>, customStatus?: string) => {
     setSaveStatus('saving');
     try {
         const patient = patients.find(p => p.id === patientId);
@@ -1405,16 +1441,30 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
             ...assessmentData,
             assessedAt: new Date().toISOString()
         };
+
+        let resolvedDoctorStatus = customStatus;
+        if (!resolvedDoctorStatus) {
+          if (updatedAssessment.quickCode === SurgeonCode.S1) {
+            resolvedDoctorStatus = 'Package Proposal';
+          } else if (updatedAssessment.quickCode === SurgeonCode.M1) {
+            resolvedDoctorStatus = 'Medication Done';
+          } else {
+            resolvedDoctorStatus = 'Doctor Done';
+          }
+        }
+
         const { error } = await supabase
             .from(APPOINTMENTS_TABLE)
             .update({ 
                 doctor_assessment: updatedAssessment,
+                booking_status: resolvedDoctorStatus,
+                status_updated_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
             })
             .eq('id', patientId);
         if (error) throw error;
 
-        syncToSheets({ ...patient, doctorAssessment: updatedAssessment });
+        syncToSheets({ ...patient, status: resolvedDoctorStatus, doctorAssessment: updatedAssessment });
         await refreshData();
         setSaveStatus('saved');
         setLastSavedAt(new Date());
@@ -1449,7 +1499,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       const resolvedPatientId = appointmentData.patient_id || null;
 
       // Source Rule: When Master Admin or Sales schedules/books an appointment, the system must automatically set the source as: Acquire OPD
-      const resolvedSource = isRoleMasterOrSales ? 'Acquire OPD' : (appointmentData.source || 'Other');
+      const resolvedSource = isRoleMasterOrSales ? 'Acquire OPD' : normalizeSource(appointmentData.source || 'Other');
       const resolvedReferralPerson = isRoleMasterOrSales && appointmentData.source === 'Referral'
         ? (appointmentData.referral_person?.trim() || null)
         : null;
@@ -1521,12 +1571,12 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       const resolvedPatientId = appointment.patient_id || null;
 
       // Source rule: If booking was scheduled by Master Admin or Sales, source is Acquire OPD and locked.
-      const isOriginalAcquireOpd = existingAppt?.source === 'Acquire OPD' || appointment.source === 'Acquire OPD';
+      const isOriginalAcquireOpd = normalizeSource(existingAppt?.source) === 'Acquire OPD' || normalizeSource(appointment.source) === 'Acquire OPD';
       const resolvedSource = isOriginalAcquireOpd
         ? 'Acquire OPD'
         : (isRoleMasterOrSales 
-            ? (appointment.source || 'Acquire OPD') 
-            : (existingAppt?.source || 'Other'));
+            ? normalizeSource(appointment.source || 'Acquire OPD') 
+            : normalizeSource(existingAppt?.source || 'Other'));
       
       const resolvedReferralPerson = isRoleMasterOrSales
         ? (appointment.source === 'Referral' ? (appointment.referral_person?.trim() || null) : null)
@@ -1552,6 +1602,8 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         ? appointment.notes_list 
         : (existingAppt?.notes_list || []);
 
+      const targetStatus = appointment.status || appointment.bookingType || existingAppt?.status || 'Scheduled';
+
       const updateData: any = {
         name: appointment.name,
         mobile: appointment.mobile,
@@ -1560,8 +1612,8 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         condition: appointment.condition,
         entry_date: nullify(appointment.date),
         booking_time: nullify(appointment.time),
-        booking_status: appointment.bookingType, 
-        is_follow_up: appointment.bookingType === 'Follow Up',
+        booking_status: targetStatus, 
+        is_follow_up: targetStatus === 'Follow Up' || appointment.bookingType === 'Follow Up',
         visit_type: appointment.visit_type || '',
         hospital_id: resolvedHospitalId,
         remarks: activeUsername,
@@ -1764,17 +1816,8 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
     (typeof window !== 'undefined' && ['MASTER', 'SALES'].includes(localStorage.getItem('hms_hospital_role') || localStorage.getItem('user_role') || ''));
 
   const authorizedAppointments = useMemo(() => {
-    if (isMasterOrSales) {
-      return appointments;
-    }
-    // Restrict Source and Referral Person visibility to Master Admin and Sales Lead only
-    return appointments.map(app => ({
-      ...app,
-      source: '',
-      sourceDoctorName: '',
-      referral_person: null
-    }));
-  }, [appointments, isMasterOrSales]);
+    return appointments;
+  }, [appointments]);
 
   return (
     <HospitalContext.Provider value={{

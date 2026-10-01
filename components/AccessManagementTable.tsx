@@ -222,21 +222,21 @@ export const AccessManagementTable: React.FC<AccessManagementTableProps> = ({
                         <button
                           onClick={() => onTogglePermission(row.key, false)}
                           disabled={isUpdating}
-                          className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 disabled:opacity-50 inline-flex items-center gap-1.5 shadow-sm hover:shadow"
+                          className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5 shadow-sm hover:shadow cursor-pointer"
                           title="Revoke dashboard access"
                         >
                           {isUpdating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
-                          Revoke
+                          {isUpdating ? 'Revoking...' : 'Revoke'}
                         </button>
                       ) : (
                         <button
                           onClick={() => onTogglePermission(row.key, true)}
                           disabled={isUpdating}
-                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 disabled:opacity-50 inline-flex items-center gap-1.5 shadow-md shadow-emerald-600/20 hover:shadow-emerald-600/30"
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5 shadow-md shadow-emerald-600/20 hover:shadow-emerald-600/30 cursor-pointer"
                           title="Grant dashboard access"
                         >
                           {isUpdating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                          Grant
+                          {isUpdating ? 'Granting...' : 'Grant'}
                         </button>
                       )}
                     </td>

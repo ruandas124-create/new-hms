@@ -7,7 +7,7 @@ import {
   Banknote, Trash2, Clock, X, Share2, Stethoscope, LayoutList, Columns, 
   Search, Phone, Filter, Tag, CalendarClock, Ban, ChevronLeft, ChevronRight, 
   LayoutPanelLeft, MessageSquareQuote, FileText, ChevronDown, AlertCircle, 
-  RefreshCcw, Database, Gauge, AlertTriangle, Sparkles, RotateCcw
+  RefreshCcw, Database, Gauge, AlertTriangle, Sparkles, RotateCcw, Loader2
 } from 'lucide-react';
 import { generateCounselingStrategy } from '../services/geminiService';
 
@@ -119,6 +119,8 @@ export const PackageTeamDashboard: React.FC = () => {
 
   const [proposal, setProposal] = useState<Partial<PackageProposal>>(initialProposalState);
   const [isGeneratingStrategy, setIsGeneratingStrategy] = useState(false);
+  const [isSavingProposal, setIsSavingProposal] = useState(false);
+  const [isSavingOutcome, setIsSavingOutcome] = useState(false);
 
   const handleGenerateAIStrategy = async () => {
     if (!selectedPatient) return;
@@ -280,29 +282,45 @@ export const PackageTeamDashboard: React.FC = () => {
   };
 
   const handleConfirmOutcome = async () => {
-    if (!selectedPatient) return;
-    const newOutcomeDate = outcomeModal.type !== 'Lost' ? outcomeModal.date : new Date().toISOString().split('T')[0];
-    const updatedProposal: PackageProposal = {
-      ...(proposal as PackageProposal),
-      outcome: outcomeModal.type!,
-      outcomeDate: newOutcomeDate,
-      surgeryDate: outcomeModal.type === 'Scheduled' ? newOutcomeDate : (proposal.surgeryDate || ''),
-      lostReason: outcomeModal.type === 'Lost' ? outcomeModal.reason : undefined,
-      proposalCreatedAt: proposal.proposalCreatedAt || new Date().toISOString(),
-      followUpDate: (outcomeModal.type === 'Follow-Up' ? outcomeModal.date : proposal.followUpDate) || ''
-    };
-    await updatePackageProposal(selectedPatient.id, updatedProposal);
-    setOutcomeModal({ ...outcomeModal, show: false });
+    if (!selectedPatient || isSavingOutcome) return;
+    setIsSavingOutcome(true);
+    try {
+      const newOutcomeDate = outcomeModal.type !== 'Lost' ? outcomeModal.date : new Date().toISOString().split('T')[0];
+      const updatedProposal: PackageProposal = {
+        ...(proposal as PackageProposal),
+        outcome: outcomeModal.type!,
+        outcomeDate: newOutcomeDate,
+        surgeryDate: outcomeModal.type === 'Scheduled' ? newOutcomeDate : (proposal.surgeryDate || ''),
+        lostReason: outcomeModal.type === 'Lost' ? outcomeModal.reason : undefined,
+        proposalCreatedAt: proposal.proposalCreatedAt || new Date().toISOString(),
+        followUpDate: (outcomeModal.type === 'Follow-Up' ? outcomeModal.date : proposal.followUpDate) || ''
+      };
+      await updatePackageProposal(selectedPatient.id, updatedProposal);
+      setOutcomeModal({ ...outcomeModal, show: false });
+    } catch (err) {
+      console.error("Failed to update proposal outcome:", err);
+      alert("Failed to update status. Please try again.");
+    } finally {
+      setIsSavingOutcome(false);
+    }
   };
 
   const handleSaveProposal = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedPatient) {
-      await updatePackageProposal(selectedPatient.id, {
-        ...(proposal as PackageProposal),
-        proposalCreatedAt: proposal.proposalCreatedAt || new Date().toISOString()
-      });
-      alert("Proposal details saved.");
+    if (selectedPatient && !isSavingProposal) {
+      setIsSavingProposal(true);
+      try {
+        await updatePackageProposal(selectedPatient.id, {
+          ...(proposal as PackageProposal),
+          proposalCreatedAt: proposal.proposalCreatedAt || new Date().toISOString()
+        });
+        alert("Proposal details saved successfully.");
+      } catch (err) {
+        console.error("Failed to save proposal:", err);
+        alert("Failed to save proposal details. Please try again.");
+      } finally {
+        setIsSavingProposal(false);
+      }
     }
   };
 
@@ -1056,9 +1074,20 @@ export const PackageTeamDashboard: React.FC = () => {
                         {renderActionButtons(selectedPatient.packageProposal?.outcome)}
                         <button 
                           type="submit" 
-                          className="w-full py-2.5 px-4 bg-hospital-600 hover:bg-hospital-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                          disabled={isSavingProposal}
+                          className="w-full py-2.5 px-4 bg-hospital-600 hover:bg-hospital-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
                         >
-                          <BadgeCheck className="w-4 h-4" /> Save / Update Proposal Details
+                          {isSavingProposal ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>Saving Proposal...</span>
+                            </>
+                          ) : (
+                            <>
+                              <BadgeCheck className="w-4 h-4" />
+                              <span>Save / Update Proposal Details</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </form>
@@ -1134,14 +1163,16 @@ export const PackageTeamDashboard: React.FC = () => {
                 Cancel
               </button>
               <button 
+                disabled={isSavingOutcome}
                 onClick={handleConfirmOutcome} 
-                className={`py-2 px-4 text-xs font-bold text-white rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer ${
+                className={`py-2 px-4 text-xs font-bold text-white rounded-xl shadow-xs transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5 ${
                   outcomeModal.type === 'Lost' ? 'bg-rose-600 hover:bg-rose-700' : 
                   outcomeModal.type === 'Completed' ? 'bg-teal-600 hover:bg-teal-700' : 
                   'bg-emerald-600 hover:bg-emerald-700'
                 }`}
               >
-                Confirm
+                {isSavingOutcome && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {isSavingOutcome ? 'Processing...' : 'Confirm'}
               </button>
             </footer>
           </div>

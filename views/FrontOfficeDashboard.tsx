@@ -8,7 +8,7 @@ import {
   Phone, X, CalendarCheck, Tag, Chrome, MessageCircle, Instagram, 
   Facebook, Youtube, Globe, Clock, Users as UsersIcon,
   Share2, History, BadgeInfo, FileText, CreditCard, Clock3, Stethoscope,
-  Filter, FileSpreadsheet, Briefcase, AlertTriangle, RefreshCcw
+  Filter, FileSpreadsheet, Briefcase, AlertTriangle, RefreshCcw, Loader2
 } from 'lucide-react';
 
 const formatDate = (dateString: string | undefined | null): string => {
@@ -42,6 +42,17 @@ const SOURCE_DISPLAY_MAP: Record<string, string> = {
 
 const getSourceDisplay = (source: string | undefined): string => {
   if (!source) return 'Others';
+  const clean = source.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (
+    clean === 'acquire opd' || 
+    clean === 'acqure opd' || 
+    clean === 'acquire_opd' || 
+    clean === 'acqure_opd' || 
+    clean === 'acquireopd' || 
+    clean === 'acqureopd'
+  ) {
+    return 'Acquire OPD';
+  }
   if (source.startsWith('Other: ')) return 'Others';
   return SOURCE_DISPLAY_MAP[source] || source;
 };
@@ -61,12 +72,20 @@ const getHistoryStatus = (p: Patient): string => {
   if (p.doctorAssessment) {
     if (p.doctorAssessment.quickCode === SurgeonCode.S1) return 'Package Proposal';
     if (p.doctorAssessment.quickCode === SurgeonCode.M1) return 'Medication Done';
-    // Removed automatic 'Doctor Done' status
+    if (p.status === 'Doctor Done' && (p.doctorAssessment.assessedAt || p.doctorAssessment.doctorSignature || p.doctorAssessment.quickCode)) {
+      return 'Doctor Done';
+    }
   }
 
   // Priority 3: Specific manual status from Front Office (if updated via Edit)
   if (p.status && p.status !== 'Arrived' && p.status !== 'Scheduled' && p.status !== 'Follow Up') {
-    return p.status;
+    if (p.status === 'Doctor Done') {
+      if (p.doctorAssessment?.assessedAt || p.doctorAssessment?.doctorSignature || p.doctorAssessment?.quickCode) {
+        return 'Doctor Done';
+      }
+    } else {
+      return p.status;
+    }
   }
 
   // Priority 4: Revisit lead identification
@@ -196,6 +215,14 @@ export const FrontOfficeDashboard: React.FC = () => {
   const [showRevisitModal, setShowRevisitModal] = useState(false);
   const [showRevisitScheduleModal, setShowRevisitScheduleModal] = useState(false);
   const [revisitScheduleData, setRevisitScheduleData] = useState({ date: new Date().toISOString().split('T')[0], time: '10:00' });
+  
+  // Loading indicators for form submissions and async actions
+  const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
+  const [isSubmittingPatient, setIsSubmittingPatient] = useState(false);
+  const [isSubmittingRevisitArrived, setIsSubmittingRevisitArrived] = useState(false);
+  const [isSubmittingRevisitSchedule, setIsSubmittingRevisitSchedule] = useState(false);
+  const [isDeletingPatient, setIsDeletingPatient] = useState(false);
+  const [updatingApptTypeId, setUpdatingApptTypeId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<Partial<Patient> & { sourceDoctorNotes?: string; sourceOtherDetails?: string }>({
     id: '', name: '', dob: '', gender: undefined, age: undefined,
@@ -332,7 +359,8 @@ export const FrontOfficeDashboard: React.FC = () => {
   };
 
   const handleRevisitArrived = async () => {
-    if (!revisitPatient) return;
+    if (!revisitPatient || isSubmittingRevisitArrived) return;
+    setIsSubmittingRevisitArrived(true);
     const item = revisitPatient;
     const baseId = item.id.split('_V')[0];
     const newVisitId = `${baseId}_V${Date.now()}`;
@@ -364,14 +392,17 @@ export const FrontOfficeDashboard: React.FC = () => {
       setActiveTab('REGISTRATION'); 
     } catch (error) { 
       alert("Failed to create revisit record."); 
+    } finally {
+      setIsSubmittingRevisitArrived(false);
     }
   };
 
   const handleRevisitScheduleSubmit = async () => {
-    if (!revisitPatient || !revisitScheduleData.date || !revisitScheduleData.time) {
-      alert("Please select date and time.");
+    if (!revisitPatient || !revisitScheduleData.date || !revisitScheduleData.time || isSubmittingRevisitSchedule) {
+      if (!revisitScheduleData.date || !revisitScheduleData.time) alert("Please select date and time.");
       return;
     }
+    setIsSubmittingRevisitSchedule(true);
     const item = revisitPatient;
     const apptData: any = {
       name: item.name,
@@ -395,11 +426,14 @@ export const FrontOfficeDashboard: React.FC = () => {
       setActiveTab('APPOINTMENTS');
     } catch (error) {
       alert("Failed to schedule revisit.");
+    } finally {
+      setIsSubmittingRevisitSchedule(false);
     }
   };
 
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingBooking) return;
     const isBasicValid = bookingData.name && bookingData.mobile && bookingData.date && bookingData.time && bookingData.source && bookingData.condition;
     if (!isBasicValid) return alert("Please provide all details.");
     
@@ -407,19 +441,37 @@ export const FrontOfficeDashboard: React.FC = () => {
     if (displaySource === 'Doctor Recommended' && !bookingData.sourceDoctorName) return alert("Please provide the Doctor Name.");
     if (displaySource === 'Others' && !bookingData.sourceOtherDetails) return alert("Please provide source details.");
 
-    const payload = { ...bookingData, bookingType: 'Scheduled' }; 
-    if (displaySource === 'Others' && payload.sourceOtherDetails) payload.source = `Other: ${payload.sourceOtherDetails}`;
-    
-    if (editingId && activeTab === 'APPOINTMENTS') await updateAppointment({ ...payload, id: editingId } as Appointment);
-    else await addAppointment(payload as any);
-    setShowBookingForm(false);
-    resetBookingForm();
+    setIsSubmittingBooking(true);
+    try {
+      const payload = { ...bookingData, bookingType: 'Scheduled' }; 
+      if (displaySource === 'Others' && payload.sourceOtherDetails) payload.source = `Other: ${payload.sourceOtherDetails}`;
+      
+      if (editingId && activeTab === 'APPOINTMENTS') await updateAppointment({ ...payload, id: editingId } as Appointment);
+      else await addAppointment(payload as any);
+      setShowBookingForm(false);
+      resetBookingForm();
+    } catch (err) {
+      alert("Failed to save appointment. Please try again.");
+    } finally {
+      setIsSubmittingBooking(false);
+    }
   };
 
-  const handleBookingTypeChange = async (appt: Appointment, newType: 'Scheduled' | 'Follow Up') => { await updateAppointment({ ...appt, bookingType: newType }); };
+  const handleBookingTypeChange = async (appt: Appointment, newType: 'Scheduled' | 'Follow Up') => { 
+    if (updatingApptTypeId) return;
+    setUpdatingApptTypeId(appt.id);
+    try {
+      await updateAppointment({ ...appt, bookingType: newType }); 
+    } catch (err) {
+      alert("Failed to update booking status.");
+    } finally {
+      setUpdatingApptTypeId(null);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingPatient) return;
     if (step === 1 && !editingId) {
       if (!formData.name || formData.age == null || !formData.gender || !formData.mobile || !formData.condition) return alert("Please complete all mandatory fields.");
       
@@ -441,25 +493,36 @@ export const FrontOfficeDashboard: React.FC = () => {
     if (displaySource === 'Doctor Recommended' && dataToSave.sourceDoctorName) dataToSave.sourceDoctorName = dataToSave.sourceDoctorNotes ? `${dataToSave.sourceDoctorName} (Notes: ${dataToSave.sourceDoctorNotes})` : dataToSave.sourceDoctorName;
     if (displaySource === 'Others' && dataToSave.sourceOtherDetails) dataToSave.source = `Other: ${dataToSave.sourceOtherDetails}`;
     
-    if (editingId) { 
-      const originalPatient = patients.find(p => p.id === editingId); 
-      if (originalPatient?.source === 'Acquire OPD') {
-        dataToSave.source = 'Acquire OPD';
-      }
-      if (originalPatient) await updatePatient(editingId, { ...originalPatient, ...dataToSave as Patient }); 
-    }
-    else { 
-      if (patients.some(p => p.id === formData.id)) return alert("File Number already exists."); 
-      if (originatingAppointmentId) {
-        const origAppt = appointments.find(a => a.id === originatingAppointmentId);
-        if (origAppt?.source === 'Acquire OPD') {
+    setIsSubmittingPatient(true);
+    try {
+      if (editingId) { 
+        const originalPatient = patients.find(p => p.id === editingId); 
+        if (originalPatient?.source === 'Acquire OPD') {
           dataToSave.source = 'Acquire OPD';
         }
-        await convertAppointment(originatingAppointmentId, dataToSave as any); 
+        if (originalPatient) await updatePatient(editingId, { ...originalPatient, ...dataToSave as Patient }); 
       }
-      else await addPatient(dataToSave as any); 
+      else { 
+        if (patients.some(p => p.id === formData.id)) {
+          setIsSubmittingPatient(false);
+          return alert("File Number already exists."); 
+        }
+        if (originatingAppointmentId) {
+          const origAppt = appointments.find(a => a.id === originatingAppointmentId);
+          if (origAppt?.source === 'Acquire OPD') {
+            dataToSave.source = 'Acquire OPD';
+          }
+          await convertAppointment(originatingAppointmentId, dataToSave as any); 
+        }
+        else await addPatient(dataToSave as any); 
+      }
+      setShowForm(false); 
+      resetForm();
+    } catch (err) {
+      alert("Failed to save patient registration. Please try again.");
+    } finally {
+      setIsSubmittingPatient(false);
     }
-    setShowForm(false); resetForm();
   };
 
   const filteredPatients = patients.filter(p => {
@@ -924,12 +987,12 @@ export const FrontOfficeDashboard: React.FC = () => {
                     )}
                   </td>
                   <td className="p-5">
-                    <div className="font-bold text-slate-900">{item.name}</div>
-                    <div className="text-[10px] text-slate-500 font-medium uppercase">
-                      {item.age ? `${item.age}Y • ${item.gender}` : ''}
-                      {(item.age || item.gender) && item.source ? ' • ' : ''}
-                      {item.source === 'Doctor Recommended' ? `Dr. ${item.sourceDoctorName || 'Recommended'}` : item.source}
-                    </div>
+                    <div className="font-bold text-slate-900 leading-tight">{item.name}</div>
+                    {item.age ? (
+                      <div className="text-[10px] text-slate-400 font-medium uppercase mt-0.5">
+                        {item.age}Y • {item.gender}
+                      </div>
+                    ) : null}
                   </td>
                   <td className="p-5 whitespace-nowrap">
                     <span className="px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200 bg-slate-100 text-slate-700">
@@ -1113,7 +1176,20 @@ export const FrontOfficeDashboard: React.FC = () => {
                       </div>
                     )}
                  </div>
-                 <button type="submit" className="w-full py-4 bg-hospital-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:scale-105 transition-all mt-6">{editingId ? 'Update Appointment' : 'Create Appointment'}</button>
+                 <button 
+                   type="submit" 
+                   disabled={isSubmittingBooking}
+                   className="w-full py-4 bg-hospital-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all mt-6 flex items-center justify-center gap-2 cursor-pointer"
+                 >
+                   {isSubmittingBooking ? (
+                     <>
+                       <Loader2 className="w-4 h-4 animate-spin" />
+                       <span>{editingId ? 'Updating Appointment...' : 'Creating Appointment...'}</span>
+                     </>
+                   ) : (
+                     <span>{editingId ? 'Update Appointment' : 'Create Appointment'}</span>
+                   )}
+                 </button>
                </form>
             </div>
           </div>
@@ -1231,7 +1307,31 @@ export const FrontOfficeDashboard: React.FC = () => {
                   )}
                 </form>
               </div>
-              <footer className="p-6 sm:p-8 border-t flex justify-between items-center bg-slate-50/30"><button onClick={() => step === 2 ? setStep(1) : setShowForm(false)} className="px-6 py-4 text-xs font-black uppercase text-slate-400">{step === 2 ? 'Back' : 'Cancel'}</button><button onClick={handleSubmit} className="px-8 sm:px-14 py-5 bg-hospital-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl transition-all">{step === 1 && !editingId ? 'Next' : 'Save'}</button></footer>
+              <footer className="p-6 sm:p-8 border-t flex justify-between items-center bg-slate-50/30">
+                <button 
+                  type="button"
+                  disabled={isSubmittingPatient}
+                  onClick={() => step === 2 ? setStep(1) : setShowForm(false)} 
+                  className="px-6 py-4 text-xs font-black uppercase text-slate-400 hover:text-slate-600 disabled:opacity-50"
+                >
+                  {step === 2 ? 'Back' : 'Cancel'}
+                </button>
+                <button 
+                  type="button"
+                  disabled={isSubmittingPatient}
+                  onClick={handleSubmit} 
+                  className="px-8 sm:px-14 py-5 bg-hospital-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-hospital-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {isSubmittingPatient ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>{step === 1 && !editingId ? 'Processing...' : (editingId ? 'Updating...' : 'Registering...')}</span>
+                    </>
+                  ) : (
+                    <span>{step === 1 && !editingId ? 'Next' : (editingId ? 'Update' : 'Save')}</span>
+                  )}
+                </button>
+              </footer>
             </div>
           </div>
         </div>
@@ -1243,7 +1343,43 @@ export const FrontOfficeDashboard: React.FC = () => {
             <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto mb-6"><AlertTriangle className="w-8 h-8 text-rose-600" /></div>
             <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight text-center">Confirm Deletion</h3>
             <p className="text-sm text-slate-500 font-medium mb-8 text-center leading-relaxed">Are you sure? This patient data will be <span className="text-rose-600 font-bold">permanently deleted</span>.</p>
-            <div className="flex gap-3"><button onClick={() => setDeleteConfirmId(null)} className="flex-1 py-3 text-[10px] font-black uppercase text-slate-500 bg-slate-50 rounded-xl border">No / Cancel</button><button onClick={async () => { if (deleteConfirmId) { await deletePatient(deleteConfirmId); setDeleteConfirmId(null); } }} className="flex-1 py-3 text-[10px] font-black uppercase text-white bg-rose-600 rounded-xl shadow-lg hover:bg-rose-700">Confirm / Yes</button></div>
+            <div className="flex gap-3">
+              <button 
+                type="button"
+                disabled={isDeletingPatient}
+                onClick={() => setDeleteConfirmId(null)} 
+                className="flex-1 py-3 text-[10px] font-black uppercase text-slate-500 bg-slate-50 rounded-xl border hover:bg-slate-100 disabled:opacity-50"
+              >
+                No / Cancel
+              </button>
+              <button 
+                type="button"
+                disabled={isDeletingPatient}
+                onClick={async () => { 
+                  if (deleteConfirmId && !isDeletingPatient) { 
+                    setIsDeletingPatient(true);
+                    try {
+                      await deletePatient(deleteConfirmId); 
+                      setDeleteConfirmId(null); 
+                    } catch (err) {
+                      alert("Failed to delete patient.");
+                    } finally {
+                      setIsDeletingPatient(false);
+                    }
+                  } 
+                }} 
+                className="flex-1 py-3 text-[10px] font-black uppercase text-white bg-rose-600 rounded-xl shadow-lg hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1 cursor-pointer"
+              >
+                {isDeletingPatient ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Confirm / Yes</span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1255,13 +1391,41 @@ export const FrontOfficeDashboard: React.FC = () => {
             <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight text-center">Revisit Action</h3>
             <p className="text-sm text-slate-500 font-medium mb-8 text-center leading-relaxed">Choose an action for <span className="text-indigo-600 font-bold">{revisitPatient.name}</span></p>
             <div className="flex flex-col gap-3">
-              <button onClick={handleRevisitArrived} className="w-full py-4 text-[10px] font-black uppercase text-white bg-emerald-600 rounded-xl shadow-lg hover:bg-emerald-700 transition-all flex items-center justify-center gap-2">
-                <CheckCircle className="w-4 h-4" /> Patient Arrived Now
+              <button 
+                type="button"
+                disabled={isSubmittingRevisitArrived}
+                onClick={handleRevisitArrived} 
+                className="w-full py-4 text-[10px] font-black uppercase text-white bg-emerald-600 rounded-xl shadow-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isSubmittingRevisitArrived ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Registering Arrival...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" /> 
+                    <span>Patient Arrived Now</span>
+                  </>
+                )}
               </button>
-              <button onClick={() => { setShowRevisitModal(false); setShowRevisitScheduleModal(true); }} className="w-full py-4 text-[10px] font-black uppercase text-white bg-indigo-600 rounded-xl shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
-                <Calendar className="w-4 h-4" /> Schedule Appointment
+              <button 
+                type="button"
+                disabled={isSubmittingRevisitArrived}
+                onClick={() => { setShowRevisitModal(false); setShowRevisitScheduleModal(true); }} 
+                className="w-full py-4 text-[10px] font-black uppercase text-white bg-indigo-600 rounded-xl shadow-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Calendar className="w-4 h-4" /> 
+                <span>Schedule Appointment</span>
               </button>
-              <button onClick={() => { setShowRevisitModal(false); setRevisitPatient(null); }} className="w-full py-3 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 transition-colors">Cancel</button>
+              <button 
+                type="button"
+                disabled={isSubmittingRevisitArrived}
+                onClick={() => { setShowRevisitModal(false); setRevisitPatient(null); }} 
+                className="w-full py-3 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
@@ -1284,8 +1448,29 @@ export const FrontOfficeDashboard: React.FC = () => {
               </div>
             </div>
             <div className="flex gap-3">
-              <button onClick={() => { setShowRevisitScheduleModal(false); setShowRevisitModal(true); }} className="flex-1 py-4 text-[10px] font-black uppercase text-slate-500 bg-slate-50 rounded-xl border">Back</button>
-              <button onClick={handleRevisitScheduleSubmit} className="flex-[2] py-4 px-8 text-[10px] font-black uppercase text-white bg-blue-600 rounded-xl shadow-lg hover:bg-blue-700 transition-all">Confirm Schedule</button>
+              <button 
+                type="button"
+                disabled={isSubmittingRevisitSchedule}
+                onClick={() => { setShowRevisitScheduleModal(false); setShowRevisitModal(true); }} 
+                className="flex-1 py-4 text-[10px] font-black uppercase text-slate-500 bg-slate-50 rounded-xl border hover:bg-slate-100 disabled:opacity-50"
+              >
+                Back
+              </button>
+              <button 
+                type="button"
+                disabled={isSubmittingRevisitSchedule}
+                onClick={handleRevisitScheduleSubmit} 
+                className="flex-[2] py-4 px-8 text-[10px] font-black uppercase text-white bg-blue-600 rounded-xl shadow-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isSubmittingRevisitSchedule ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Scheduling...</span>
+                  </>
+                ) : (
+                  <span>Confirm Schedule</span>
+                )}
+              </button>
             </div>
           </div>
         </div>
