@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
 import { SurgeonCode, PainSeverity, Affordability, ConversionReadiness, Patient, DoctorAssessment, Appointment } from '../types';
-import { Stethoscope, Check, ChevronRight, User, Calendar, Save, Briefcase, CreditCard, Activity, Tag, FileText, Database, Clock, Share2, ShieldCheck, Search, Filter, History, ClipboardList, RefreshCcw, Upload, Trash2, Loader2 } from 'lucide-react';
+import { Stethoscope, Check, ChevronRight, ChevronLeft, User, Calendar, Save, Briefcase, CreditCard, Activity, Tag, FileText, Database, Clock, Share2, ShieldCheck, Search, Filter, History, ClipboardList, RefreshCcw, Upload, Trash2, Loader2 } from 'lucide-react';
 
 const PROCEDURES = [
   "Lap Cholecystectomy",
@@ -80,6 +80,15 @@ export const DoctorDashboard: React.FC = () => {
     doctorSignature: ''
   });
 
+  const getFormattedDoctorName = (name?: string) => {
+    if (!name) return 'Doctor';
+    const trimmed = name.trim();
+    if (trimmed.toLowerCase().startsWith('dr.') || trimmed.toLowerCase().startsWith('dr ')) {
+      return trimmed;
+    }
+    return `Dr. ${trimmed}`;
+  };
+
   const currentDoctorId = localStorage.getItem('hms_hospital_id') || '';
   const loggedInDoctor = staffUsers?.find(u => u.id === currentDoctorId) || {
     id: currentDoctorId,
@@ -116,11 +125,73 @@ export const DoctorDashboard: React.FC = () => {
   const [isSavingAssessment, setIsSavingAssessment] = useState(false);
   const [isSavingAvailability, setIsSavingAvailability] = useState(false);
   const [updatingApptId, setUpdatingApptId] = useState<string | null>(null);
+  const [isDirectoryCollapsed, setIsDirectoryCollapsed] = useState(false);
 
   const [daySchedules, setDaySchedules] = useState<any[]>(DEFAULT_DAY_SCHEDULES);
   const [blockedDates, setBlockedDates] = useState<any[]>([]);
   const [blockedDateInput, setBlockedDateInput] = useState('');
   const [blockedReasonInput, setBlockedReasonInput] = useState('Vacation');
+
+  // True Weekly Calendar state & helpers
+  const getMonday = (d: Date) => {
+    const date = new Date(d);
+    const day = date.getDay();
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(date.setDate(diff));
+  };
+
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => getMonday(new Date()));
+
+  const weekDays = useMemo(() => {
+    const days = [];
+    const start = new Date(currentWeekStart);
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const weekdayName = d.toLocaleDateString('en-US', { weekday: 'long' });
+      const shortWeekday = d.toLocaleDateString('en-US', { weekday: 'short' });
+      const dateNum = d.getDate();
+      const monthStr = d.toLocaleDateString('en-US', { month: 'short' });
+      const year = d.getFullYear();
+      const isoDate = d.toISOString().split('T')[0];
+      days.push({
+        dateObj: d,
+        weekday: weekdayName,
+        shortWeekday,
+        dateNum,
+        monthStr,
+        formattedDate: `${weekdayName}, ${dateNum} ${monthStr}`, // e.g. "Monday, 5 Oct"
+        isoDate
+      });
+    }
+    return days;
+  }, [currentWeekStart]);
+
+  const weekRangeLabel = useMemo(() => {
+    const first = weekDays[0];
+    const last = weekDays[6];
+    return `${first.dateNum} ${first.monthStr} - ${last.dateNum} ${last.monthStr}, ${last.dateObj.getFullYear()}`;
+  }, [weekDays]);
+
+  const handlePrevWeek = () => {
+    setCurrentWeekStart(prev => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() - 7);
+      return d;
+    });
+  };
+
+  const handleNextWeek = () => {
+    setCurrentWeekStart(prev => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() + 7);
+      return d;
+    });
+  };
+
+  const handleTodayWeek = () => {
+    setCurrentWeekStart(getMonday(new Date()));
+  };
 
   // Synchronize state with loaded metadata database records
   useEffect(() => {
@@ -453,190 +524,205 @@ export const DoctorDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header and Tab Layout Switcher */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
-        <div className="flex items-center gap-4 w-full md:w-auto">
-          {/* Doctor Pic */}
-          <div className="relative shrink-0">
-            {loggedInDoctor.photoUrl ? (
-              <img 
-                src={loggedInDoctor.photoUrl} 
-                alt="Profile" 
-                className="w-14 h-14 rounded-xl object-cover border border-slate-200 shadow-sm"
-              />
-            ) : (
-              <div className="w-14 h-14 rounded-xl bg-hospital-50 text-hospital-700 flex items-center justify-center border border-hospital-150 text-[10px] uppercase font-black font-mono">
-                {loggedInDoctor.name ? loggedInDoctor.name.substring(0, 2) : 'DR'}
-              </div>
-            )}
-            <span className="absolute -bottom-1 -right-1 bg-green-500 w-3.5 h-3.5 rounded-full border-2 border-white"></span>
-          </div>
-
-          <div>
-            <div className="text-[9px] font-black text-hospital-600 uppercase tracking-widest flex items-center gap-1.5 mb-0.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-hospital-600" /> Active Profile
-            </div>
-            <h2 className="text-xl font-black text-slate-800 tracking-tight leading-none mb-1">
-              Dr. {loggedInDoctor.name}
-            </h2>
-            <p className="text-[11px] text-slate-400 font-medium">
-              Manage live clinical patient queues and scheduled leaves.
-            </p>
-          </div>
-        </div>
-
-        {/* Active Section Indicator (Controlled via Side Menu) */}
-        <div className="flex items-center gap-2">
-          <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center gap-2">
-            {activeTab === 'patients' && (
-              <>
-                <User className="w-4 h-4 text-emerald-600" />
-                <span className="text-xs font-black uppercase text-slate-800 tracking-wider">Patients Queue</span>
-              </>
-            )}
-            {activeTab === 'appointments' && (
-              <>
-                <Calendar className="w-4 h-4 text-hospital-600" />
-                <span className="text-xs font-black uppercase text-slate-800 tracking-wider">
-                  Appointments ({doctorAppointments.length})
-                </span>
-              </>
-            )}
-            {activeTab === 'availability' && (
-              <>
-                <Clock className="w-4 h-4 text-amber-600" />
-                <span className="text-xs font-black uppercase text-slate-800 tracking-wider">Availability Mode</span>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
 
       {activeTab === 'patients' ? (
-        <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-210px)] gap-6 animate-in fade-in duration-300">
-          <div className="w-full lg:w-1/3 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden h-[450px] lg:h-full">
-            <div className="p-4 border-b bg-gray-50 flex justify-between items-center shrink-0">
-               <h3 className="font-bold text-gray-700 flex items-center gap-2">
-                 <User className="w-5 h-5 text-hospital-600" /> Patient Directory
-               </h3>
-               <div className="flex gap-2">
-                 <div className="flex flex-col items-end">
-                   <span className="text-[7px] font-black text-slate-400 uppercase leading-none mb-1">Pending</span>
-                   <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100 leading-none">{pendingCount}</span>
-                 </div>
-                 <div className="flex flex-col items-end">
-                   <span className="text-[7px] font-black text-slate-400 uppercase leading-none mb-1">Done</span>
-                   <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 leading-none">{doneCount}</span>
-                 </div>
-               </div>
-            </div>
-
-            {/* Directory Filters */}
-            <div className="p-3 bg-white border-b space-y-3 shrink-0">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="Search patients..."
-                  className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm font-medium focus:ring-2 focus:ring-hospital-500 outline-none transition-all"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+        <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-90px)] min-h-[600px] gap-4 sm:gap-6 animate-in fade-in duration-300">
+          {/* Patient Directory Sidebar Panel */}
+          {!isDirectoryCollapsed && (
+            <div className="w-full lg:w-1/3 h-[500px] lg:h-full bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden shrink-0 transition-all duration-300">
+              <div className="p-4 border-b bg-gray-50 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDirectoryCollapsed(true)}
+                    className="p-1.5 hover:bg-slate-200/80 text-slate-500 rounded-lg transition-colors cursor-pointer"
+                    title="Collapse Patient Directory"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <h3 className="font-bold text-gray-700 flex items-center gap-2">
+                    <User className="w-5 h-5 text-hospital-600" /> Patient Directory
+                  </h3>
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex flex-col items-end">
+                    <span className="text-[7px] font-black text-slate-400 uppercase leading-none mb-1">Pending</span>
+                    <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100 leading-none">{pendingCount}</span>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className="text-[7px] font-black text-slate-400 uppercase leading-none mb-1">Done</span>
+                    <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 leading-none">{doneCount}</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <div className="flex-1 relative flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg">
-                  <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter shrink-0">From</span>
+
+              {/* Directory Filters */}
+              <div className="p-3 bg-white border-b space-y-3 shrink-0">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
-                    type="date"
-                    className="w-full bg-transparent text-[11px] font-bold outline-none"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
+                    type="text"
+                    placeholder="Search patients..."
+                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm font-medium focus:ring-2 focus:ring-hospital-500 outline-none transition-all"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
-                <div className="flex-1 relative flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg">
-                  <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter shrink-0">To</span>
-                  <input
-                    type="date"
-                    className="w-full bg-transparent text-[11px] font-bold outline-none"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                  />
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div 
+                    onClick={(e) => {
+                      const input = e.currentTarget.querySelector('input') as HTMLInputElement | null;
+                      if (input) {
+                        try {
+                          if (typeof input.showPicker === 'function') {
+                            input.showPicker();
+                          } else {
+                            input.focus();
+                          }
+                        } catch {
+                          input.focus();
+                        }
+                      }
+                    }}
+                    className="flex-1 relative flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors"
+                  >
+                    <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter shrink-0 select-none">From</span>
+                    <input
+                      type="date"
+                      className="w-full bg-transparent text-[11px] font-bold outline-none cursor-pointer"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      onClick={(e) => {
+                        try {
+                          if (typeof e.currentTarget.showPicker === 'function') {
+                            e.currentTarget.showPicker();
+                          }
+                        } catch {}
+                      }}
+                    />
+                  </div>
+                  <div 
+                    onClick={(e) => {
+                      const input = e.currentTarget.querySelector('input') as HTMLInputElement | null;
+                      if (input) {
+                        try {
+                          if (typeof input.showPicker === 'function') {
+                            input.showPicker();
+                          } else {
+                            input.focus();
+                          }
+                        } catch {
+                          input.focus();
+                        }
+                      }
+                    }}
+                    className="flex-1 relative flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors"
+                  >
+                    <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter shrink-0 select-none">To</span>
+                    <input
+                      type="date"
+                      className="w-full bg-transparent text-[11px] font-bold outline-none cursor-pointer"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      onClick={(e) => {
+                        try {
+                          if (typeof e.currentTarget.showPicker === 'function') {
+                            e.currentTarget.showPicker();
+                          }
+                        } catch {}
+                      }}
+                    />
+                  </div>
                 </div>
+              </div>
+
+              <div className="overflow-y-auto flex-1 p-3 space-y-6">
+                {/* Pending Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-3 px-1">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-amber-500" /> Pending Assessments
+                    </span>
+                    <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 rounded-full">{pendingPatients.length}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {pendingPatients.map(p => <PatientCard key={p.id} p={p} />)}
+                    {pendingPatients.length === 0 && (
+                      <div className="p-4 text-center text-slate-300 text-[10px] font-black uppercase tracking-widest border border-dashed border-slate-100 rounded-xl bg-slate-50/30">
+                        No Pending patients
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Done Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-3 px-1">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                      <ClipboardList className="w-3.5 h-3.5 text-emerald-500" /> Completed Today
+                    </span>
+                    <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 rounded-full">{donePatients.length}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {donePatients.map(p => <PatientCard key={p.id} p={p} />)}
+                    {donePatients.length === 0 && (
+                      <div className="p-4 text-center text-slate-300 text-[10px] font-black uppercase tracking-widest border border-dashed border-slate-100 rounded-xl bg-slate-50/30">
+                        No Completed assessments
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {filteredDirectoryPatients.length === 0 && (
+                  <div className="pt-10 text-center text-slate-300 text-xs font-black uppercase tracking-widest">
+                    No results for this date range
+                  </div>
+                )}
               </div>
             </div>
+          )}
 
-            <div className="overflow-y-auto flex-1 p-3 space-y-6">
-              {/* Pending Section */}
-              <div>
-                <div className="flex items-center justify-between mb-3 px-1">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-amber-500" /> Pending Assessments
-                  </span>
-                  <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 rounded-full">{pendingPatients.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {pendingPatients.map(p => <PatientCard key={p.id} p={p} />)}
-                  {pendingPatients.length === 0 && (
-                    <div className="p-4 text-center text-slate-300 text-[10px] font-black uppercase tracking-widest border border-dashed border-slate-100 rounded-xl bg-slate-50/30">
-                      No Pending patients
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Done Section */}
-              <div>
-                <div className="flex items-center justify-between mb-3 px-1">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                    <ClipboardList className="w-3.5 h-3.5 text-emerald-500" /> Completed Today
-                  </span>
-                  <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 rounded-full">{donePatients.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {donePatients.map(p => <PatientCard key={p.id} p={p} />)}
-                  {donePatients.length === 0 && (
-                    <div className="p-4 text-center text-slate-300 text-[10px] font-black uppercase tracking-widest border border-dashed border-slate-100 rounded-xl bg-slate-50/30">
-                      No Completed assessments
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {filteredDirectoryPatients.length === 0 && (
-                <div className="pt-10 text-center text-slate-300 text-xs font-black uppercase tracking-widest">
-                  No results for this date range
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="w-full lg:w-2/3 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden">
+          {/* Patient Assessment Workspace */}
+          <div className={`bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden h-[500px] lg:h-full transition-all duration-300 ${
+            isDirectoryCollapsed ? 'w-full lg:w-full flex-1' : 'w-full lg:w-2/3'
+          }`}>
             {selectedPatient ? (
               <form onSubmit={handleSave} className="flex flex-col h-full">
-                <div className="p-4 sm:p-6 border-b bg-white shrink-0">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                    <div className="bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 p-3 rounded-2xl shadow-sm">
+                <div className="p-4 sm:p-5 border-b bg-white shrink-0 flex items-center gap-3 overflow-x-auto scrollbar-thin">
+                  {isDirectoryCollapsed && (
+                    <button
+                      type="button"
+                      onClick={() => setIsDirectoryCollapsed(false)}
+                      className="px-3.5 py-2.5 bg-hospital-600 hover:bg-hospital-700 text-white rounded-2xl text-xs font-extrabold flex items-center gap-2 transition-all shadow-md shrink-0 cursor-pointer"
+                      title="Expand Patient Directory"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                      <span className="whitespace-nowrap">Directory ({pendingCount})</span>
+                    </button>
+                  )}
+                  <div className="flex items-center gap-3 min-w-max pb-0.5 flex-1">
+                    <div className="bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 p-3 rounded-2xl shadow-sm min-w-[150px] flex-1 shrink-0">
                       <div className="flex items-center gap-1.5 mb-1">
                         <User className="w-3 h-3 text-indigo-500" />
                         <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Name</span>
                       </div>
                       <div className="text-sm font-black text-indigo-900 truncate leading-tight">{selectedPatient.name}</div>
                     </div>
-                    <div className="bg-gradient-to-br from-blue-50 to-white border border-blue-100 p-3 rounded-2xl shadow-sm">
+                    <div className="bg-gradient-to-br from-blue-50 to-white border border-blue-100 p-3 rounded-2xl shadow-sm min-w-[150px] flex-1 shrink-0">
                       <div className="flex items-center gap-1.5 mb-1">
                         <Activity className="w-3 h-3 text-blue-500" />
                         <span className="text-[8px] font-black text-blue-400 uppercase tracking-widest">Age / Gender</span>
                       </div>
                       <div className="text-sm font-black text-blue-900 leading-tight">{selectedPatient.age}Y <span className="text-blue-200">|</span> {selectedPatient.gender}</div>
                     </div>
-                    <div className="bg-gradient-to-br from-amber-50 to-white border border-amber-100 p-3 rounded-2xl shadow-sm">
+                    <div className="bg-gradient-to-br from-amber-50 to-white border border-amber-100 p-3 rounded-2xl shadow-sm min-w-[150px] flex-1 shrink-0">
                       <div className="flex items-center gap-1.5 mb-1">
                         <Briefcase className="w-3 h-3 text-amber-500" />
                         <span className="text-[8px] font-black text-amber-400 uppercase tracking-widest">Occupation</span>
                       </div>
                       <div className="text-sm font-black text-amber-900 truncate leading-tight">{selectedPatient.occupation || '---'}</div>
                     </div>
-                    <div className="bg-gradient-to-br from-teal-50 to-white border border-teal-100 p-3 rounded-2xl shadow-sm">
+                    <div className="bg-gradient-to-br from-teal-50 to-white border border-teal-100 p-3 rounded-2xl shadow-sm min-w-[150px] flex-1 shrink-0">
                       <div className="flex items-center gap-1.5 mb-1">
                         <Share2 className="w-3 h-3 text-teal-500" />
                         <span className="text-[8px] font-black text-teal-400 uppercase tracking-widest">Source</span>
@@ -645,7 +731,7 @@ export const DoctorDashboard: React.FC = () => {
                         {selectedPatient.source === 'Doctor Recommended' ? `Dr. ${selectedPatient.sourceDoctorName || 'Recommended'}` : selectedPatient.source}
                       </div>
                     </div>
-                    <div className="bg-gradient-to-br from-rose-50 to-white border border-rose-100 p-3 rounded-2xl shadow-sm">
+                    <div className="bg-gradient-to-br from-rose-50 to-white border border-rose-100 p-3 rounded-2xl shadow-sm min-w-[150px] flex-1 shrink-0">
                       <div className="flex items-center gap-1.5 mb-1">
                         <ShieldCheck className="w-3 h-3 text-rose-500" />
                         <span className="text-[8px] font-black text-rose-400 uppercase tracking-widest">Insurance Name</span>
@@ -772,20 +858,23 @@ export const DoctorDashboard: React.FC = () => {
                   </div>
 
                 </div>
-                <div className="p-6 border-t bg-gray-50 flex justify-end shrink-0">
+                <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200/80 flex items-center justify-between shrink-0">
+                  <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <ShieldCheck className="w-3.5 h-3.5 text-slate-400" /> Assessment Record
+                  </div>
                   <button 
                     type="submit" 
                     disabled={isSavingAssessment}
-                    className="w-full sm:w-auto bg-hospital-600 text-white px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-hospital-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md"
+                    className="w-full sm:w-auto bg-hospital-600 text-white px-5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 hover:bg-hospital-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm cursor-pointer ml-auto"
                   >
                     {isSavingAssessment ? (
                       <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin" />
                         <span>Saving Assessment...</span>
                       </>
                     ) : (
                       <>
-                        <Save className="w-5 h-5" />
+                        <Save className="w-4 h-4" />
                         <span>Save Assessment</span>
                       </>
                     )}
@@ -796,6 +885,15 @@ export const DoctorDashboard: React.FC = () => {
               <div className="flex-1 flex flex-col items-center justify-center text-gray-300 p-10">
                 <Stethoscope className="w-24 h-24 mb-4" />
                 <p className="text-lg font-bold text-center">Select a patient to begin assessment</p>
+                {isDirectoryCollapsed && (
+                  <button
+                    type="button"
+                    onClick={() => setIsDirectoryCollapsed(false)}
+                    className="mt-4 px-4 py-2.5 bg-hospital-600 hover:bg-hospital-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-md transition-all cursor-pointer"
+                  >
+                    <ChevronRight className="w-4 h-4" /> Open Patient Directory ({pendingCount} Pending)
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -973,14 +1071,16 @@ export const DoctorDashboard: React.FC = () => {
 
           {/* Availability days and calendar settings */}
           <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-100 shadow-sm space-y-6">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-sm font-black uppercase text-slate-800 tracking-wider flex items-center gap-1.5">
                   <Calendar className="w-4 h-4 text-hospital-600" /> Weekly Advanced Scheduler
                 </h3>
-                <p className="text-slate-400 text-xs">Set daily working hours, unlimited customizable breaks, status, and holidays.</p>
+                <p className="text-slate-400 text-xs">True 7-day weekly calendar with exact dates, daily working hours, customizable breaks, status, and holidays.</p>
               </div>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full border border-emerald-100">Saved in Database</p>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full border border-emerald-100">Saved in Database</span>
+              </div>
             </div>
 
             {/* Weekdays picker checkboxes */}
@@ -1007,101 +1107,158 @@ export const DoctorDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Daily Schedule Planner Grid */}
-            <div className="space-y-4">
-              <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest">Detail Schedules by Day</span>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {daySchedules.map((ds) => (
-                  <div key={ds.day} className="bg-slate-50/50 border border-slate-100 rounded-xl p-4 space-y-3 shadow-sm hover:border-slate-200 transition-all">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-700">{ds.day}</span>
-                      <select
-                        value={ds.status}
-                        onChange={(e) => updateDayScheduleField(ds.day, "status", e.target.value)}
-                        className="text-[11px] font-bold border border-slate-200 bg-white rounded-lg p-1 px-1.5 text-slate-600 outline-none focus:border-hospital-500"
-                      >
-                        <option value="Available">Available</option>
-                        <option value="Unavailable">Unavailable</option>
-                        <option value="Holiday">Holiday</option>
-                        <option value="Leave">Leave</option>
-                      </select>
-                    </div>
+            {/* True Weekly Calendar View with Week Navigation */}
+            <div className="space-y-4 pt-2">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+                <div>
+                  <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest">Active Week View</span>
+                  <div className="text-xs font-extrabold text-slate-900 mt-0.5">{weekRangeLabel}</div>
+                </div>
+                <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 shadow-xs">
+                  <button
+                    type="button"
+                    onClick={handlePrevWeek}
+                    className="px-3 py-1.5 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                    title="Previous Week"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" /> Previous Week
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTodayWeek}
+                    className="px-3 py-1.5 bg-hospital-600 hover:bg-hospital-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+                    title="Return to Current Week"
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNextWeek}
+                    className="px-3 py-1.5 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                    title="Next Week"
+                  >
+                    Next Week <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
 
-                    {ds.status === "Available" ? (
-                      <div className="space-y-3 pt-2 border-t border-slate-100">
-                        {/* Start and end times */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-[8px] uppercase font-bold text-slate-400 mb-0.5">Start Time</label>
-                            <input
-                              type="time"
-                              value={ds.startTime || "09:00"}
-                              onChange={(e) => updateDayScheduleField(ds.day, "startTime", e.target.value)}
-                              className="w-full bg-white border border-slate-200 p-1 rounded-md text-[11px] font-bold text-slate-700"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[8px] uppercase font-bold text-slate-400 mb-0.5">End Time</label>
-                            <input
-                              type="time"
-                              value={ds.endTime || "17:00"}
-                              onChange={(e) => updateDayScheduleField(ds.day, "endTime", e.target.value)}
-                              className="w-full bg-white border border-slate-200 p-1 rounded-md text-[11px] font-bold text-slate-700"
-                            />
-                          </div>
-                        </div>
+              {/* 7 Days Weekly Grid with Exact Dates and Horizontal Scroll support */}
+              <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest pt-1">Detail Schedules by Date & Day (7 Days)</span>
+              
+              <div className="overflow-x-auto pb-2 scrollbar-thin">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-w-[280px]">
+                  {weekDays.map((wd) => {
+                    const ds = daySchedules.find(s => s.day === wd.weekday) || {
+                      day: wd.weekday,
+                      status: "Available",
+                      startTime: "09:00",
+                      endTime: "17:00",
+                      breaks: [{ startTime: "13:00", endTime: "14:00" }]
+                    };
 
-                        {/* Breaks list */}
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between items-center">
-                            <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Breaks</span>
-                            <button
-                              type="button"
-                              onClick={() => addBreakToDay(ds.day)}
-                              className="text-[9px] font-extrabold text-hospital-600 hover:text-hospital-800"
+                    return (
+                      <div key={wd.isoDate} className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 space-y-3 shadow-sm hover:border-hospital-400 transition-all flex flex-col justify-between">
+                        <div>
+                          <div className="flex justify-between items-start gap-2 mb-2 pb-2 border-b border-slate-200/60">
+                            <div>
+                              <div className="text-xs font-black text-slate-900">{wd.formattedDate}</div>
+                              <div className="text-[10px] text-hospital-600 font-mono font-bold">{wd.isoDate}</div>
+                            </div>
+                            <select
+                              value={ds.status}
+                              onChange={(e) => updateDayScheduleField(wd.weekday, "status", e.target.value)}
+                              className="text-[10px] font-extrabold border border-slate-200 bg-white rounded-lg px-2 py-1 text-slate-700 outline-none focus:border-hospital-500 shadow-xs"
                             >
-                              + Add Break
-                            </button>
+                              <option value="Available">Available</option>
+                              <option value="Unavailable">Unavailable</option>
+                              <option value="Holiday">Holiday</option>
+                              <option value="Leave">Leave</option>
+                            </select>
                           </div>
 
-                          <div className="space-y-1">
-                            {(ds.breaks || []).map((b: any, bIdx: number) => (
-                              <div key={bIdx} className="flex items-center gap-1 bg-white border border-slate-200 pl-1.5 pr-1 py-1 rounded-lg">
-                                <input
-                                  type="time"
-                                  value={b.startTime}
-                                  onChange={(e) => updateBreakTime(ds.day, bIdx, "startTime", e.target.value)}
-                                  className="bg-transparent text-[10px] font-semibold text-slate-600 max-w-[55px] border-b border-dashed border-slate-200"
-                                />
-                                <span className="text-slate-400 text-[10px]">-</span>
-                                <input
-                                  type="time"
-                                  value={b.endTime}
-                                  onChange={(e) => updateBreakTime(ds.day, bIdx, "endTime", e.target.value)}
-                                  className="bg-transparent text-[10px] font-semibold text-slate-600 max-w-[55px] border-b border-dashed border-slate-200"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => removeBreakFromDay(ds.day, bIdx)}
-                                  className="text-rose-500 hover:text-rose-700 ml-auto p-0.5"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
+                          {ds.status === "Available" ? (
+                            <div className="space-y-3 pt-1">
+                              {/* Start and end times */}
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-[8px] uppercase font-extrabold text-slate-400 mb-0.5">Start Time</label>
+                                  <input
+                                    type="time"
+                                    value={ds.startTime || "09:00"}
+                                    onChange={(e) => updateDayScheduleField(wd.weekday, "startTime", e.target.value)}
+                                    className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-[11px] font-bold text-slate-800 font-mono"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[8px] uppercase font-extrabold text-slate-400 mb-0.5">End Time</label>
+                                  <input
+                                    type="time"
+                                    value={ds.endTime || "17:00"}
+                                    onChange={(e) => updateDayScheduleField(wd.weekday, "endTime", e.target.value)}
+                                    className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-[11px] font-bold text-slate-800 font-mono"
+                                  />
+                                </div>
                               </div>
-                            ))}
-                            {(ds.breaks || []).length === 0 && (
-                              <p className="text-[10px] text-slate-400 italic">No scheduled breaks.</p>
-                            )}
-                          </div>
+
+                              {/* Breaks list */}
+                              <div className="space-y-1.5">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider">Breaks</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => addBreakToDay(wd.weekday)}
+                                    className="text-[9px] font-extrabold text-hospital-600 hover:text-hospital-800 bg-hospital-50 px-2 py-0.5 rounded-md"
+                                  >
+                                    + Add Break
+                                  </button>
+                                </div>
+
+                                <div className="space-y-1">
+                                  {(ds.breaks || []).map((b: any, bIdx: number) => (
+                                    <div key={bIdx} className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-lg">
+                                      <input
+                                        type="time"
+                                        value={b.startTime}
+                                        onChange={(e) => updateBreakTime(wd.weekday, bIdx, "startTime", e.target.value)}
+                                        className="bg-transparent text-[10px] font-semibold text-slate-700 w-16 font-mono outline-none"
+                                      />
+                                      <span className="text-slate-400 text-[10px]">-</span>
+                                      <input
+                                        type="time"
+                                        value={b.endTime}
+                                        onChange={(e) => updateBreakTime(wd.weekday, bIdx, "endTime", e.target.value)}
+                                        className="bg-transparent text-[10px] font-semibold text-slate-700 w-16 font-mono outline-none"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => removeBreakFromDay(wd.weekday, bIdx)}
+                                        className="text-rose-500 hover:text-rose-700 ml-auto p-0.5"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  {(ds.breaks || []).length === 0 && (
+                                    <p className="text-[10px] text-slate-400 italic">No scheduled breaks.</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="bg-slate-200 text-slate-600 text-center py-5 rounded-xl text-xs font-mono font-bold mt-2">
+                              {ds.status === "Holiday" ? "🎉 Public Holiday" : ds.status === "Leave" ? "📴 Leave Period" : "❌ Closed"}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-200/60 text-[9px] text-slate-400 font-bold flex justify-between items-center">
+                          <span>Target Date:</span>
+                          <span className="font-mono text-slate-700">{wd.isoDate}</span>
                         </div>
                       </div>
-                    ) : (
-                      <div className="bg-slate-100 text-slate-500 text-center py-4 rounded-lg text-xs font-mono font-bold">
-                        {ds.status === "Holiday" ? "🎉 Public Holiday" : ds.status === "Leave" ? "📴 Leave Period" : "❌ Closed"}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
