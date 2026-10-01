@@ -81,9 +81,9 @@ export interface DoctorAvailabilityDetails {
 }
 
 const isDoctorAvailableOnDate = (doctor: any, dateString: string | undefined): boolean => {
-  if (!dateString || !doctor) return true;
+  if (!dateString || !doctor || !doctor.id || doctor.role === 'DEACTIVATED_DOCTOR') return false;
   const availability = doctor.availability;
-  if (!availability) return true;
+  if (!availability) return false;
 
   const dateObj = new Date(dateString + 'T00:00:00');
   const formattedDate = dateString.split('T')[0];
@@ -114,9 +114,13 @@ const isDoctorAvailableOnDate = (doctor: any, dateString: string | undefined): b
       if (dayConfig.status !== "Available") return false;
     } else if (availability.availableDays && availability.availableDays.length > 0) {
       if (!availability.availableDays.some((d: string) => d.toLowerCase() === weekday.toLowerCase())) return false;
+    } else {
+      return false;
     }
   } else if (availability.availableDays && availability.availableDays.length > 0) {
     if (!availability.availableDays.some((d: string) => d.toLowerCase() === weekday.toLowerCase())) return false;
+  } else {
+    return false;
   }
 
   return true;
@@ -532,34 +536,36 @@ const defaultHospitalSlots: DoctorSlotInfo[] = [
 }));
 
 const getAvailableSlotsForDoctorAndDate = (doctor: any, dateString: string | undefined): string[] => {
-  const defaultSlots = [
-    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', 
-    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', 
-    '15:00', '15:30', '16:00', '16:30', '17:00'
-  ];
-  if (!dateString) return defaultSlots;
-  if (!doctor) return defaultSlots;
+  if (!dateString || !doctor || !doctor.id) return [];
   if (!isDoctorAvailableOnDate(doctor, dateString)) return [];
 
   const availability = doctor.availability || {};
-  let start = availability.startTime || '09:00';
-  let end = availability.endTime || '17:00';
-  let breaksList: any[] = [];
+  let shiftStart = availability.startTime || '09:00';
+  let shiftEnd = availability.endTime || '17:00';
+  let breaksList: { startTime: string; endTime: string }[] = [];
 
-  const weekday = new Date(dateString + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' });
-  if (availability.daySchedules) {
-    const dayConfig = (availability.daySchedules || []).find((ds: any) => ds.day === weekday);
+  const dateObj = new Date(dateString + 'T00:00:00');
+  const weekday = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+
+  if (availability.daySchedules && Array.isArray(availability.daySchedules) && availability.daySchedules.length > 0) {
+    const dayConfig = availability.daySchedules.find((ds: any) => ds.day?.toLowerCase() === weekday.toLowerCase());
     if (dayConfig && dayConfig.status === "Available") {
-      start = dayConfig.startTime || start;
-      end = dayConfig.endTime || end;
+      shiftStart = dayConfig.startTime || shiftStart;
+      shiftEnd = dayConfig.endTime || shiftEnd;
       breaksList = dayConfig.breaks || [];
+    } else {
+      return [];
     }
   }
 
-  const [sh, sm] = start.split(':').map(Number);
-  const [eh, em] = end.split(':').map(Number);
+  if (!shiftStart || !shiftEnd) return [];
+
+  const [sh, sm] = shiftStart.split(':').map(Number);
+  const [eh, em] = shiftEnd.split(':').map(Number);
   const startMinutes = (isNaN(sh) ? 9 : sh) * 60 + (isNaN(sm) ? 0 : sm);
   const endMinutes = (isNaN(eh) ? 17 : eh) * 60 + (isNaN(em) ? 0 : em);
+
+  if (startMinutes >= endMinutes) return [];
 
   const slotsList: string[] = [];
   for (let min = startMinutes; min < endMinutes; min += 30) {
@@ -567,12 +573,12 @@ const getAvailableSlotsForDoctorAndDate = (doctor: any, dateString: string | und
     const m = min % 60;
     const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 
-    const isDuringBreak = breaksList.some((br: any) => {
+    const isDuringBreak = (breaksList || []).some((br: any) => {
       if (!br.startTime || !br.endTime) return false;
       const [bsh, bsm] = br.startTime.split(':').map(Number);
       const [beh, bem] = br.endTime.split(':').map(Number);
-      const bsMin = bsh * 60 + bsm;
-      const beMin = beh * 60 + bem;
+      const bsMin = (isNaN(bsh) ? 0 : bsh) * 60 + (isNaN(bsm) ? 0 : bsm);
+      const beMin = (isNaN(beh) ? 0 : beh) * 60 + (isNaN(bem) ? 0 : bem);
       return min >= bsMin && min < beMin;
     });
 
@@ -581,7 +587,7 @@ const getAvailableSlotsForDoctorAndDate = (doctor: any, dateString: string | und
     }
   }
 
-  return slotsList.length > 0 ? slotsList : defaultSlots;
+  return slotsList;
 };
 
 const getInitials = (name?: string): string => {

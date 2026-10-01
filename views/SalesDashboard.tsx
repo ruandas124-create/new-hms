@@ -20,60 +20,90 @@ const isDoctorAssociatedWithHospital = (doctor: any, hospital: any): boolean => 
 };
 
 const isDoctorAvailableOnDate = (doctor: any, dateString: string | undefined): boolean => {
-  if (!dateString) return true;
-  if (!doctor || !doctor.id) return true;
-  if (doctor.role === 'DEACTIVATED_DOCTOR') return false;
-
-  const availability = doctor.availability || {};
-  const formattedDate = dateString;
-
-  if (availability.blockedDates) {
-    const isBlocked = (availability.blockedDates || []).some((b: any) => b.date === formattedDate);
-    if (isBlocked) return false;
-  }
-  if (availability.unavailableDates && availability.unavailableDates.includes(formattedDate)) {
+  if (!dateString || !doctor || !doctor.id || doctor.role === 'DEACTIVATED_DOCTOR') {
     return false;
   }
 
-  const weekday = new Date(dateString + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+  const availability = doctor.availability || {};
+  const formattedDate = dateString.split('T')[0];
 
-  if (availability.daySchedules) {
-    const dayConfig = (availability.daySchedules || []).find((ds: any) => ds.day === weekday);
+  // 1. Check blocked dates / unavailable dates
+  if (availability.blockedDates && Array.isArray(availability.blockedDates)) {
+    const isBlocked = availability.blockedDates.some((b: any) => {
+      if (!b) return false;
+      if (typeof b === 'string') return b === formattedDate;
+      if (b.date) return b.date === formattedDate;
+      const from = b.startDate || b.from;
+      const to = b.endDate || b.to;
+      if (from && to) return formattedDate >= from && formattedDate <= to;
+      return false;
+    });
+    if (isBlocked) return false;
+  }
+
+  if (Array.isArray(availability.unavailableDates) && availability.unavailableDates.includes(formattedDate)) {
+    return false;
+  }
+
+  // 2. Identify weekday of selected appointment date
+  const dateObj = new Date(dateString + 'T00:00:00');
+  const weekday = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+
+  // 3. Check daySchedules (Weekly Advanced Scheduler)
+  if (Array.isArray(availability.daySchedules) && availability.daySchedules.length > 0) {
+    const dayConfig = availability.daySchedules.find((ds: any) => ds.day?.toLowerCase() === weekday.toLowerCase());
     if (dayConfig) {
       if (dayConfig.status !== 'Available') return false;
+    } else if (Array.isArray(availability.availableDays) && availability.availableDays.length > 0) {
+      if (!availability.availableDays.some((d: string) => d.toLowerCase() === weekday.toLowerCase())) {
+        return false;
+      }
+    } else {
+      return false;
     }
-  } else if (availability.availableDays && availability.availableDays.length > 0) {
-    if (!availability.availableDays.includes(weekday)) return false;
+  } else if (Array.isArray(availability.availableDays) && availability.availableDays.length > 0) {
+    if (!availability.availableDays.some((d: string) => d.toLowerCase() === weekday.toLowerCase())) {
+      return false;
+    }
+  } else {
+    return false;
   }
 
   return true;
 };
 
 const getAvailableSlotsForDoctorAndDate = (doctor: any, dateString: string | undefined): string[] => {
-  const defaultSlots = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'];
-  if (!dateString) return defaultSlots;
-  if (!doctor) return defaultSlots;
+  if (!dateString || !doctor || !doctor.id) return [];
+
   if (!isDoctorAvailableOnDate(doctor, dateString)) return [];
 
   const availability = doctor.availability || {};
-  let start = availability.startTime || '09:00';
-  let end = availability.endTime || '17:00';
-  let breaksList: any[] = [];
+  const dateObj = new Date(dateString + 'T00:00:00');
+  const weekday = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
 
-  const weekday = new Date(dateString + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' });
-  if (availability.daySchedules) {
-    const dayConfig = (availability.daySchedules || []).find((ds: any) => ds.day === weekday);
+  let shiftStart = availability.startTime || '09:00';
+  let shiftEnd = availability.endTime || '17:00';
+  let breaksList: { startTime: string; endTime: string }[] = [];
+
+  if (Array.isArray(availability.daySchedules) && availability.daySchedules.length > 0) {
+    const dayConfig = availability.daySchedules.find((ds: any) => ds.day?.toLowerCase() === weekday.toLowerCase());
     if (dayConfig && dayConfig.status === 'Available') {
-      start = dayConfig.startTime || start;
-      end = dayConfig.endTime || end;
+      shiftStart = dayConfig.startTime || shiftStart;
+      shiftEnd = dayConfig.endTime || shiftEnd;
       breaksList = dayConfig.breaks || [];
+    } else {
+      return [];
     }
   }
 
-  const [sh, sm] = (start || '09:00').split(':').map(Number);
-  const [eh, em] = (end || '17:00').split(':').map(Number);
-  const startMinutes = (sh || 9) * 60 + (sm || 0);
-  const endMinutes = (eh || 17) * 60 + (em || 0);
+  if (!shiftStart || !shiftEnd) return [];
+
+  const [sh, sm] = shiftStart.split(':').map(Number);
+  const [eh, em] = shiftEnd.split(':').map(Number);
+  const startMinutes = (isNaN(sh) ? 9 : sh) * 60 + (isNaN(sm) ? 0 : sm);
+  const endMinutes = (isNaN(eh) ? 17 : eh) * 60 + (isNaN(em) ? 0 : em);
+
+  if (startMinutes >= endMinutes) return [];
 
   const slotsList: string[] = [];
   for (let min = startMinutes; min < endMinutes; min += 30) {
@@ -81,12 +111,12 @@ const getAvailableSlotsForDoctorAndDate = (doctor: any, dateString: string | und
     const m = min % 60;
     const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 
-    const isDuringBreak = breaksList.some((br: any) => {
+    const isDuringBreak = (breaksList || []).some((br: any) => {
       if (!br.startTime || !br.endTime) return false;
       const [bsh, bsm] = br.startTime.split(':').map(Number);
       const [beh, bem] = br.endTime.split(':').map(Number);
-      const bsMin = bsh * 60 + bsm;
-      const beMin = beh * 60 + bem;
+      const bsMin = (isNaN(bsh) ? 0 : bsh) * 60 + (isNaN(bsm) ? 0 : bsm);
+      const beMin = (isNaN(beh) ? 0 : beh) * 60 + (isNaN(bem) ? 0 : bem);
       return min >= bsMin && min < beMin;
     });
 
@@ -95,7 +125,7 @@ const getAvailableSlotsForDoctorAndDate = (doctor: any, dateString: string | und
     }
   }
 
-  return slotsList.length > 0 ? slotsList : defaultSlots;
+  return slotsList;
 };
 
 const sourceConfig = [
@@ -1870,8 +1900,8 @@ export const SalesDashboard: React.FC = () => {
                             {doctorsForSelectedHospital.map(d => {
                               const isAvailable = isDoctorAvailableOnDate(d, bookingFormData.date);
                               return (
-                                <option key={d.id} value={d.id} disabled={!isAvailable}>
-                                  {d.name} {!isAvailable ? '(Unavailable Today)' : ''}
+                                <option key={d.id} value={d.id}>
+                                  {d.name} {bookingFormData.date && !isAvailable ? '(Unavailable on Date)' : ''}
                                 </option>
                               );
                             })}
@@ -1887,12 +1917,37 @@ export const SalesDashboard: React.FC = () => {
                           const activeDoc = doctors.find(d => d.id === selectedDoctorId);
                           const slots = getAvailableSlotsForDoctorAndDate(activeDoc, bookingFormData.date);
                           const bookedSlots = appointments
-                            ?.filter(a => a.assignedDoctorId === selectedDoctorId && a.date === bookingFormData.date && a.id !== bookingToEdit?.appointmentId)
+                            ?.filter(a => a.assignedDoctorId === selectedDoctorId && a.date === bookingFormData.date && a.id !== bookingToEdit?.appointmentId && a.status !== 'Cancelled' && a.status !== 'Junk')
                             ?.map(a => a.time ? a.time.substring(0, 5) : '') || [];
+
+                          if (!selectedDoctorId && selectedRoute === 'DOCTOR') {
+                            return (
+                              <select disabled className="w-full border-b-2 border-slate-100 p-2 bg-slate-50 text-sm font-bold text-slate-400 cursor-not-allowed">
+                                <option value="">Select Preferred Doctor first...</option>
+                              </select>
+                            );
+                          }
+
+                          if (!bookingFormData.date) {
+                            return (
+                              <select disabled className="w-full border-b-2 border-slate-100 p-2 bg-slate-50 text-sm font-bold text-slate-400 cursor-not-allowed">
+                                <option value="">Select Appt Date first...</option>
+                              </select>
+                            );
+                          }
+
+                          if (slots.length === 0) {
+                            return (
+                              <select disabled className="w-full border-b-2 border-slate-100 p-2 bg-slate-50 text-sm font-bold text-slate-400 cursor-not-allowed">
+                                <option value="">No available time slots for this doctor on the selected date.</option>
+                              </select>
+                            );
+                          }
+
                           return (
                             <select
                               required
-                              className="w-full border-b-2 border-slate-100 p-2 bg-white text-sm font-bold"
+                              className="w-full border-b-2 border-slate-100 p-2 bg-white text-sm font-bold outline-none focus:border-hospital-500 cursor-pointer"
                               value={bookingFormData.time}
                               onChange={e => setBookingFormData({ ...bookingFormData, time: e.target.value })}
                             >
