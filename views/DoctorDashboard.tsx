@@ -859,7 +859,7 @@ export const DoctorDashboard: React.FC = () => {
 
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-3">Quick Code Assessment</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <button type="button" onClick={() => setFormState(s => ({...s, quickCode: SurgeonCode.M1}))} className={`p-4 rounded-xl border-2 text-left transition-all ${formState.quickCode === SurgeonCode.M1 ? 'bg-blue-50 border-blue-500 shadow-xs' : 'bg-white border-gray-200 hover:border-blue-300'}`}>
                         <div className="font-bold text-sm text-slate-800">{SurgeonCode.M1}</div>
                         <div className="text-xs text-slate-500 mt-1">Patient requires medication only.</div>
@@ -867,10 +867,6 @@ export const DoctorDashboard: React.FC = () => {
                       <button type="button" onClick={() => setFormState(s => ({...s, quickCode: SurgeonCode.S1}))} className={`p-4 rounded-xl border-2 text-left transition-all ${formState.quickCode === SurgeonCode.S1 ? 'bg-emerald-50 border-emerald-500 shadow-xs' : 'bg-white border-gray-200 hover:border-emerald-300'}`}>
                         <div className="font-bold text-sm text-slate-800">{SurgeonCode.S1}</div>
                         <div className="text-xs text-slate-500 mt-1">Patient candidate for surgery.</div>
-                      </button>
-                      <button type="button" onClick={() => setFormState(s => ({...s, quickCode: 'Doctor Done' as any}))} className={`p-4 rounded-xl border-2 text-left transition-all ${formState.quickCode === ('Doctor Done' as any) ? 'bg-teal-50 border-teal-500 shadow-xs' : 'bg-white border-gray-200 hover:border-teal-300'}`}>
-                        <div className="font-bold text-sm text-slate-800">Doctor Done</div>
-                        <div className="text-xs text-slate-500 mt-1">Consultation completed. No further procedure.</div>
                       </button>
                     </div>
                   </div>
