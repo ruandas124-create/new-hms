@@ -633,6 +633,35 @@ export const DoctorDashboard: React.FC = () => {
   return (
     <div className="space-y-6">
 
+      {/* Doctor Dashboard Header Banner */}
+      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 font-extrabold text-lg shrink-0 overflow-hidden shadow-xs">
+            {loggedInDoctor.photoUrl ? (
+              <img src={loggedInDoctor.photoUrl} alt={loggedInDoctor.name} className="w-full h-full object-cover" />
+            ) : (
+              <Stethoscope className="w-6 h-6" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <span>Doctor Dashboard</span>
+              <span>•</span>
+              <span className="text-emerald-600 font-extrabold">{loggedInDoctor.specialization || 'General Surgeon'}</span>
+            </div>
+            <h1 className="text-lg sm:text-xl font-black text-slate-900 truncate mt-0.5">
+              {getFormattedDoctorName(loggedInDoctor.name)}
+            </h1>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
+          <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200/80 rounded-xl text-emerald-800 text-xs font-extrabold flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Active Session</span>
+          </div>
+        </div>
+      </div>
+
       {activeTab === 'patients' ? (
         <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-90px)] min-h-[600px] gap-4 sm:gap-6 animate-in fade-in duration-300">
           {/* Patient Directory Sidebar Panel */}

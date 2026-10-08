@@ -20,8 +20,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     activeDashboard,
     setActiveDashboard,
     dashboardPermissions,
-    hasPermission
+    hasPermission,
+    staffUsers
   } = useHospital();
+
+  const currentDoctorId = typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') || '' : '';
+  const loggedInDoctor = staffUsers?.find(u => u.id === currentDoctorId);
+  const doctorName = loggedInDoctor?.name || (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_name') : null) || 'Doctor';
+  const formattedDoctorName = doctorName.toLowerCase().startsWith('dr') ? doctorName : `Dr. ${doctorName}`;
   
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(false);
@@ -268,8 +274,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          <div className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md uppercase tracking-wider truncate max-w-[110px]">
-            {getRoleLabel()}
+          <div className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md uppercase tracking-wider truncate max-w-[130px]">
+            {currentUserRole === 'DOCTOR' ? formattedDoctorName : getRoleLabel()}
           </div>
           <button 
             onClick={() => refreshData()}
@@ -344,11 +350,20 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           {/* User Session Info Card */}
           <div className="mb-3.5 w-full bg-slate-900/90 rounded-xl p-2.5 border border-slate-800 shadow-2xs">
             <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-slate-800 border border-slate-700/60 flex items-center justify-center shrink-0">
-                {getRoleIcon()}
+              <div className="w-7 h-7 rounded-lg bg-slate-800 border border-slate-700/60 flex items-center justify-center shrink-0 overflow-hidden">
+                {currentUserRole === 'DOCTOR' && loggedInDoctor?.photoUrl ? (
+                  <img src={loggedInDoctor.photoUrl} alt="Doctor" className="w-full h-full object-cover" />
+                ) : (
+                  getRoleIcon()
+                )}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="font-bold text-slate-100 text-xs truncate">{getRoleLabel()}</div>
+                <div className="font-bold text-slate-100 text-xs truncate">
+                  {currentUserRole === 'DOCTOR' ? formattedDoctorName : getRoleLabel()}
+                </div>
+                <div className="text-[9px] text-slate-400 font-medium">
+                  {currentUserRole === 'DOCTOR' ? 'Doctor Dashboard' : ''}
+                </div>
                 <div className="mt-0.5"><CloudStatus /></div>
               </div>
             </div>
@@ -491,12 +506,20 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             </button>
 
             <div className="flex items-center gap-2 pl-2.5 border-l border-slate-200">
-              <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center">
-                {getRoleIcon()}
+              <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden">
+                {currentUserRole === 'DOCTOR' && loggedInDoctor?.photoUrl ? (
+                  <img src={loggedInDoctor.photoUrl} alt="Doctor" className="w-full h-full object-cover" />
+                ) : (
+                  getRoleIcon()
+                )}
               </div>
               <div className="text-left">
-                <div className="text-xs font-bold text-slate-800 leading-tight">{getRoleLabel()}</div>
-                <div className="text-[9px] text-slate-400 font-medium">Authorized</div>
+                <div className="text-xs font-bold text-slate-800 leading-tight">
+                  {currentUserRole === 'DOCTOR' ? formattedDoctorName : getRoleLabel()}
+                </div>
+                <div className="text-[9px] text-slate-400 font-medium">
+                  {currentUserRole === 'DOCTOR' ? 'Doctor Dashboard' : 'Authorized'}
+                </div>
               </div>
             </div>
           </div>

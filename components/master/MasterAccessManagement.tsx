@@ -17,6 +17,19 @@ export const MasterAccessManagement: React.FC = () => {
   
   // Hospital Creation Modal State
   const [isHospitalModalOpen, setIsHospitalModalOpen] = useState(false);
+
+  // Sales Registration Modal State
+  const [isSalesModalOpen, setIsSalesModalOpen] = useState(false);
+  const [salesFormData, setSalesFormData] = useState({
+    name: '',
+    mobile: '',
+    email: '',
+    password: '',
+    city: '',
+    state: '',
+    address: '',
+    pincode: '',
+  });
   
   // Selected Hospital for "Configure Access" Modal
   const [configuringHospital, setConfiguringHospital] = useState<StaffUser | null>(null);
@@ -25,7 +38,7 @@ export const MasterAccessManagement: React.FC = () => {
   const [internalFormType, setInternalFormType] = useState<'Doctor' | 'FrontOffice' | 'Package' | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState<'ALL' | 'HOSPITAL' | 'SALES'>('ALL');
+  const [roleFilter, setRoleFilter] = useState<'HOSPITAL' | 'SALES'>('HOSPITAL');
 
   // Hospital form state
   const [hospitalFormData, setHospitalFormData] = useState({
@@ -76,7 +89,7 @@ export const MasterAccessManagement: React.FC = () => {
   // Filtered accounts for display
   const filteredUsers = useMemo(() => {
     return accessUsers.filter(u => {
-      const matchesRole = roleFilter === 'ALL' || 
+      const matchesRole = 
         (roleFilter === 'HOSPITAL' && (u.role === 'HOSPITAL' || u.role === 'ANALYTICS' || u.role === 'ANALYTICS_HUB')) ||
         (roleFilter === 'SALES' && u.role === 'SALES');
       
@@ -116,6 +129,51 @@ export const MasterAccessManagement: React.FC = () => {
       fullAddress: '',
       doctorDashboardLimit: 5,
     });
+  };
+
+  const handleOpenSalesForm = () => {
+    setIsSalesModalOpen(true);
+    setShowModalPassword(false);
+    setSalesFormData({
+      name: '',
+      mobile: '',
+      email: '',
+      password: '',
+      city: '',
+      state: '',
+      address: '',
+      pincode: '',
+    });
+  };
+
+  const handleCreateSalesAccess = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      await registerStaff({
+        name: salesFormData.name.trim(),
+        role: 'SALES',
+        mobile: salesFormData.mobile.trim(),
+        email: salesFormData.email.trim().toLowerCase(),
+        password: salesFormData.password || 'Sales@123',
+        city: salesFormData.city.trim() || undefined,
+        state: salesFormData.state.trim() || undefined,
+        address: salesFormData.address.trim() || undefined,
+        pincode: salesFormData.pincode.trim() || undefined,
+        accessStatus: 'Active',
+        grantedBy: 'Master Admin',
+        department: 'Sales Dashboard',
+      });
+      setIsSalesModalOpen(false);
+      setSalesFormData({
+        name: '', mobile: '', email: '', password: '', city: '', state: '', address: '', pincode: ''
+      });
+    } catch (err) {
+      console.error('Failed to create sales account:', err);
+      alert('Failed to register sales account. Please review details.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCreateHospitalAccess = async (e: React.FormEvent) => {
@@ -263,7 +321,7 @@ export const MasterAccessManagement: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Top Header Card */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs">
+      <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs">
         <div>
           <div className="text-[10px] font-black uppercase tracking-widest text-hospital-600 mb-0.5 flex items-center gap-1.5">
             <Shield className="w-3.5 h-3.5 text-hospital-600" /> Master Admin Governance
@@ -272,18 +330,6 @@ export const MasterAccessManagement: React.FC = () => {
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-medium">
             Grant access to Hospitals (Analytic Hubs) and configure internal team structures (Multiple Doctors, One Front Office, One Package Dashboard)
           </p>
-        </div>
-        
-        <div className="flex items-center gap-2.5 w-full lg:w-auto">
-          {/* Master Admin ONLY gives access to Hospital */}
-          <button 
-            id="grant-hospital-access-btn"
-            onClick={handleOpenHospitalForm}
-            className="w-full sm:w-auto justify-center bg-hospital-600 hover:bg-hospital-700 text-white px-5 py-2.5 rounded-xl font-extrabold shadow-md shadow-hospital-600/20 transition-all flex items-center gap-2 active:scale-95 text-xs sm:text-sm cursor-pointer"
-          >
-            <Building2 className="w-4 h-4" />
-            Give Access to Hospital
-          </button>
         </div>
       </div>
 
@@ -463,6 +509,162 @@ export const MasterAccessManagement: React.FC = () => {
                 >
                   {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                   {isSubmitting ? 'Granting Access...' : 'Grant Hospital Access'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Dialog for Registering Sales Account */}
+      {isSalesModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[94dvh] sm:max-h-[90vh] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col border border-slate-100">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-100 bg-slate-50/80 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 bg-rose-50 text-rose-600 border border-rose-200">
+                  <Target className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900">
+                    Register Sale
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Create a new Sales and Booking representative account
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setIsSalesModalOpen(false)} 
+                className="p-2 hover:bg-slate-200 rounded-xl transition-colors text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Body */}
+            <div className="overflow-y-auto flex-1 p-4 sm:p-6">
+              <form id="sales-access-form" onSubmit={handleCreateSalesAccess} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="col-span-1 sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">
+                      Full Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      required
+                      type="text"
+                      value={salesFormData.name}
+                      onChange={(e) => setSalesFormData({...salesFormData, name: e.target.value})}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:ring-2 focus:ring-rose-500 outline-none"
+                      placeholder="Enter representative full name"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">
+                      Mobile Number <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      required
+                      type="tel"
+                      value={salesFormData.mobile}
+                      onChange={(e) => setSalesFormData({...salesFormData, mobile: e.target.value})}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:ring-2 focus:ring-rose-500 outline-none"
+                      placeholder="10-digit mobile"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">
+                      Email Address <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      required
+                      type="email"
+                      value={salesFormData.email}
+                      onChange={(e) => setSalesFormData({...salesFormData, email: e.target.value})}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:ring-2 focus:ring-rose-500 outline-none"
+                      placeholder="sales@example.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">City</label>
+                    <input
+                      type="text"
+                      value={salesFormData.city}
+                      onChange={(e) => setSalesFormData({...salesFormData, city: e.target.value})}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:ring-2 focus:ring-rose-500 outline-none"
+                      placeholder="City"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">State</label>
+                    <input
+                      type="text"
+                      value={salesFormData.state}
+                      onChange={(e) => setSalesFormData({...salesFormData, state: e.target.value})}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:ring-2 focus:ring-rose-500 outline-none"
+                      placeholder="State"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Password <span className="text-rose-500">*</span></label>
+                    <div className="relative">
+                      <input
+                        required
+                        type={showModalPassword ? "text" : "password"}
+                        value={salesFormData.password}
+                        onChange={(e) => setSalesFormData({...salesFormData, password: e.target.value})}
+                        className="w-full px-3.5 py-2.5 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-mono focus:bg-white focus:ring-2 focus:ring-rose-500 outline-none"
+                        placeholder="Set account password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowModalPassword(prev => !prev)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                      >
+                        {showModalPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="col-span-1 sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Address</label>
+                    <textarea
+                      rows={2}
+                      value={salesFormData.address}
+                      onChange={(e) => setSalesFormData({...salesFormData, address: e.target.value})}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:ring-2 focus:ring-rose-500 outline-none resize-none"
+                      placeholder="Complete address"
+                    />
+                  </div>
+                </div>
+              </form>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 sm:p-6 border-t border-slate-100 bg-slate-50/80 shrink-0">
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsSalesModalOpen(false)}
+                  className="px-5 py-2.5 text-xs sm:text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  form="sales-access-form"
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 text-xs sm:text-sm font-extrabold text-white rounded-xl transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 bg-rose-600 hover:bg-rose-700 cursor-pointer"
+                >
+                  {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {isSubmitting ? 'Registering...' : 'Register Sale'}
                 </button>
               </div>
             </div>
@@ -893,36 +1095,45 @@ export const MasterAccessManagement: React.FC = () => {
       {/* Main Granted Access Accounts Table */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col min-h-[500px]">
         <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-extrabold text-slate-900 text-sm mr-2">Granted Access Accounts</h3>
-            
-            {/* Filter Pills */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <div className="flex flex-wrap items-center gap-1 bg-slate-200/70 p-1 rounded-2xl">
               <button
-                onClick={() => setRoleFilter('ALL')}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                  roleFilter === 'ALL' ? 'bg-white text-slate-900 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                All ({accessUsers.length})
-              </button>
-              <button
                 onClick={() => setRoleFilter('HOSPITAL')}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                   roleFilter === 'HOSPITAL' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <Building2 className="w-3 h-3" /> Hospitals ({hospCount})
+                <Building2 className="w-3.5 h-3.5" /> Hospitals ({hospCount})
               </button>
               <button
                 onClick={() => setRoleFilter('SALES')}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                   roleFilter === 'SALES' ? 'bg-white text-rose-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <Target className="w-3 h-3" /> Sales ({salesCount})
+                <Target className="w-3.5 h-3.5" /> Sales ({salesCount})
               </button>
             </div>
+
+            {roleFilter === 'HOSPITAL' ? (
+              <button 
+                id="grant-hospital-access-btn"
+                onClick={handleOpenHospitalForm}
+                className="bg-hospital-600 hover:bg-hospital-700 text-white px-4 py-2 rounded-xl font-extrabold shadow-sm transition-all flex items-center gap-2 text-xs cursor-pointer active:scale-95"
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                Give Access to Hospital
+              </button>
+            ) : (
+              <button 
+                id="register-sale-btn"
+                onClick={handleOpenSalesForm}
+                className="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl font-extrabold shadow-sm transition-all flex items-center gap-2 text-xs cursor-pointer active:scale-95"
+              >
+                <Target className="w-3.5 h-3.5" />
+                Register Sale
+              </button>
+            )}
           </div>
 
           <div className="relative w-full lg:w-72">
@@ -931,7 +1142,7 @@ export const MasterAccessManagement: React.FC = () => {
               type="text" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search hospitals or location..." 
+              placeholder={roleFilter === 'HOSPITAL' ? "Search hospitals or location..." : "Search sales representatives..."} 
               className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-hospital-500 outline-none"
             />
           </div>
