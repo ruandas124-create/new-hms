@@ -1,15 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useHospital } from '../context/HospitalContext';
 import { ExportButtons } from '../components/ExportButtons';
-import { Gender, Condition, Patient, Appointment, SurgeonCode } from '../types';
+import { Gender, Condition, Patient, Appointment, SurgeonCode, normalizeSource } from '../types';
 import { 
   PlusCircle, Search, CheckCircle, ArrowLeft, 
   Calendar, Pencil, Trash2, User, 
   Phone, X, CalendarCheck, Tag, Chrome, MessageCircle, Instagram, 
   Facebook, Youtube, Globe, Clock, Users as UsersIcon,
   Share2, History, BadgeInfo, FileText, CreditCard, Clock3, Stethoscope,
-  Filter, FileSpreadsheet, Briefcase, AlertTriangle, RefreshCcw, Loader2
+  Filter, FileSpreadsheet, Briefcase, AlertTriangle, RefreshCcw, Loader2,
+  ChevronLeft, ChevronRight, RotateCcw
 } from 'lucide-react';
+
+const getTodayLocalIso = (): string => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const shiftIsoDate = (isoDate: string, days: number): string => {
+  if (!isoDate) return getTodayLocalIso();
+  const parts = isoDate.split('T')[0].split('-');
+  if (parts.length !== 3) return getTodayLocalIso();
+  const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  d.setDate(d.getDate() + days);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatReadableDate = (isoDate: string): string => {
+  if (!isoDate) return '';
+  const parts = isoDate.split('T')[0].split('-');
+  if (parts.length !== 3) return isoDate;
+  const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  const today = getTodayLocalIso();
+  const isToday = isoDate === today;
+  const formatted = d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  return isToday ? `Today • ${formatted}` : formatted;
+};
 
 const formatDate = (dateString: string | undefined | null): string => {
   if (!dateString) return '';
@@ -25,7 +57,6 @@ const formatDate = (dateString: string | undefined | null): string => {
 };
 
 const SOURCE_DISPLAY_MAP: Record<string, string> = {
-  'Acquire OPD': 'Acquire OPD',
   'Google': 'Google / YouTube / Website',
   'YouTube': 'Google / YouTube / Website',
   'Website': 'Google / YouTube / Website',
@@ -42,19 +73,10 @@ const SOURCE_DISPLAY_MAP: Record<string, string> = {
 
 const getSourceDisplay = (source: string | undefined): string => {
   if (!source) return 'Others';
-  const clean = source.trim().toLowerCase().replace(/\s+/g, ' ');
-  if (
-    clean === 'acquire opd' || 
-    clean === 'acqure opd' || 
-    clean === 'acquire_opd' || 
-    clean === 'acqure_opd' || 
-    clean === 'acquireopd' || 
-    clean === 'acqureopd'
-  ) {
-    return 'Acquire OPD';
-  }
+  const norm = normalizeSource(source);
+  if (norm === 'Other' || norm === 'Others') return 'Others';
   if (source.startsWith('Other: ')) return 'Others';
-  return SOURCE_DISPLAY_MAP[source] || source;
+  return SOURCE_DISPLAY_MAP[norm] || SOURCE_DISPLAY_MAP[source] || source;
 };
 
 const getHistoryStatus = (p: Patient): string => {
@@ -212,21 +234,64 @@ const getAvailableSlotsForDoctorAndDate = (doctor: any, dateString: string | und
 export const FrontOfficeDashboard: React.FC = () => {
   const { 
     patients, addPatient, updatePatient, deletePatient, convertAppointment,
-    appointments, addAppointment, updateAppointment, staffUsers
+    appointments, addAppointment, updateAppointment, staffUsers, isLoading
   } = useHospital();
   
-  const [activeTab, setActiveTab] = useState<'REGISTRATION' | 'APPOINTMENTS' | 'GLOBAL_SEARCH'>('REGISTRATION');
+  const [activeTab, setActiveTab] = useState<'REGISTRATION' | 'APPOINTMENTS' | 'GLOBAL_SEARCH'>('APPOINTMENTS');
   const [showForm, setShowForm] = useState(false);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [step, setStep] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   
   const [showFilters, setShowFilters] = useState(false);
-  const [opdStartDate, setOpdStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [opdEndDate, setOpdEndDate] = useState(new Date().toISOString().split('T')[0]);
-  const [apptStartDate, setApptStartDate] = useState('');
-  const [apptEndDate, setApptEndDate] = useState('');
+  const todayIso = getTodayLocalIso();
+  const [opdStartDate, setOpdStartDate] = useState(todayIso);
+  const [opdEndDate, setOpdEndDate] = useState(todayIso);
+  const [apptStartDate, setApptStartDate] = useState(todayIso);
+  const [apptEndDate, setApptEndDate] = useState(todayIso);
   const [opdDoctorFilter, setOpdDoctorFilter] = useState('ALL');
+  const [isTabLoading, setIsTabLoading] = useState(false);
+
+  // Dashboard entry effect: Whenever user enters/re-enters Front Office, default to Scheduled Roster
+  useEffect(() => {
+    const handleNav = (e: any) => {
+      if (e.detail === 'front_office') {
+        setActiveTab('APPOINTMENTS');
+        const today = getTodayLocalIso();
+        setApptStartDate(today);
+        setApptEndDate(today);
+      }
+    };
+    window.addEventListener('hms:navigate-dashboard', handleNav);
+    return () => window.removeEventListener('hms:navigate-dashboard', handleNav);
+  }, []);
+
+  // Tab switch effect: Default to current local date when user opens or returns to a tab
+  useEffect(() => {
+    const today = getTodayLocalIso();
+    setIsTabLoading(true);
+    if (activeTab === 'REGISTRATION') {
+      setOpdStartDate(today);
+      setOpdEndDate(today);
+    } else if (activeTab === 'APPOINTMENTS') {
+      setApptStartDate(today);
+      setApptEndDate(today);
+    }
+    const timer = setTimeout(() => setIsTabLoading(false), 200);
+    return () => clearTimeout(timer);
+  }, [activeTab]);
+
+  const handleSingleDateChange = (newDate: string) => {
+    setIsTabLoading(true);
+    if (activeTab === 'REGISTRATION') {
+      setOpdStartDate(newDate);
+      setOpdEndDate(newDate);
+    } else if (activeTab === 'APPOINTMENTS') {
+      setApptStartDate(newDate);
+      setApptEndDate(newDate);
+    }
+    setTimeout(() => setIsTabLoading(false), 200);
+  };
 
   const [historyFilters, setHistoryFilters] = useState({
     startDate: '', endDate: '', source: '', condition: '', status: '', visitType: 'ALL', type: 'ALL' as 'ALL' | 'Registration' | 'Appointment', doctor: 'ALL'
@@ -271,7 +336,6 @@ export const FrontOfficeDashboard: React.FC = () => {
     { name: "Friend + Online", icon: <Share2 className="w-4 h-4 text-indigo-500" /> },
     { name: "Hospital Billboards", icon: <Tag className="w-4 h-4 text-slate-500" /> },
     { name: "Doctor Recommended", icon: <Stethoscope className="w-4 h-4 text-teal-500" /> },
-    { name: "Acquire OPD", icon: <FileText className="w-4 h-4 text-hospital-500" /> },
     { name: "Others", icon: <PlusCircle className="w-4 h-4 text-slate-400" /> }
   ];
 
@@ -523,9 +587,6 @@ export const FrontOfficeDashboard: React.FC = () => {
     try {
       if (editingId) { 
         const originalPatient = patients.find(p => p.id === editingId); 
-        if (originalPatient?.source === 'Acquire OPD') {
-          dataToSave.source = 'Acquire OPD';
-        }
         if (originalPatient) await updatePatient(editingId, { ...originalPatient, ...dataToSave as Patient }); 
       }
       else { 
@@ -534,10 +595,6 @@ export const FrontOfficeDashboard: React.FC = () => {
           return alert("File Number already exists."); 
         }
         if (originatingAppointmentId) {
-          const origAppt = appointments.find(a => a.id === originatingAppointmentId);
-          if (origAppt?.source === 'Acquire OPD') {
-            dataToSave.source = 'Acquire OPD';
-          }
           await convertAppointment(originatingAppointmentId, dataToSave as any); 
         }
         else await addPatient(dataToSave as any); 
@@ -553,11 +610,11 @@ export const FrontOfficeDashboard: React.FC = () => {
 
   const filteredPatients = patients.filter(p => {
     if (p.status !== 'Arrived') return false;
-    const pDate = p.entry_date || '';
+    const pDate = (p.entry_date || '').split('T')[0];
     if (opdStartDate && pDate < opdStartDate) return false;
     if (opdEndDate && pDate > opdEndDate) return false;
     if (opdDoctorFilter !== 'ALL' && p.doctorAssessment?.assignedDoctorId !== opdDoctorFilter) return false;
-    const sTerm = searchTerm.toLowerCase(); 
+    const sTerm = searchTerm.toLowerCase().trim(); 
     return !sTerm || 
       p.name.toLowerCase().includes(sTerm) || 
       p.id.toLowerCase().includes(sTerm) || 
@@ -567,7 +624,7 @@ export const FrontOfficeDashboard: React.FC = () => {
 
   const filteredAppointments = appointments.filter(a => { 
     const sTerm = searchTerm.toLowerCase().trim(); 
-    const aDate = a.date || '';
+    const aDate = (a.date || '').split('T')[0];
     if (apptStartDate && aDate < apptStartDate) return false;
     if (apptEndDate && aDate > apptEndDate) return false;
     return !sTerm || 
@@ -666,12 +723,12 @@ export const FrontOfficeDashboard: React.FC = () => {
   };
 
   const displayData = activeTab === 'REGISTRATION' ? filteredPatients : activeTab === 'APPOINTMENTS' ? filteredAppointments : combinedHistoryData;
+  const currentActiveDate = activeTab === 'REGISTRATION' ? opdStartDate : activeTab === 'APPOINTMENTS' ? apptStartDate : todayIso;
   const filterInputClasses = "h-10 w-full bg-slate-50 border border-slate-100 rounded-xl px-3 text-[10px] font-bold focus:ring-2 focus:ring-hospital-500 outline-none transition-all appearance-none";
 
-  const todayIso = new Date().toISOString().split('T')[0];
-  const todayRegCount = patients.filter(p => p.entry_date === todayIso).length;
-  const arrivedCount = patients.filter(p => p.status === 'Arrived').length;
-  const todayApptCount = appointments.filter(a => a.date === todayIso).length;
+  const todayRegCount = patients.filter(p => (p.entry_date || '').split('T')[0] === todayIso).length;
+  const arrivedCount = patients.filter(p => p.status === 'Arrived' && (p.entry_date || '').split('T')[0] === todayIso).length;
+  const todayApptCount = appointments.filter(a => (a.date || '').split('T')[0] === todayIso).length;
   const totalCount = patients.length;
 
   return (
@@ -754,6 +811,72 @@ export const FrontOfficeDashboard: React.FC = () => {
 
       {/* Search and Filters Card */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-xs border border-slate-200/80 flex flex-col gap-4">
+        
+        {/* Quick Date Filter Bar for OPD Registry & Scheduled Roster Tabs */}
+        {(activeTab === 'REGISTRATION' || activeTab === 'APPOINTMENTS') && (
+          <div className="p-3 bg-slate-50/90 rounded-2xl border border-slate-200/90 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-hospital-100 text-hospital-700 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+                <Calendar className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
+                  {activeTab === 'REGISTRATION' ? 'Registry Date' : 'Schedule Date'}
+                </span>
+                <div className="text-xs font-black text-slate-900 flex items-center gap-2 mt-0.5">
+                  <span>{formatReadableDate(currentActiveDate)}</span>
+                  {currentActiveDate === todayIso && (
+                    <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      Today
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 self-end sm:self-auto w-full sm:w-auto justify-between sm:justify-end">
+              <button
+                type="button"
+                onClick={() => handleSingleDateChange(shiftIsoDate(currentActiveDate, -1))}
+                className="px-2.5 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl border border-slate-200 text-xs font-bold transition-all shadow-2xs flex items-center gap-1 active:scale-95 cursor-pointer shrink-0"
+                title="Previous Day"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span className="hidden md:inline">Prev Day</span>
+              </button>
+
+              <input
+                type="date"
+                value={currentActiveDate}
+                onChange={(e) => e.target.value && handleSingleDateChange(e.target.value)}
+                className="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:border-hospital-500 focus:ring-2 focus:ring-hospital-500/20 shadow-2xs cursor-pointer font-mono shrink-0"
+              />
+
+              <button
+                type="button"
+                onClick={() => handleSingleDateChange(shiftIsoDate(currentActiveDate, 1))}
+                className="px-2.5 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl border border-slate-200 text-xs font-bold transition-all shadow-2xs flex items-center gap-1 active:scale-95 cursor-pointer shrink-0"
+                title="Next Day"
+              >
+                <span className="hidden md:inline">Next Day</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              {currentActiveDate !== todayIso && (
+                <button
+                  type="button"
+                  onClick={() => handleSingleDateChange(todayIso)}
+                  className="px-3 py-2 bg-hospital-600 hover:bg-hospital-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 active:scale-95 cursor-pointer shrink-0"
+                  title="Jump to Today"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Today</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col lg:flex-row gap-3 justify-between items-stretch lg:items-center">
           <div className="flex flex-1 flex-col sm:flex-row gap-2.5 items-stretch sm:items-center w-full">
             <div className="relative flex-1 max-w-full sm:max-w-xs">
@@ -985,127 +1108,147 @@ export const FrontOfficeDashboard: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {displayData.map((item: any) => (
-                <tr key={item.id + (item.updated_at || item.registeredAt || item.displayDate)} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="p-5 whitespace-nowrap">
-                    {activeTab === 'APPOINTMENTS' ? (
-                      <div className="flex flex-col">
-                        <div className="font-mono font-black text-slate-800 flex items-center gap-1.5 text-xs">
-                          <Clock className="w-3.5 h-3.5 text-hospital-600" /> {item.time || '10:00'}
-                        </div>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase mt-1 flex items-center gap-1">
-                          <Calendar className="w-3 h-3 text-slate-400" /> {formatDate(item.date || item.entry_date)}
-                        </span>
-                        <span className="text-[9px] font-mono text-slate-400 font-bold mt-0.5">
-                          {item.id}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col">
-                        <button 
-                          onClick={() => handleEdit(item)}
-                          className="font-mono font-black text-slate-500 hover:text-hospital-600 transition-colors text-left"
-                        >
-                          {item.id.split('_V')[0]}
-                        </button>
-                        <span className="text-[10px] text-slate-400 font-bold uppercase mt-1">{formatDate(item.entry_date || item.displayEntryDate)}</span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="p-5">
-                    <div className="font-bold text-slate-900 leading-tight">{item.name}</div>
-                    {item.age ? (
-                      <div className="text-[10px] text-slate-400 font-medium uppercase mt-0.5">
-                        {item.age}Y • {item.gender}
-                      </div>
-                    ) : null}
-                  </td>
-                  <td className="p-5 whitespace-nowrap">
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200 bg-slate-100 text-slate-700">
-                      {getSourceDisplay(item.source)}
-                    </span>
-                  </td>
-                  <td className="p-5 text-sm font-medium text-slate-400 whitespace-nowrap flex items-center gap-2"><Phone className="w-3.5 h-3.5" /> {item.mobile}</td>
-                  {(activeTab === 'REGISTRATION' || activeTab === 'GLOBAL_SEARCH') && (
-                    <td className="p-5 whitespace-nowrap">
-                      {(() => {
-                        const visitType = calculateVisitType(item, patients);
-                        return (
-                          <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-lg border shadow-sm ${
-                            visitType === 'New' 
-                              ? 'bg-teal-50 text-teal-700 border-teal-100' 
-                              : visitType === 'Scheduled' 
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                : 'bg-orange-50 text-orange-700 border-orange-100'
-                          }`}>
-                            {visitType}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                  )}
-                  <td className="p-5 whitespace-nowrap">
-                    <div className="flex items-center gap-2.5">
-                      {(() => {
-                        const assignedDocId = item.doctorAssessment?.assignedDoctorId || item.assignedDoctorId;
-                        const docObj = staffUsers?.find(u => u.id === assignedDocId);
-                        if (docObj?.photoUrl) {
-                          return (
-                            <img 
-                              src={docObj.photoUrl} 
-                              alt="Doctor" 
-                              className="w-7 h-7 rounded-lg object-cover border border-slate-200/60 shadow-sm"
-                            />
-                          );
-                        }
-                        return (
-                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-black leading-none ${item.doctorAssessment?.assignedDoctorName || item.assignedDoctorName ? 'bg-hospital-150 text-hospital-700 font-sans' : 'bg-slate-100 text-slate-400 font-sans'}`}>
-                            DR
-                          </div>
-                        );
-                      })()}
-                      <div className="flex flex-col">
-                        <span className="font-bold text-xs text-slate-700 leading-tight">
-                          {item.doctorAssessment?.assignedDoctorName || item.assignedDoctorName || 'Not Assigned'}
-                        </span>
-                        {(item.hospitalName || item.doctorAssessment?.hospitalName) && (
-                          <span className="text-[9px] text-slate-400 font-bold mt-0.5">
-                            {item.hospitalName || item.doctorAssessment?.hospitalName}
-                          </span>
-                        )}
-                        {item.assignedDoctorId && (
-                          <span className="text-[7px] text-slate-400 font-black uppercase tracking-tighter mt-0.5">APPTS BOOKED</span>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-5 whitespace-nowrap">
-                    <span className="text-[10px] font-black uppercase bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full">{item.condition}</span>
-                  </td>
-                  <td className="p-5 whitespace-nowrap">
-                    <span className={`text-[8px] font-black uppercase px-2.5 py-1.5 rounded-md shadow-sm border border-transparent whitespace-nowrap ${getStatusClass(item.displayStatus || getHistoryStatus(item))}`}>
-                      {item.displayStatus || getHistoryStatus(item)}
-                    </span>
-                  </td>
-                  <td className="p-5 text-right whitespace-nowrap">
-                    <div className="flex justify-end gap-2 items-center">
-                      {(activeTab === 'REGISTRATION' || activeTab === 'GLOBAL_SEARCH') && item.recordType === 'Registration' && (
-                        <button onClick={() => handleRevisitClick(item)} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-[9px] font-black uppercase hover:bg-indigo-100 transition-all flex items-center gap-1.5 shadow-sm border border-indigo-100"><History className="w-3.5 h-3.5" /> Revisit</button>
-                      )}
-                      {activeTab === 'APPOINTMENTS' && (
-                        <button onClick={() => handleArrived(item)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase shadow-sm transition-all flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5" /> Arrived & Register</button>
-                      )}
-                      <button onClick={() => handleEdit(item)} className="p-2 text-slate-300 hover:text-blue-600 transition-colors"><Pencil className="w-4 h-4" /></button>
-                      {item.id !== '---' && activeTab === 'APPOINTMENTS' && (
-                        <button onClick={() => setDeleteConfirmId(item.id)} className="p-2 text-slate-200 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
-                      )}
+              {isTabLoading || isLoading ? (
+                <tr>
+                  <td colSpan={9} className="p-12 text-center">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <Loader2 className="w-7 h-7 text-hospital-600 animate-spin" />
+                      <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Loading records for selected date...</span>
                     </div>
                   </td>
                 </tr>
-              ))}
+              ) : displayData.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="p-12 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Calendar className="w-8 h-8 text-slate-300" />
+                      <span className="text-xs font-extrabold text-slate-700">No records found for {formatReadableDate(currentActiveDate || todayIso)}</span>
+                      <span className="text-[11px] text-slate-400">Try choosing a different date or clearing your search filter.</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                displayData.map((item: any) => (
+                  <tr key={item.id + (item.updated_at || item.registeredAt || item.displayDate)} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-5 whitespace-nowrap">
+                      {activeTab === 'APPOINTMENTS' ? (
+                        <div className="flex flex-col">
+                          <div className="font-mono font-black text-slate-800 flex items-center gap-1.5 text-xs">
+                            <Clock className="w-3.5 h-3.5 text-hospital-600" /> {item.time || '10:00'}
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-bold uppercase mt-1 flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-slate-400" /> {formatDate(item.date || item.entry_date)}
+                          </span>
+                          <span className="text-[9px] font-mono text-slate-400 font-bold mt-0.5">
+                            {item.id}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col">
+                          <button 
+                            onClick={() => handleEdit(item)}
+                            className="font-mono font-black text-slate-500 hover:text-hospital-600 transition-colors text-left"
+                          >
+                            {item.id.split('_V')[0]}
+                          </button>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase mt-1">{formatDate(item.entry_date || item.displayEntryDate)}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-5">
+                      <div className="font-bold text-slate-900 leading-tight">{item.name}</div>
+                      {item.age ? (
+                        <div className="text-[10px] text-slate-400 font-medium uppercase mt-0.5">
+                          {item.age}Y • {item.gender}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="p-5 whitespace-nowrap">
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200 bg-slate-100 text-slate-700">
+                        {getSourceDisplay(item.source)}
+                      </span>
+                    </td>
+                    <td className="p-5 text-sm font-medium text-slate-400 whitespace-nowrap flex items-center gap-2"><Phone className="w-3.5 h-3.5" /> {item.mobile}</td>
+                    {(activeTab === 'REGISTRATION' || activeTab === 'GLOBAL_SEARCH') && (
+                      <td className="p-5 whitespace-nowrap">
+                        {(() => {
+                          const visitType = calculateVisitType(item, patients);
+                          return (
+                            <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-lg border shadow-sm ${
+                              visitType === 'New' 
+                                ? 'bg-teal-50 text-teal-700 border-teal-100' 
+                                : visitType === 'Scheduled' 
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                  : 'bg-orange-50 text-orange-700 border-orange-100'
+                            }`}>
+                              {visitType}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                    )}
+                    <td className="p-5 whitespace-nowrap">
+                      <div className="flex items-center gap-2.5">
+                        {(() => {
+                          const assignedDocId = item.doctorAssessment?.assignedDoctorId || item.assignedDoctorId;
+                          const docObj = staffUsers?.find(u => u.id === assignedDocId);
+                          if (docObj?.photoUrl) {
+                            return (
+                              <img 
+                                src={docObj.photoUrl} 
+                                alt="Doctor" 
+                                className="w-7 h-7 rounded-lg object-cover border border-slate-200/60 shadow-sm"
+                              />
+                            );
+                          }
+                          return (
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-black leading-none ${item.doctorAssessment?.assignedDoctorName || item.assignedDoctorName ? 'bg-hospital-150 text-hospital-700 font-sans' : 'bg-slate-100 text-slate-400 font-sans'}`}>
+                              DR
+                            </div>
+                          );
+                        })()}
+                        <div className="flex flex-col">
+                          <span className="font-bold text-xs text-slate-700 leading-tight">
+                            {item.doctorAssessment?.assignedDoctorName || item.assignedDoctorName || 'Not Assigned'}
+                          </span>
+                          {(item.hospitalName || item.doctorAssessment?.hospitalName) && (
+                            <span className="text-[9px] text-slate-400 font-bold mt-0.5">
+                              {item.hospitalName || item.doctorAssessment?.hospitalName}
+                            </span>
+                          )}
+                          {item.assignedDoctorId && (
+                            <span className="text-[7px] text-slate-400 font-black uppercase tracking-tighter mt-0.5">APPTS BOOKED</span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-5 whitespace-nowrap">
+                      <span className="text-[10px] font-black uppercase bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full">{item.condition}</span>
+                    </td>
+                    <td className="p-5 whitespace-nowrap">
+                      <span className={`text-[8px] font-black uppercase px-2.5 py-1.5 rounded-md shadow-sm border border-transparent whitespace-nowrap ${getStatusClass(item.displayStatus || getHistoryStatus(item))}`}>
+                        {item.displayStatus || getHistoryStatus(item)}
+                      </span>
+                    </td>
+                    <td className="p-5 text-right whitespace-nowrap">
+                      <div className="flex justify-end gap-2 items-center">
+                        {(activeTab === 'REGISTRATION' || activeTab === 'GLOBAL_SEARCH') && item.recordType === 'Registration' && (
+                          <button onClick={() => handleRevisitClick(item)} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-[9px] font-black uppercase hover:bg-indigo-100 transition-all flex items-center gap-1.5 shadow-sm border border-indigo-100"><History className="w-3.5 h-3.5" /> Revisit</button>
+                        )}
+                        {activeTab === 'APPOINTMENTS' && (
+                          <button onClick={() => handleArrived(item)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase shadow-sm transition-all flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5" /> Arrived & Register</button>
+                        )}
+                        <button onClick={() => handleEdit(item)} className="p-2 text-slate-300 hover:text-blue-600 transition-colors"><Pencil className="w-4 h-4" /></button>
+                        {item.id !== '---' && activeTab === 'APPOINTMENTS' && (
+                          <button onClick={() => setDeleteConfirmId(item.id)} className="p-2 text-slate-200 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
-          {displayData.length === 0 && <div className="p-10 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">No matching records found</div>}
         </div>
       </div>
 
@@ -1230,7 +1373,7 @@ export const FrontOfficeDashboard: React.FC = () => {
                  <button 
                    type="submit" 
                    disabled={isSubmittingBooking}
-                   className="w-full py-4 bg-hospital-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all mt-6 flex items-center justify-center gap-2 cursor-pointer"
+                   className="w-full py-3 px-5 bg-hospital-600 hover:bg-hospital-700 active:scale-[0.99] text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all mt-6 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
                  >
                    {isSubmittingBooking ? (
                      <>
@@ -1317,26 +1460,10 @@ export const FrontOfficeDashboard: React.FC = () => {
                        </div>
                        <div>
                          <label className="block text-[10px] font-black uppercase text-slate-500 mb-2">How did you hear about us?</label>
-                         {formData.source === 'Acquire OPD' ? (
-                           <div className="flex items-center gap-2">
-                             <input 
-                               type="text" 
-                               readOnly 
-                               disabled 
-                               value="Acquire OPD" 
-                               className="w-full border-b-2 border-slate-200 p-2 text-sm font-bold bg-slate-100 text-slate-700 outline-none cursor-not-allowed select-none rounded-t" 
-                               title="Source is set to Acquire OPD and cannot be changed"
-                             />
-                             <span className="text-[9px] font-black uppercase text-rose-600 bg-rose-50 px-2 py-1 rounded-md border border-rose-200 whitespace-nowrap">
-                               Locked
-                             </span>
-                           </div>
-                         ) : (
-                           <select className="w-full border-b-2 border-slate-100 p-2 bg-white" value={getSourceDisplay(formData.source) || ''} onChange={e => setFormData({...formData, source: e.target.value})}>
-                             <option value="">Select...</option>
-                             {sourceConfig.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
-                           </select>
-                         )}
+                         <select className="w-full border-b-2 border-slate-100 p-2 bg-white" value={getSourceDisplay(formData.source) || ''} onChange={e => setFormData({...formData, source: e.target.value})}>
+                           <option value="">Select...</option>
+                           {sourceConfig.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                         </select>
                        </div>
                        <div><label className="block text-[10px] font-black uppercase text-slate-500 mb-2">Insurance</label><div className="flex gap-2 p-1 bg-slate-100 rounded-xl">{['Yes', 'No'].map(v => (<button key={v} type="button" onClick={() => setFormData({...formData, hasInsurance: v as any})} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${formData.hasInsurance === v ? 'bg-hospital-600 text-white shadow' : 'text-slate-500'}`}>{v}</button>))}</div></div>
                        {formData.hasInsurance === 'Yes' && (<div className="animate-in slide-in-from-top-2 duration-300"><label className="block text-[10px] font-black uppercase text-hospital-600 mb-2 tracking-widest">Insurance Name</label><input required className="w-full text-lg font-bold border-b-2 border-hospital-100 p-2 outline-none focus:border-hospital-500 placeholder-slate-200" value={formData.insuranceName || ''} onChange={e => setFormData({...formData, insuranceName: e.target.value})} placeholder="Enter Insurance Provider" /></div>)}
@@ -1358,12 +1485,12 @@ export const FrontOfficeDashboard: React.FC = () => {
                   )}
                 </form>
               </div>
-              <footer className="p-6 sm:p-8 border-t flex justify-between items-center bg-slate-50/30">
+              <footer className="p-4 sm:p-6 border-t flex justify-between items-center bg-slate-50/50">
                 <button 
                   type="button"
                   disabled={isSubmittingPatient}
                   onClick={() => step === 2 ? setStep(1) : setShowForm(false)} 
-                  className="px-6 py-4 text-xs font-black uppercase text-slate-400 hover:text-slate-600 disabled:opacity-50"
+                  className="px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50 min-h-[42px]"
                 >
                   {step === 2 ? 'Back' : 'Cancel'}
                 </button>
@@ -1371,7 +1498,7 @@ export const FrontOfficeDashboard: React.FC = () => {
                   type="button"
                   disabled={isSubmittingPatient}
                   onClick={handleSubmit} 
-                  className="px-8 sm:px-14 py-5 bg-hospital-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-hospital-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  className="px-6 py-2.5 bg-hospital-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm hover:bg-hospital-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[42px]"
                 >
                   {isSubmittingPatient ? (
                     <>
@@ -1446,7 +1573,7 @@ export const FrontOfficeDashboard: React.FC = () => {
                 type="button"
                 disabled={isSubmittingRevisitArrived}
                 onClick={handleRevisitArrived} 
-                className="w-full py-4 text-[10px] font-black uppercase text-white bg-emerald-600 rounded-xl shadow-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-2.5 px-4 text-xs font-bold uppercase tracking-wider text-white bg-emerald-600 rounded-xl shadow-xs hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[42px]"
               >
                 {isSubmittingRevisitArrived ? (
                   <>
@@ -1464,7 +1591,7 @@ export const FrontOfficeDashboard: React.FC = () => {
                 type="button"
                 disabled={isSubmittingRevisitArrived}
                 onClick={() => { setShowRevisitModal(false); setShowRevisitScheduleModal(true); }} 
-                className="w-full py-4 text-[10px] font-black uppercase text-white bg-indigo-600 rounded-xl shadow-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-2.5 px-4 text-xs font-bold uppercase tracking-wider text-white bg-indigo-600 rounded-xl shadow-xs hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[42px]"
               >
                 <Calendar className="w-4 h-4" /> 
                 <span>Schedule Appointment</span>
@@ -1473,7 +1600,7 @@ export const FrontOfficeDashboard: React.FC = () => {
                 type="button"
                 disabled={isSubmittingRevisitArrived}
                 onClick={() => { setShowRevisitModal(false); setRevisitPatient(null); }} 
-                className="w-full py-3 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-50"
+                className="w-full py-2 text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -1484,26 +1611,26 @@ export const FrontOfficeDashboard: React.FC = () => {
 
       {showRevisitScheduleModal && revisitPatient && (
         <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl p-8 border border-slate-100 animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-6"><CalendarCheck className="w-8 h-8 text-blue-600" /></div>
-            <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight text-center">Schedule Appointment</h3>
-            <p className="text-sm text-slate-500 font-medium mb-8 text-center leading-relaxed">For <span className="text-blue-600 font-bold">{revisitPatient.name}</span></p>
-            <div className="space-y-4 mb-8">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 sm:p-8 border border-slate-100 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-blue-600"><CalendarCheck className="w-6 h-6" /></div>
+            <h3 className="text-lg font-black text-slate-900 mb-1 uppercase tracking-tight text-center">Schedule Appointment</h3>
+            <p className="text-xs text-slate-500 font-medium mb-6 text-center leading-relaxed">For <span className="text-blue-600 font-bold">{revisitPatient.name}</span></p>
+            <div className="space-y-4 mb-6">
               <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Date</label>
-                <input type="date" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-3 text-sm font-bold outline-none focus:border-blue-500 transition-all" value={revisitScheduleData.date} onChange={e => setRevisitScheduleData({...revisitScheduleData, date: e.target.value})} />
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1 tracking-widest">Date</label>
+                <input type="date" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold outline-none focus:border-blue-500 focus:bg-white transition-all" value={revisitScheduleData.date} onChange={e => setRevisitScheduleData({...revisitScheduleData, date: e.target.value})} />
               </div>
               <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Time</label>
-                <input type="time" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-3 text-sm font-bold outline-none focus:border-blue-500 transition-all" value={revisitScheduleData.time} onChange={e => setRevisitScheduleData({...revisitScheduleData, time: e.target.value})} />
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1 tracking-widest">Time</label>
+                <input type="time" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold outline-none focus:border-blue-500 focus:bg-white transition-all" value={revisitScheduleData.time} onChange={e => setRevisitScheduleData({...revisitScheduleData, time: e.target.value})} />
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-2.5">
               <button 
                 type="button"
                 disabled={isSubmittingRevisitSchedule}
                 onClick={() => { setShowRevisitScheduleModal(false); setShowRevisitModal(true); }} 
-                className="flex-1 py-4 text-[10px] font-black uppercase text-slate-500 bg-slate-50 rounded-xl border hover:bg-slate-100 disabled:opacity-50"
+                className="flex-1 py-2.5 px-4 text-xs font-bold uppercase tracking-wider text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 disabled:opacity-50 transition-colors"
               >
                 Back
               </button>
@@ -1511,7 +1638,7 @@ export const FrontOfficeDashboard: React.FC = () => {
                 type="button"
                 disabled={isSubmittingRevisitSchedule}
                 onClick={handleRevisitScheduleSubmit} 
-                className="flex-[2] py-4 px-8 text-[10px] font-black uppercase text-white bg-blue-600 rounded-xl shadow-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="flex-[2] py-2.5 px-5 text-xs font-bold uppercase tracking-wider text-white bg-blue-600 rounded-xl shadow-xs hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[42px]"
               >
                 {isSubmittingRevisitSchedule ? (
                   <>

@@ -15,10 +15,12 @@ const DASHBOARD_NAMES: Record<DashboardKey, string> = {
   master_reports: 'Report Access Management',
   analytics_hub: 'Analytics Hub Dashboard',
   analytics_give_access: 'Analytics Access Management',
+  doctor_performance: 'Doctor Performance Report',
   front_office: 'Front Office Dashboard',
   doctor: 'Doctor Dashboard',
   doctor_appointments: 'Doctor Appointments',
   doctor_availability: 'Doctor Availability',
+  doctor_profile: 'Doctor Profile',
   package: 'Package Counselor Dashboard',
   sales: 'Sales Dashboard',
 };

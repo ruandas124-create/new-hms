@@ -27,45 +27,45 @@ export const PeriodActivityReport: React.FC<PeriodActivityReportProps> = ({
     .slice(0, 15);
 
   return (
-    <div className="space-y-6 animate-in slide-in-from-bottom-6 duration-500">
-      <div className="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm flex flex-col">
-        <div className="p-4 sm:p-8 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50/40">
+    <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-300">
+      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 overflow-hidden shadow-xs flex flex-col">
+        <div className="p-4 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50/50">
           <div>
-            <h4 className="text-base font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-indigo-600" />
-              Period Activity & Daily Conversion Report
+            <h4 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-hospital-600" />
+              Period Activity & Daily Conversion Ledger
             </h4>
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5 font-medium">
               Day-by-day arrivals, new vs revisits, surgical leads, and realized revenue
             </p>
           </div>
           <button 
             onClick={onExportDaily} 
-            className="w-full sm:w-auto px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95" 
+            className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer min-h-[40px]" 
             title="Download Report as CSV"
           >
-            <Download className="w-4 h-4" /> Export CSV
+            <Download className="w-4 h-4" /> <span>Export CSV</span>
           </button>
         </div>
 
         <div className="overflow-x-auto table-container w-full flex-1">
-          <table className="w-full text-left min-w-[800px]">
-            <thead className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b bg-slate-50/60">
+          <table className="w-full text-left min-w-[800px] border-collapse">
+            <thead className="text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 bg-slate-50">
               <tr>
-                <th className="px-6 py-4">Date</th>
-                <th className="px-6 py-4">Arrivals</th>
-                <th className="px-6 py-4 text-teal-600">New</th>
-                <th className="px-6 py-4 text-orange-600">Revisit</th>
-                <th className="px-6 py-4">S1 Leads</th>
-                <th className="px-6 py-4 text-emerald-600">Surgeries</th>
-                <th className="px-6 py-4 text-right">Opp. Revenue</th>
-                <th className="px-6 py-4 text-right">Actual Revenue</th>
+                <th className="px-5 py-3.5">Date</th>
+                <th className="px-5 py-3.5 text-center">Arrivals</th>
+                <th className="px-5 py-3.5 text-center text-teal-700">New</th>
+                <th className="px-5 py-3.5 text-center text-orange-700">Revisit</th>
+                <th className="px-5 py-3.5 text-center">S1 Leads</th>
+                <th className="px-5 py-3.5 text-center text-emerald-700">Surgeries</th>
+                <th className="px-5 py-3.5 text-right">Opp. Revenue</th>
+                <th className="px-5 py-3.5 text-right">Actual Revenue</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50 text-xs">
+            <tbody className="divide-y divide-slate-100 text-xs">
               {allDates.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-slate-400 font-bold">
+                  <td colSpan={8} className="px-6 py-12 text-center text-slate-400 font-bold">
                     No activity recorded in this period.
                   </td>
                 </tr>
@@ -81,20 +81,20 @@ export const PeriodActivityReport: React.FC<PeriodActivityReportProps> = ({
                   const dayArrivals = dayNew + dayRevisits;
 
                   return (
-                    <tr key={i} className="hover:bg-slate-50 transition-colors group">
-                      <td className="px-6 py-4 text-[11px] font-black text-slate-900">{formatDate(date)}</td>
-                      <td className="px-6 py-4 text-xs font-bold text-slate-600">{dayArrivals}</td>
-                      <td className="px-6 py-4 text-xs font-bold text-teal-600">{dayNew}</td>
-                      <td className="px-6 py-4 text-xs font-bold text-orange-600">{dayRevisits}</td>
-                      <td className="px-6 py-4 text-xs font-bold text-indigo-500">
+                    <tr key={i} className="hover:bg-slate-50/70 transition-colors group">
+                      <td className="px-5 py-3.5 text-xs font-bold text-slate-900 font-mono">{formatDate(date)}</td>
+                      <td className="px-5 py-3.5 text-xs font-black text-slate-800 text-center font-mono tabular-nums">{dayArrivals}</td>
+                      <td className="px-5 py-3.5 text-xs font-bold text-teal-700 text-center font-mono tabular-nums">{dayNew}</td>
+                      <td className="px-5 py-3.5 text-xs font-bold text-orange-700 text-center font-mono tabular-nums">{dayRevisits}</td>
+                      <td className="px-5 py-3.5 text-xs font-bold text-indigo-600 text-center font-mono tabular-nums">
                         {flowDay.filter(p => p.doctorAssessment?.quickCode === SurgeonCode.S1).length}
                       </td>
-                      <td className="px-6 py-4 text-xs font-bold text-emerald-600">{completedDay.length}</td>
-                      <td className="px-6 py-4 text-right text-xs font-black text-slate-900">
-                        ₹{combinedOppRev.toLocaleString()}
+                      <td className="px-5 py-3.5 text-xs font-black text-emerald-600 text-center font-mono tabular-nums">{completedDay.length}</td>
+                      <td className="px-5 py-3.5 text-right text-xs font-bold text-slate-700 font-mono tabular-nums">
+                        ₹{combinedOppRev.toLocaleString('en-IN')}
                       </td>
-                      <td className="px-6 py-4 text-right text-xs font-black text-emerald-600">
-                        ₹{actualRev.toLocaleString()}
+                      <td className="px-5 py-3.5 text-right text-xs font-black text-emerald-700 font-mono tabular-nums">
+                        ₹{actualRev.toLocaleString('en-IN')}
                       </td>
                     </tr>
                   );

@@ -101,10 +101,12 @@ export const DEFAULT_PERMISSIONS: Record<DashboardKey, boolean> = {
   master_reports: true,
   analytics_hub: true,
   analytics_give_access: true,
+  doctor_performance: true,
   front_office: true,
   doctor: true,
   doctor_appointments: true,
   doctor_availability: true,
+  doctor_profile: true,
   package: true,
   sales: true,
 };
@@ -130,10 +132,12 @@ export const DASHBOARD_TO_SLUG: Record<DashboardKey, string> = {
   master_reports: 'master-reports',
   analytics_hub: 'analytics-hub',
   analytics_give_access: 'analytics-give-access',
+  doctor_performance: 'doctor-performance',
   front_office: 'front-office',
   doctor: 'doctor',
   doctor_appointments: 'doctor-appointments',
   doctor_availability: 'doctor-availability',
+  doctor_profile: 'doctor-profile',
   package: 'package',
   sales: 'sales',
 };
@@ -152,7 +156,7 @@ export const checkPermission = (
 
   if (user && user.grantedBy === 'Master Admin' && user.accessStatus === 'Active') {
     if (user.role === 'SALES' && dashboard === 'sales') return !!permissions.sales;
-    if (dashboard === 'analytics_hub') return !!permissions.analytics_hub;
+    if (dashboard === 'analytics_hub' || dashboard === 'doctor_performance') return !!permissions.analytics_hub;
   }
 
   // 1. MASTER: Full complete access to all dashboards
@@ -160,7 +164,7 @@ export const checkPermission = (
 
   // 2. ADMIN: Access to Analytics Hub and permitted operational dashboards
   if (role === 'ADMIN') {
-    if (dashboard === 'analytics_hub') return !!permissions.analytics_hub;
+    if (dashboard === 'analytics_hub' || dashboard === 'doctor_performance') return !!permissions.analytics_hub;
     if (dashboard === 'front_office') return !!permissions.front_office;
     if (dashboard === 'doctor') return !!permissions.doctor;
     if (dashboard === 'package') return !!permissions.package;
@@ -170,7 +174,7 @@ export const checkPermission = (
 
   // 3. ANALYTICS / ANALYTICS_HUB / HOSPITAL
   if (role === 'ANALYTICS' || role === 'ANALYTICS_HUB' || role === 'HOSPITAL') {
-    if (dashboard === 'analytics_hub' || dashboard === 'analytics_give_access') return !!permissions.analytics_hub;
+    if (dashboard === 'analytics_hub' || dashboard === 'analytics_give_access' || dashboard === 'doctor_performance') return !!permissions.analytics_hub;
     return false;
   }
 
@@ -180,9 +184,9 @@ export const checkPermission = (
     return false;
   }
 
-  // 5. DOCTOR: Can access doctor patient queue, appointments, and availability
+  // 5. DOCTOR: Can access doctor patient queue, appointments, availability, and profile
   if (role === 'DOCTOR') {
-    if (dashboard === 'doctor' || dashboard === 'doctor_appointments' || dashboard === 'doctor_availability') return !!permissions.doctor;
+    if (dashboard === 'doctor' || dashboard === 'doctor_appointments' || dashboard === 'doctor_availability' || dashboard === 'doctor_profile') return !!permissions.doctor;
     return false;
   }
 
@@ -243,6 +247,7 @@ const getDashboardFromLocation = (): DashboardKey | null => {
     if (hash === 'master-reports' || hash === 'master_reports') return 'master_reports';
     if (hash === 'admin') return 'analytics_hub';
     if (hash === 'analytics' || hash === 'analytics-hub' || hash === 'analytics_hub') return 'analytics_hub';
+    if (hash === 'doctor-performance' || hash === 'doctor_performance') return 'doctor_performance';
     if (hash === 'front-office' || hash === 'front_office') return 'front_office';
     if (hash === 'doctor') return 'doctor';
     if (hash === 'package') return 'package';
@@ -319,16 +324,7 @@ const mapRowToPatient = (row: any): Patient => {
     };
   }
 
-  const isAcquireOpd = normalizeSource(row.source) === 'Acquire OPD' || 
-    normalizeSource(row.doctor_assessment?.source) === 'Acquire OPD' ||
-    row.doctor_assessment?.scheduled_by === 'Sales Executive' ||
-    row.doctor_assessment?.scheduled_by === 'Master Admin' ||
-    row.doctor_assessment?.username === 'Sales Executive' ||
-    row.doctor_assessment?.username === 'Master Admin' ||
-    row.remarks === 'Sales Executive' ||
-    row.remarks === 'Master Admin';
-
-  const resolvedSource = isAcquireOpd ? 'Acquire OPD' : normalizeSource(row.source || row.doctor_assessment?.source || 'Other');
+  const resolvedSource = normalizeSource(row.source || row.doctor_assessment?.source || 'Other');
 
   return {
     id: row.id || '',
@@ -342,7 +338,7 @@ const mapRowToPatient = (row: any): Patient => {
     hasInsurance: row.has_insurance || 'No',
     insuranceName: row.insurance_name || '',
     source: resolvedSource,
-    sourceDoctorName: resolvedSource === 'Acquire OPD' ? '' : (row.source_doctor_name || ''),
+    sourceDoctorName: row.source_doctor_name || '',
     condition: (row.condition || Condition.Other) as Condition,
     visitType: row.is_follow_up ? 'Follow Up' : 'OPD',
     visit_type: row.visit_type || '',
@@ -583,6 +579,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       if (window.location.hash !== `#/${slug}`) {
         window.location.hash = `#/${slug}`;
       }
+      window.dispatchEvent(new CustomEvent('hms:navigate-dashboard', { detail: key }));
     }
   };
 
@@ -659,7 +656,22 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       grantedBy: 'Master Admin',
       hospital_id: doctorId,
       hospitalName: `${doctorData.name} (Doctor Only)`,
-      specialization: doctorData.specialization || 'General Surgeon'
+      specialization: doctorData.specialization || 'General Surgeon',
+      availability: {
+        availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+        startTime: '09:00',
+        endTime: '17:00',
+        unavailableDates: [],
+        daySchedules: [
+          { day: "Monday", status: "Available", startTime: "09:00", endTime: "17:00", breaks: [{ startTime: "13:00", endTime: "14:00" }] },
+          { day: "Tuesday", status: "Available", startTime: "09:00", endTime: "17:00", breaks: [{ startTime: "13:00", endTime: "14:00" }] },
+          { day: "Wednesday", status: "Available", startTime: "09:00", endTime: "17:00", breaks: [{ startTime: "13:00", endTime: "14:00" }] },
+          { day: "Thursday", status: "Available", startTime: "09:00", endTime: "17:00", breaks: [{ startTime: "13:00", endTime: "14:00" }] },
+          { day: "Friday", status: "Available", startTime: "09:00", endTime: "17:00", breaks: [{ startTime: "13:00", endTime: "14:00" }] },
+          { day: "Saturday", status: "Available", startTime: "09:00", endTime: "12:00", breaks: [] },
+          { day: "Sunday", status: "Holiday", startTime: "09:00", endTime: "17:00", breaks: [] }
+        ]
+      }
     };
 
     await registerStaff(newAccount);
@@ -731,10 +743,19 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       hospital_id: analyticsId,
       hospitalName: targetName,
       availability: doctorData.availability || {
-        availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+        availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
         startTime: '09:00',
         endTime: '17:00',
-        unavailableDates: []
+        unavailableDates: [],
+        daySchedules: [
+          { day: "Monday", status: "Available", startTime: "09:00", endTime: "17:00", breaks: [{ startTime: "13:00", endTime: "14:00" }] },
+          { day: "Tuesday", status: "Available", startTime: "09:00", endTime: "17:00", breaks: [{ startTime: "13:00", endTime: "14:00" }] },
+          { day: "Wednesday", status: "Available", startTime: "09:00", endTime: "17:00", breaks: [{ startTime: "13:00", endTime: "14:00" }] },
+          { day: "Thursday", status: "Available", startTime: "09:00", endTime: "17:00", breaks: [{ startTime: "13:00", endTime: "14:00" }] },
+          { day: "Friday", status: "Available", startTime: "09:00", endTime: "17:00", breaks: [{ startTime: "13:00", endTime: "14:00" }] },
+          { day: "Saturday", status: "Available", startTime: "09:00", endTime: "12:00", breaks: [] },
+          { day: "Sunday", status: "Holiday", startTime: "09:00", endTime: "17:00", breaks: [] }
+        ]
       }
     };
 
@@ -1053,16 +1074,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           const resolvedHospId = r.hospital_id || r.doctor_assessment?.hospital_id || assignedDoc?.hospital_id || '';
           const resolvedHospName = r.doctor_assessment?.hospitalName || (staffData || []).find((u: any) => u.id === resolvedHospId)?.name || '';
 
-          const isAcquireOpd = normalizeSource(r.source) === 'Acquire OPD' || 
-            normalizeSource(r.doctor_assessment?.source) === 'Acquire OPD' ||
-            r.doctor_assessment?.scheduled_by === 'Sales Executive' ||
-            r.doctor_assessment?.scheduled_by === 'Master Admin' ||
-            r.doctor_assessment?.username === 'Sales Executive' ||
-            r.doctor_assessment?.username === 'Master Admin' ||
-            r.remarks === 'Sales Executive' ||
-            r.remarks === 'Master Admin';
-
-          const resolvedSource = isAcquireOpd ? 'Acquire OPD' : normalizeSource(r.source || r.doctor_assessment?.source || 'Other');
+          const resolvedSource = normalizeSource(r.source || r.doctor_assessment?.source || 'Other');
 
           let apptStatus = r.booking_status || 'Scheduled';
           if (apptStatus === 'Doctor Done' && (!r.doctor_assessment?.quickCode && !r.doctor_assessment?.assessedAt && !r.doctor_assessment?.doctorSignature)) {
@@ -1074,8 +1086,8 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
             hospital_id: resolvedHospId,
             name: r.name || '',
             source: resolvedSource,
-            sourceDoctorName: resolvedSource === 'Acquire OPD' ? '' : (r.source_doctor_name || ''),
-            referral_person: resolvedSource === 'Acquire OPD' ? null : (r.doctor_assessment?.referral_person || (r.source === 'Referral' ? r.source_doctor_name : null) || null),
+            sourceDoctorName: r.source_doctor_name || '',
+            referral_person: r.doctor_assessment?.referral_person || (r.source === 'Referral' ? r.source_doctor_name : null) || null,
             condition: (r.condition || Condition.Other) as Condition,
             mobile: r.mobile || '',
             date: r.entry_date || '',
@@ -1191,7 +1203,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         age: patientData.age,
         mobile: patientData.mobile,
         occupation: patientData.occupation,
-        source: patientData.source,
+        source: normalizeSource(patientData.source || 'Other'),
         source_doctor_name: patientData.sourceDoctorName,
         condition: patientData.condition,
         is_follow_up: patientData.visitType === 'Follow Up',
@@ -1305,7 +1317,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         gender: patient.gender,
         mobile: patient.mobile,
         occupation: patient.occupation,
-        source: (normalizeSource(existingPatient?.source) === 'Acquire OPD' || normalizeSource(patient.source) === 'Acquire OPD') ? 'Acquire OPD' : normalizeSource(patient.source || 'Other'),
+        source: normalizeSource(patient.source || existingPatient?.source || 'Other'),
         condition: patient.condition,
         is_follow_up: patient.visitType === 'Follow Up',
         visit_type: patient.visit_type || existingPatient?.visit_type || '',
@@ -1357,9 +1369,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
     setSaveStatus('saving');
     try {
         const originalAppt = allAppointments.find(a => a.id === appointmentId);
-        const resolvedSource = (normalizeSource(originalAppt?.source) === 'Acquire OPD' || normalizeSource(patientData.source) === 'Acquire OPD') 
-          ? 'Acquire OPD' 
-          : normalizeSource(patientData.source || 'Other');
+        const resolvedSource = normalizeSource(patientData.source || originalAppt?.source || 'Other');
         const assignedDocId = patientData.doctorAssessment?.assignedDoctorId || (patientData as any).assignedDoctorId || originalAppt?.assignedDoctorId;
         const assignedDocName = patientData.doctorAssessment?.assignedDoctorName || (patientData as any).assignedDoctorName || originalAppt?.assignedDoctorName;
 
@@ -1498,8 +1508,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       const resolvedHospitalName = appointmentData.hospitalName || null;
       const resolvedPatientId = appointmentData.patient_id || null;
 
-      // Source Rule: When Master Admin or Sales schedules/books an appointment, the system must automatically set the source as: Acquire OPD
-      const resolvedSource = isRoleMasterOrSales ? 'Acquire OPD' : normalizeSource(appointmentData.source || 'Other');
+      const resolvedSource = normalizeSource(appointmentData.source || 'Other');
       const resolvedReferralPerson = isRoleMasterOrSales && appointmentData.source === 'Referral'
         ? (appointmentData.referral_person?.trim() || null)
         : null;
@@ -1570,13 +1579,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       const resolvedHospitalName = appointment.hospitalName || null;
       const resolvedPatientId = appointment.patient_id || null;
 
-      // Source rule: If booking was scheduled by Master Admin or Sales, source is Acquire OPD and locked.
-      const isOriginalAcquireOpd = normalizeSource(existingAppt?.source) === 'Acquire OPD' || normalizeSource(appointment.source) === 'Acquire OPD';
-      const resolvedSource = isOriginalAcquireOpd
-        ? 'Acquire OPD'
-        : (isRoleMasterOrSales 
-            ? normalizeSource(appointment.source || 'Acquire OPD') 
-            : normalizeSource(existingAppt?.source || 'Other'));
+      const resolvedSource = normalizeSource(appointment.source || existingAppt?.source || 'Other');
       
       const resolvedReferralPerson = isRoleMasterOrSales
         ? (appointment.source === 'Referral' ? (appointment.referral_person?.trim() || null) : null)
@@ -1798,12 +1801,24 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       if (staffData.hospital_id !== undefined) dbStaffData.hospital_id = staffData.hospital_id;
       if (staffData.hospitalName !== undefined) dbStaffData.hospital_name = staffData.hospitalName;
 
-      if (Object.keys(dbStaffData).length > 0) {
-        const { error } = await supabase.from('staff_users').update(dbStaffData).eq('id', id);
-        if (error) throw error;
+      // Update in-memory state immediately for instantaneous, flicker-free feedback
+      setAllStaffUsers(prev => prev.map(u => u.id === id ? { ...u, ...staffData } : u));
+      if (staffData.name) {
+        setAllAppointments(prev => prev.map(a => a.assignedDoctorId === id ? { ...a, assignedDoctorName: staffData.name } : a));
       }
 
-      await refreshData();
+      if (Object.keys(dbStaffData).length > 0) {
+        try {
+          const { error } = await supabase.from('staff_users').update(dbStaffData).eq('id', id);
+          if (error) {
+            console.warn('Could not update staff_users in database (fallback to local state):', error);
+          }
+        } catch (dbErr) {
+          console.warn('Supabase staff_users update error (fallback to local state):', dbErr);
+        }
+      }
+
+      await refreshData(true);
       setSaveStatus('saved');
       setLastSavedAt(new Date());
     } catch (err) {

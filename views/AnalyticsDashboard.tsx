@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
-import { Patient, SurgeonCode, Condition, DashboardKey } from '../types';
+import { Patient, SurgeonCode, Condition, DashboardKey, normalizeSource } from '../types';
 import { AnalyticsAccessManagement } from '../components/AnalyticsAccessManagement';
 import { DoctorPerformanceReport } from '../components/DoctorPerformanceReport';
 import { PeriodActivityReport } from '../components/PeriodActivityReport';
@@ -32,7 +32,6 @@ const ONLINE_SOURCES = [
 ];
 
 const SOURCE_DISPLAY_MAP: Record<string, string> = {
-  'Acquire OPD': 'Acquire OPD',
   'Google': 'Google / YouTube / Website',
   'YouTube': 'Google / YouTube / Website',
   'Website': 'Google / YouTube / Website',
@@ -60,19 +59,16 @@ const CHART_COLORS = [
 
 const getSourceDisplay = (source: string | undefined): string => {
   if (!source) return 'Others';
-  const clean = source.trim().toLowerCase().replace(/\s+/g, ' ');
-  if (
-    clean === 'acquire opd' || 
-    clean === 'acqure opd' || 
-    clean === 'acquire_opd' || 
-    clean === 'acqure_opd' || 
-    clean === 'acquireopd' || 
-    clean === 'acqureopd'
-  ) {
-    return 'Acquire OPD';
-  }
+  const norm = normalizeSource(source);
+  if (norm === 'Other' || norm === 'Others') return 'Others';
   if (source.startsWith('Other: ')) return 'Others';
-  return SOURCE_DISPLAY_MAP[source] || source;
+  return SOURCE_DISPLAY_MAP[norm] || SOURCE_DISPLAY_MAP[source] || source.trim();
+};
+
+const isOnlineSource = (source: string | undefined): boolean => {
+  if (!source) return false;
+  const ds = getSourceDisplay(source);
+  return ONLINE_SOURCES.includes(source) || ONLINE_SOURCES.includes(ds);
 };
 
 // Robust helper to parse package amounts for accurate summation
@@ -107,7 +103,7 @@ interface AnalyticsStats {
   marketingLeadsRevisit: number;
   marketingCompleted: number;
   marketingRevenue: number;
-  sources: Record<string, { total: number, completed: number, revenue: number, new: number, revisit: number }>;
+  sources: Record<string, { total: number, completed: number, revenue: number, new: number, revisit: number, scheduled?: number, leads?: number }>;
   arrivedDataset: Patient[];
   completedDataset: Patient[];
   decisionPatternMix: Record<string, number>;
@@ -129,9 +125,9 @@ const AnalyticsPieChart: React.FC<{
 
   if (total === 0) {
     return (
-      <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm h-full flex flex-col items-center justify-center space-y-4">
-        <div className="p-4 bg-slate-50 rounded-2xl text-slate-300">{icon}</div>
-        <p className="text-[10px] font-black uppercase text-slate-300 tracking-widest text-center">No Data for {title}<br/>in selected range</p>
+      <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-xs h-full flex flex-col items-center justify-center space-y-3">
+        <div className="p-3 bg-slate-50 rounded-xl text-slate-300">{icon}</div>
+        <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider text-center">No Data for {title}<br/>in selected range</p>
       </div>
     );
   }
@@ -158,19 +154,19 @@ const AnalyticsPieChart: React.FC<{
   });
 
   return (
-    <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm flex flex-col h-full animate-in fade-in duration-700">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-slate-50 rounded-xl text-slate-500">{icon}</div>
+    <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-xs flex flex-col h-full animate-in fade-in duration-300">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 bg-slate-50 rounded-lg text-slate-500">{icon}</div>
           <div>
-            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{title}</h4>
-            <div className="text-xl font-black text-slate-900">{total} <span className="text-[10px] text-slate-400">Cases</span></div>
+            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{title}</h4>
+            <div className="text-lg font-bold text-slate-900 font-mono">{total} <span className="text-[10px] font-normal text-slate-400">Cases</span></div>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col xl:flex-row items-center gap-8 flex-1">
-        <div className="relative w-36 h-36 lg:w-44 lg:h-44 shrink-0">
+      <div className="flex flex-col sm:flex-row items-center gap-4 flex-1">
+        <div className="relative w-28 h-28 sm:w-32 sm:h-32 shrink-0">
           <svg viewBox="-1 -1 2 2" className="w-full h-full -rotate-90">
             {slices.map((slice, i) => (
               <path 
@@ -186,27 +182,27 @@ const AnalyticsPieChart: React.FC<{
             <circle cx="0" cy="0" r="0.65" fill="white" />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="text-xl font-black text-slate-900 leading-none">{total}</span>
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Total</span>
+            <span className="text-base font-bold text-slate-900 leading-none font-mono">{total}</span>
+            <span className="text-[8px] font-semibold text-slate-400 uppercase">Total</span>
           </div>
         </div>
 
-        <div className="flex-1 space-y-3 w-full">
+        <div className="flex-1 space-y-1.5 w-full">
           {slices.map((slice, i) => (
             <div 
               key={i} 
               onClick={() => onSegmentClick?.(slice.name)}
-              className={`flex items-center justify-between group ${onSegmentClick ? 'cursor-pointer hover:bg-slate-50 p-1 -m-1 rounded-lg transition-colors' : ''}`}
+              className={`flex items-center justify-between group py-0.5 ${onSegmentClick ? 'cursor-pointer hover:bg-slate-50 px-1.5 rounded transition-colors' : ''}`}
             >
-              <div className="flex items-center gap-2 overflow-hidden">
-                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: slice.color }}></div>
-                <span className="text-[9px] font-black text-slate-600 uppercase truncate group-hover:text-slate-900 transition-colors">
+              <div className="flex items-center gap-1.5 overflow-hidden">
+                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: slice.color }}></div>
+                <span className="text-[10px] font-semibold text-slate-600 truncate group-hover:text-slate-900 transition-colors">
                   {slice.name}
                 </span>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[10px] font-black text-slate-900">{slice.val}</span>
-                <span className="text-[8px] font-bold text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded-md group-hover:bg-white transition-colors">{slice.percent}%</span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[10px] font-bold text-slate-900 font-mono">{slice.val}</span>
+                <span className="text-[8px] font-semibold text-slate-400 bg-slate-50 px-1 py-0.5 rounded group-hover:bg-white transition-colors">{slice.percent}%</span>
               </div>
             </div>
           ))}
@@ -229,7 +225,8 @@ export const AnalyticsDashboard: React.FC = () => {
     schedulingPermissions,
     updateDashboardPermission, 
     setActiveDashboard,
-    refreshData 
+    refreshData,
+    isLoading
   } = useHospital();
   
   // Tab state for switching between Analytics and Reports
@@ -276,6 +273,37 @@ export const AnalyticsDashboard: React.FC = () => {
     to: new Date().toISOString().split('T')[0]
   });
 
+  // Source Filter states (All Sources / etc.)
+  const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>('ALL');
+  const [appliedSourceFilter, setAppliedSourceFilter] = useState<string>('ALL');
+
+  // Available unique sources for dropdown filtering
+  const availableSources = useMemo(() => {
+    const base = [
+      'Google / YouTube / Website',
+      'FB / Insta / WhatsApp',
+      'Friend + Online',
+      'Doctor Recommended',
+      'Self / Old Patient / Relative',
+      'Hospital Billboards',
+      'Others'
+    ];
+    const dynamicSources = new Set<string>();
+    patients.forEach(p => {
+      if (p.source) {
+        const ds = getSourceDisplay(p.source);
+        if (ds) dynamicSources.add(ds);
+      }
+    });
+    appointments.forEach(a => {
+      if (a.source) {
+        const ds = getSourceDisplay(a.source);
+        if (ds) dynamicSources.add(ds);
+      }
+    });
+    return Array.from(new Set([...base, ...Array.from(dynamicSources)])).filter(Boolean);
+  }, [patients, appointments]);
+
   // Comparison specific states
   const [graphGranularity, setGraphGranularity] = useState<'daily' | 'monthly'>('daily');
   const [showComparison, setShowComparison] = useState(false);
@@ -304,6 +332,7 @@ export const AnalyticsDashboard: React.FC = () => {
 
   const handleApplyFilter = () => {
     setAppliedRange({ from: fromDate, to: toDate });
+    setAppliedSourceFilter(selectedSourceFilter);
   };
 
   const handleApplyCompRange = () => {
@@ -311,6 +340,17 @@ export const AnalyticsDashboard: React.FC = () => {
       setAppliedCompRange({ from: compFromDate, to: compToDate });
     }
   };
+
+  // Filter datasets by source if a specific source filter is applied
+  const filteredPatients = useMemo(() => {
+    if (appliedSourceFilter === 'ALL') return patients;
+    return patients.filter(p => getSourceDisplay(p.source) === appliedSourceFilter);
+  }, [patients, appliedSourceFilter]);
+
+  const filteredAppointments = useMemo(() => {
+    if (appliedSourceFilter === 'ALL') return appointments;
+    return appointments.filter(a => getSourceDisplay(a.source) === appliedSourceFilter);
+  }, [appointments, appliedSourceFilter]);
 
   // Calculate stats for the selected range
   const stats: AnalyticsStats = useMemo(() => {
@@ -351,56 +391,61 @@ export const AnalyticsDashboard: React.FC = () => {
         const leadsRevenue = leadsDataset.reduce((sum, p) => sum + parseAmount(p.packageProposal?.packageAmount), 0);
 
         // Grouping sources for the entire flow dataset (filtered by visit_type existence)
-        const sourcesMap: Record<string, { total: number, completed: number, revenue: number, new: number, revisit: number }> = {};
+        const sourcesMap: Record<string, { total: number, completed: number, revenue: number, new: number, revisit: number, scheduled: number, leads: number }> = {};
         
         flowDataset.forEach(p => {
           const vt = (p.visit_type || '').trim().toLowerCase();
           if (vt !== 'new' && vt !== 'revisit') return;
 
           const ds = getSourceDisplay(p.source);
-          if (!sourcesMap[ds]) sourcesMap[ds] = { total: 0, completed: 0, revenue: 0, new: 0, revisit: 0 };
+          if (!sourcesMap[ds]) sourcesMap[ds] = { total: 0, completed: 0, revenue: 0, new: 0, revisit: 0, scheduled: 0, leads: 0 };
           sourcesMap[ds].total++;
           
           if (vt === 'revisit') sourcesMap[ds].revisit++;
           else sourcesMap[ds].new++;
+
+          if (p.doctorAssessment?.quickCode === SurgeonCode.S1) {
+            sourcesMap[ds].leads++;
+          }
         });
 
-        // Add revenue data to sources strictly from the completed set
+        // Add scheduled appointments in range
+        filteredAppointments.filter(a => filterByRange(a.date, range)).forEach(a => {
+          const ds = getSourceDisplay(a.source);
+          if (!sourcesMap[ds]) sourcesMap[ds] = { total: 0, completed: 0, revenue: 0, new: 0, revisit: 0, scheduled: 0, leads: 0 };
+          sourcesMap[ds].scheduled++;
+        });
+
+        // Add revenue and completed data to sources strictly from the completed set
         completedInPeriod.forEach(p => {
           const ds = getSourceDisplay(p.source);
-          if (sourcesMap[ds]) {
-            sourcesMap[ds].completed++;
-            sourcesMap[ds].revenue += parseAmount(p.packageProposal?.packageAmount);
-          }
+          if (!sourcesMap[ds]) sourcesMap[ds] = { total: 0, completed: 0, revenue: 0, new: 0, revisit: 0, scheduled: 0, leads: 0 };
+          sourcesMap[ds].completed++;
+          sourcesMap[ds].revenue += parseAmount(p.packageProposal?.packageAmount);
         });
 
         // Digital split for 'New' patients flow strictly based on visit_type column
         let onlineTotal = flowDataset.filter(p => {
           const vt = (p.visit_type || '').trim().toLowerCase();
           if (vt !== 'new') return false; // Exclusion of Revisit records for Digital vs Traditional Flow section
-          const ds = getSourceDisplay(p.source);
-          return (ONLINE_SOURCES.includes(p.source) || ONLINE_SOURCES.includes(ds));
+          return isOnlineSource(p.source);
         }).length;
 
         let offlineTotal = newPatients - onlineTotal;
 
         const marketingLeadsData = flowDataset.filter(p => {
-          const ds = getSourceDisplay(p.source);
-          const isOnline = ONLINE_SOURCES.includes(p.source) || ONLINE_SOURCES.includes(ds);
-          return isOnline && p.doctorAssessment?.quickCode === SurgeonCode.S1;
+          return isOnlineSource(p.source) && p.doctorAssessment?.quickCode === SurgeonCode.S1;
         });
         const marketingLeads = marketingLeadsData.length;
         const marketingLeadsNew = marketingLeadsData.filter(p => (p.visit_type || '').trim().toLowerCase() === 'new').length;
         const marketingLeadsRevisit = marketingLeadsData.filter(p => (p.visit_type || '').trim().toLowerCase() === 'revisit').length;
 
         const marketingCompleted = completedInPeriod.filter(p => {
-          const ds = getSourceDisplay(p.source);
-          return ONLINE_SOURCES.includes(p.source) || ONLINE_SOURCES.includes(ds);
+          return isOnlineSource(p.source);
         }).length;
 
         const marketingRevenue = completedInPeriod.filter(p => {
-          const ds = getSourceDisplay(p.source);
-          return ONLINE_SOURCES.includes(p.source) || ONLINE_SOURCES.includes(ds);
+          return isOnlineSource(p.source);
         }).reduce((sum, p) => sum + parseAmount(p.packageProposal?.packageAmount), 0);
 
         // Counseling status mix aggregation
@@ -448,31 +493,36 @@ export const AnalyticsDashboard: React.FC = () => {
         };
     };
 
-    const primaryStats = processSet(patients, appliedRange);
+    const primaryStats = processSet(filteredPatients, appliedRange);
     
     let compStats: any = null;
     if (showComparison && appliedCompRange) {
-        compStats = processSet(patients, appliedCompRange);
+        compStats = processSet(filteredPatients, appliedCompRange);
     }
 
-    const scheduledCount = appointments.filter(a => filterByRange(a.date, appliedRange)).length;
+    const scheduledCount = filteredAppointments.filter(a => filterByRange(a.date, appliedRange)).length;
 
     return {
       ...primaryStats,
       scheduledCount: scheduledCount as number,
       comparison: compStats as AnalyticsStats | null
     } as AnalyticsStats;
-  }, [patients, appointments, appliedRange, showComparison, appliedCompRange]);
+  }, [filteredPatients, filteredAppointments, appliedRange, showComparison, appliedCompRange]);
 
   const sourceStats = useMemo(() => {
-    return Object.entries(stats.sources).map(([name, data]) => {
-      const sData = data as { total: number, completed: number, revenue: number, new: number, revisit: number };
+    const list = Object.entries(stats.sources)
+      .map(([name, data]) => {
+      const sData = data as { total: number, completed: number, revenue: number, new: number, revisit: number, scheduled?: number, leads?: number };
       return {
         name,
         ...sData,
+        scheduled: sData.scheduled || 0,
+        leads: sData.leads || 0,
         conversionRate: sData.total > 0 ? ((sData.completed / sData.total) * 100).toFixed(1) : '0'
       };
-    }).sort((a, b) => b.total - a.total);
+    });
+
+    return list.sort((a, b) => b.total - a.total);
   }, [stats.sources]);
 
   const handleExportDaily = () => {
@@ -531,7 +581,7 @@ export const AnalyticsDashboard: React.FC = () => {
       rows = drillDown.data.map(p => [
         p.id,
         p.name,
-        p.source,
+        getSourceDisplay(p.source),
         p.packageProposal?.outcome || 'Pending',
         p.packageProposal?.decisionPattern || '',
         p.packageProposal?.proposalStage || '',
@@ -550,7 +600,7 @@ export const AnalyticsDashboard: React.FC = () => {
         p.condition,
         p.mobile,
         p.visit_type || 'OPD',
-        p.source,
+        getSourceDisplay(p.source),
         p.packageProposal?.outcome || 'Pending',
         formatDate(p.entry_date),
         p.doctorAssessment?.affordability || '---',
@@ -580,28 +630,26 @@ export const AnalyticsDashboard: React.FC = () => {
         filteredData = stats.arrivedDataset.filter(p => {
             const vt = (p.visit_type || '').trim().toLowerCase();
             if (vt !== 'new') return false; // Only show New patients in flow analytics share
-            const ds = getSourceDisplay(p.source);
-            return (ONLINE_SOURCES.includes(p.source) || ONLINE_SOURCES.includes(ds));
+            return isOnlineSource(p.source);
         });
         break;
       case 'Offline Traffic':
         filteredData = stats.arrivedDataset.filter(p => {
             const vt = (p.visit_type || '').trim().toLowerCase();
             if (vt !== 'new') return false; // Only show New patients in flow analytics share
-            const ds = getSourceDisplay(p.source);
-            return !(ONLINE_SOURCES.includes(p.source) || ONLINE_SOURCES.includes(ds));
+            return !isOnlineSource(p.source);
         });
         break;
       case 'Scheduled Appts':
         filteredData = appointments
-          .filter(a => filterByRange(a.date, appliedRange))
+          .filter(a => filterByRange(a.date, appliedRange) && (appliedSourceFilter === 'ALL' || getSourceDisplay(a.source) === appliedSourceFilter))
           .map(a => ({
             id: a.id,
             name: a.name,
             mobile: a.mobile,
             condition: a.condition,
             entry_date: a.date,
-            source: a.source,
+            source: getSourceDisplay(a.source),
             visit_type: a.visit_type || 'New',
             gender: 'Other' as any,
             age: 0,
@@ -625,27 +673,63 @@ export const AnalyticsDashboard: React.FC = () => {
         filteredData = stats.arrivedDataset.filter(p => {
           const vt = (p.visit_type || '').trim().toLowerCase();
           if (vt !== 'new') return false;
-          const ds = getSourceDisplay(p.source);
-          return ONLINE_SOURCES.includes(p.source) || ONLINE_SOURCES.includes(ds);
+          return isOnlineSource(p.source);
         });
         break;
       case 'Marketing Leads':
         filteredData = stats.arrivedDataset.filter(p => {
-          const ds = getSourceDisplay(p.source);
-          const isOnline = ONLINE_SOURCES.includes(p.source) || ONLINE_SOURCES.includes(ds);
-          return isOnline && p.doctorAssessment?.quickCode === SurgeonCode.S1;
+          return isOnlineSource(p.source) && p.doctorAssessment?.quickCode === SurgeonCode.S1;
         });
         break;
       case 'Marketing Surgeries':
         filteredData = stats.completedDataset.filter(p => {
-          const ds = getSourceDisplay(p.source);
-          return ONLINE_SOURCES.includes(p.source) || ONLINE_SOURCES.includes(ds);
+          return isOnlineSource(p.source);
         });
         break;
       default:
         filteredData = stats.arrivedDataset;
     }
     setDrillDown({ label, data: filteredData, viewMode: 'cards' });
+  };
+
+  const handleSourceClick = (sourceName: string) => {
+    const arrivals = stats.arrivedDataset.filter(p => getSourceDisplay(p.source) === sourceName);
+    const appts = appointments.filter(a => filterByRange(a.date, appliedRange) && getSourceDisplay(a.source) === sourceName);
+    
+    const combinedData: Patient[] = [
+      ...arrivals,
+      ...appts.filter(a => !arrivals.some(p => p.id === a.id || p.id === a.patient_id)).map(a => ({
+        id: a.id,
+        name: a.name,
+        mobile: a.mobile,
+        condition: a.condition,
+        entry_date: a.date,
+        source: getSourceDisplay(a.source),
+        visit_type: a.visit_type || 'New',
+        gender: 'Other' as any,
+        age: 0,
+        registeredAt: a.createdAt,
+        hasInsurance: 'No' as any,
+        occupation: '',
+        visitType: 'OPD',
+        status: a.status || 'Scheduled'
+      } as Patient))
+    ];
+
+    setDrillDown({
+      label: `Source: ${sourceName} (${combinedData.length} Records)`,
+      data: combinedData,
+      viewMode: 'table'
+    });
+  };
+
+  const handleSourceCompletedClick = (sourceName: string) => {
+    const completed = stats.completedDataset.filter(p => getSourceDisplay(p.source) === sourceName);
+    setDrillDown({
+      label: `Completed Surgeries: ${sourceName} (${completed.length} Records)`,
+      data: completed,
+      viewMode: 'table'
+    });
   };
 
   const handleCounselingClick = (category: 'DP' | 'PS', label: string) => {
@@ -1028,32 +1112,44 @@ export const AnalyticsDashboard: React.FC = () => {
     printWindow.document.close();
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[500px] bg-white rounded-3xl border border-slate-100 p-12 space-y-4 animate-in fade-in duration-300">
+        <div className="w-12 h-12 rounded-2xl bg-hospital-50 border border-hospital-100 flex items-center justify-center text-hospital-600">
+          <RefreshCw className="w-6 h-6 animate-spin" />
+        </div>
+        <div className="text-slate-800 font-black text-base">Loading Analytics Hub Data...</div>
+        <div className="text-slate-400 text-xs font-semibold">Analyzing patient flow and source performance...</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-4 sm:space-y-5 animate-in fade-in duration-300">
       {/* Header Section */}
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-6 border-b border-slate-100 pb-6">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-3 border-b border-slate-100 pb-3.5">
         <div className="shrink-0">
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Analytics Hub</h2>
-          <p className="text-slate-500 text-sm font-bold tracking-widest uppercase mt-1 flex items-center gap-2">
-            <RefreshCw className="w-4 h-4 text-hospital-500" /> Real-Time Hospital Intelligence (All Sources)
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight uppercase">Analytics Hub</h2>
+          <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider mt-0.5 flex items-center gap-1.5">
+            <RefreshCw className="w-3.5 h-3.5 text-hospital-500" /> Real-Time Hospital Intelligence (All Sources)
           </p>
         </div>
         
         {/* Hub Tab Switcher and Shared Date Filter */}
-        <div className="flex flex-col lg:flex-row items-center gap-4 w-full xl:w-auto">
+        <div className="flex flex-col lg:flex-row items-center gap-2.5 w-full xl:w-auto">
           {/* Tab Selector */}
           {(currentUserRole === 'MASTER' || currentUserRole === 'ADMIN' || currentUserRole === 'ANALYTICS' || currentUserRole === 'DOCTOR') && (
-            <div className="bg-slate-100 p-1.5 rounded-2xl flex items-center w-full lg:w-auto shadow-inner">
+            <div className="bg-slate-100 p-0.5 rounded-lg flex items-center w-full lg:w-auto border border-slate-200/70">
               <button
                 onClick={() => setActiveHubTab('analytics')}
-                className={`flex-1 lg:flex-none px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${activeHubTab === 'analytics' ? 'bg-white shadow-sm text-slate-900 font-extrabold' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex-1 lg:flex-none px-3 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${activeHubTab === 'analytics' ? 'bg-white shadow-2xs text-slate-900 font-bold' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 <BarChart3 className="w-3.5 h-3.5 text-indigo-600" />
                 1. Analytics
               </button>
               <button
                 onClick={() => setActiveHubTab('reports')}
-                className={`flex-1 lg:flex-none px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${activeHubTab === 'reports' ? 'bg-white shadow-sm text-slate-900 font-extrabold' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex-1 lg:flex-none px-3 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${activeHubTab === 'reports' ? 'bg-white shadow-2xs text-slate-900 font-bold' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
                 2. Reports
@@ -1061,65 +1157,107 @@ export const AnalyticsDashboard: React.FC = () => {
             </div>
           )}
 
-          {/* Date Filter Bar (Active in Analytics and Reports) */}
-          <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-3 rounded-3xl border shadow-sm w-full lg:w-auto">
-            <div className="flex items-center gap-3 w-full sm:w-auto">
+          {/* Date & Source Filter Bar (Active in Analytics and Reports) */}
+          <div className="flex flex-col sm:flex-row items-center gap-2 bg-white p-2 rounded-xl border border-slate-200/80 shadow-2xs w-full lg:w-auto">
+            <div className="flex items-center gap-1.5 w-full sm:w-auto">
               <div className="relative flex-1">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-400 uppercase">From</span>
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 uppercase">From</span>
                 <input 
                   type="date" 
                   value={fromDate} 
                   onChange={e => setFromDate(e.target.value)}
-                  className="pl-12 pr-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold outline-none focus:ring-2 focus:ring-hospital-500 w-full sm:w-36"
+                  className="pl-11 pr-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:ring-1 focus:ring-hospital-500 w-full sm:w-32 font-mono"
                 />
               </div>
               <div className="relative flex-1">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-400 uppercase">To</span>
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 uppercase">To</span>
                 <input 
                   type="date" 
                   value={toDate} 
                   onChange={e => setToDate(e.target.value)}
-                  className="pl-10 pr-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold outline-none focus:ring-2 focus:ring-hospital-500 w-full sm:w-36"
+                  className="pl-9 pr-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:ring-1 focus:ring-hospital-500 w-full sm:w-32 font-mono"
                 />
               </div>
             </div>
+
+            {/* Source Dropdown Filter */}
+            <div className="relative w-full sm:w-auto">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 uppercase">Source</span>
+              <select 
+                value={selectedSourceFilter}
+                onChange={e => setSelectedSourceFilter(e.target.value)}
+                className="pl-14 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:ring-1 focus:ring-hospital-500 w-full sm:w-40 cursor-pointer text-slate-700"
+              >
+                <option value="ALL">All Sources</option>
+                {availableSources.map(src => (
+                  <option key={src} value={src}>{src}</option>
+                ))}
+              </select>
+            </div>
+
             <button 
               onClick={handleApplyFilter}
-              className="w-full sm:w-auto px-6 py-2.5 bg-hospital-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-hospital-100 hover:bg-hospital-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-3.5 py-1.5 bg-hospital-600 text-white rounded-lg text-xs font-semibold shadow-2xs hover:bg-hospital-700 active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
             >
-              <Search className="w-3.5 h-3.5" /> Apply Filter
+              <Search className="w-3.5 h-3.5" /> Apply
             </button>
           </div>
         </div>
       </div>
 
+      {/* Active Source Filter Banner */}
+      {appliedSourceFilter !== 'ALL' && (
+        <div className="bg-hospital-50 border border-hospital-200 px-3.5 py-2 rounded-xl flex items-center justify-between gap-3 animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-2">
+            <Globe className="w-3.5 h-3.5 text-hospital-600" />
+            <span className="text-xs font-semibold text-hospital-800">
+              Filtered by Source: <span className="font-bold underline">{appliedSourceFilter}</span>
+            </span>
+            <span className="text-[10px] text-hospital-600 font-medium hidden sm:inline">
+              ({stats.total} OPD Arrivals, {stats.scheduledCount || 0} Appts, ₹{stats.revenue.toLocaleString()} Revenue)
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              setSelectedSourceFilter('ALL');
+              setAppliedSourceFilter('ALL');
+            }}
+            className="text-[10px] font-bold uppercase text-hospital-700 hover:text-hospital-900 bg-white px-2 py-0.5 rounded-md border border-hospital-200 transition-all flex items-center gap-1 cursor-pointer"
+          >
+            <X className="w-3 h-3" /> Clear Filter
+          </button>
+        </div>
+      )}
+
       {/* 1. ANALYTICS SECTION */}
       {activeHubTab === 'analytics' && (
-        <div className="space-y-8 animate-in fade-in duration-300">
+        <div className="space-y-4 sm:space-y-5 animate-in fade-in duration-300">
           {/* KPI Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
         {[
           { label: 'Scheduled Appts', val: stats.scheduledCount, icon: Calendar, color: 'slate', detail: 'Pending Arrivals' },
           { label: 'OPD Flow', val: stats.total, icon: Users, color: 'indigo', detail: `${stats.newPatients} New • ${stats.revisits} Revisit` },
           { label: 'Surg Recommended', val: stats.leads, icon: Target, color: 'indigo', detail: 'S1 Assessments', subVal: `₹${stats.leadsRevenue.toLocaleString()}` },
           { label: 'Surg Completed', val: stats.conversions, icon: CheckCircle, color: 'emerald', detail: `${stats.conversionRate}% Conversion Rate` },
-          { label: 'Total Revenue', val: `₹${stats.revenue.toLocaleString()}`, icon: Banknote, color: 'amber', detail: 'Actual Realized Completed Sales' }
+          { label: 'Total Revenue', val: `₹${stats.revenue.toLocaleString()}`, icon: Banknote, color: 'amber', detail: 'Realized Completed Sales' }
         ].map((card, idx) => (
           <div 
             key={idx} 
             onClick={() => handleKpiClick(card.label)}
-            className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group cursor-pointer active:scale-95"
+            className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200/80 shadow-xs hover:shadow-sm hover:-translate-y-0.5 transition-all group cursor-pointer active:scale-95 flex flex-col justify-between"
           >
-            <div className="flex justify-between items-start mb-4">
-              <div className={`p-3 rounded-2xl bg-${card.color}-50 text-${card.color}-600 group-hover:scale-110 transition-transform`}>
-                <card.icon className="w-6 h-6" />
+            <div className="flex justify-between items-start mb-2">
+              <div className={`p-2 rounded-lg bg-${card.color}-50 text-${card.color}-600 group-hover:scale-105 transition-transform`}>
+                <card.icon className="w-4 h-4" />
               </div>
-              <ArrowUpRight className="w-4 h-4 text-slate-300" />
+              <ArrowUpRight className="w-3.5 h-3.5 text-slate-300" />
             </div>
-            <div className="text-3xl font-black text-slate-900 leading-none mb-2">{card.val}</div>
-            {card.subVal && <div className="text-sm font-black text-indigo-600 mb-2">{card.subVal}</div>}
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{card.label}</div>
-            <div className={`mt-4 pt-4 border-t border-slate-50 text-[9px] font-bold text-${card.color}-600 uppercase`}>
+            <div>
+              <div className="text-xl sm:text-2xl font-bold text-slate-900 leading-none mb-1 font-mono">{card.val}</div>
+              {card.subVal && <div className="text-xs font-bold text-indigo-600 mb-1 font-mono">{card.subVal}</div>}
+              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{card.label}</div>
+            </div>
+            <div className={`mt-2.5 pt-2 border-t border-slate-100 text-[9px] font-semibold text-${card.color}-600 uppercase`}>
               {card.detail}
             </div>
           </div>
@@ -1128,15 +1266,15 @@ export const AnalyticsDashboard: React.FC = () => {
 
       {/* Drill Down Modal */}
       {drillDown && (
-        <div className="fixed inset-0 z-[150] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-7xl rounded-2xl sm:rounded-[3rem] shadow-2xl overflow-hidden border border-white/20 flex flex-col max-h-[94dvh] sm:max-h-[90vh]">
-            <header className="p-4 sm:p-8 border-b flex justify-between items-center bg-slate-50/50 shrink-0">
+        <div className="fixed inset-0 z-[150] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-6xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[92dvh] sm:max-h-[88vh]">
+            <header className="p-3.5 sm:p-4 border-b flex justify-between items-center bg-slate-50/50 shrink-0">
                <div>
-                 <div className="flex items-center gap-4">
-                    <h3 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight">{drillDown.label}</h3>
+                 <div className="flex items-center gap-3">
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 uppercase tracking-tight">{drillDown.label}</h3>
                     <button 
                       onClick={handleExportDrillDown}
-                      className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all flex items-center gap-2 border border-emerald-100 text-[10px] font-black uppercase tracking-widest"
+                      className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-all flex items-center gap-1.5 border border-emerald-100 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
                       title="Download Table as CSV"
                     >
                       <Download className="w-4 h-4" /> Export CSV
@@ -1177,7 +1315,9 @@ export const AnalyticsDashboard: React.FC = () => {
                            <tr key={p.id + idx} className="hover:bg-slate-50 transition-colors">
                              <td className="p-4 text-[10px] font-mono font-bold text-slate-400">{p.id.split('_V')[0]}</td>
                              <td className="p-4 text-[11px] font-black text-slate-900 whitespace-nowrap">{p.name}</td>
-                             <td className="p-4 text-[10px] font-bold text-slate-500 uppercase whitespace-nowrap">{p.source}</td>
+                             <td className="p-4 text-[10px] font-bold text-slate-500 uppercase whitespace-nowrap">
+                                <span>{getSourceDisplay(p.source)}</span>
+                              </td>
                              <td className="p-4">
                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
                                  p.packageProposal?.outcome === 'Completed' ? 'bg-teal-50 text-teal-700' :
@@ -1235,7 +1375,7 @@ export const AnalyticsDashboard: React.FC = () => {
                          </div>
                          <div className="flex items-center gap-3">
                            <div className="p-2 bg-white rounded-xl text-slate-400"><Globe className="w-3.5 h-3.5" /></div>
-                           <span className="text-[10px] font-black uppercase text-slate-600 truncate max-w-[150px]">{p.source}</span>
+                           <span className="text-[10px] font-black uppercase truncate max-w-[150px] text-slate-600">{getSourceDisplay(p.source)}</span>
                          </div>
                        </div>
 
@@ -1269,39 +1409,64 @@ export const AnalyticsDashboard: React.FC = () => {
       )}
 
       {/* Source Analytics Section */}
-      <div className="space-y-8 animate-in slide-in-from-bottom-6 duration-700">
-        <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+      <div className="space-y-4 sm:space-y-5 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
           <div>
-            <h3 className="text-2xl font-black text-slate-900 uppercase">Source Insights</h3>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Lead Attribution & Performance breakdown</p>
+            <h3 className="text-sm sm:text-base font-bold text-slate-900 uppercase tracking-tight">Source Insights</h3>
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Lead Attribution & Performance breakdown</p>
           </div>
-          <div className="p-3 bg-hospital-50 rounded-2xl">
-            <Globe className="w-6 h-6 text-hospital-600" />
+          <div className="p-2 bg-hospital-50 rounded-lg">
+            <Globe className="w-4 h-4 text-hospital-600" />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4">
           {/* Source Charts */}
-          <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm space-y-10">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-xs space-y-5">
             <div>
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6 flex justify-between">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex justify-between items-center">
                 <span>Total Patient Flow Attribution</span>
-                <span className="flex gap-4">
-                  <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-hospital-500"></div> All OPD Traffic</span>
+                <span className="flex gap-2 text-[9px] font-semibold text-slate-500">
+                  <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-hospital-500"></div> All OPD Traffic</span>
                 </span>
               </h4>
-              <div className="space-y-4">
+              <div className="space-y-2">
                 {sourceStats.slice(0, 10).map((s, idx) => {
                   const max = Math.max(...sourceStats.map(x => x.total), 1);
                   const pTotal = (s.total / max * 100).toFixed(0);
                   return (
-                    <div key={idx} className="group">
-                      <div className="flex justify-between text-[10px] font-black uppercase mb-1.5">
-                        <span className="text-slate-600 group-hover:text-hospital-600 transition-colors">{s.name}</span>
-                        <span className="text-slate-900">{s.total} <span className="text-slate-300 font-bold">Total</span></span>
+                    <div 
+                      key={idx} 
+                      onClick={() => handleSourceClick(s.name)}
+                      className="group cursor-pointer p-1.5 -mx-1.5 rounded-lg transition-all hover:bg-slate-50 border border-transparent"
+                    >
+                      <div className="flex justify-between items-center text-[10px] font-semibold uppercase mb-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-slate-700 group-hover:text-hospital-600 transition-colors">
+                            {s.name}
+                          </span>
+                          <ArrowUpRight className="w-3 h-3 text-slate-400 group-hover:text-hospital-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {s.scheduled > 0 && (
+                            <span className="text-indigo-600 font-bold text-[9px] bg-indigo-50 px-1 py-0.2 rounded">
+                              {s.scheduled} Appts
+                            </span>
+                          )}
+                          <span className="text-slate-900 font-bold font-mono text-xs">
+                            {s.total} <span className="text-slate-400 font-normal text-[9px]">Total</span>
+                          </span>
+                        </div>
                       </div>
-                      <div className="h-2.5 bg-slate-50 rounded-full overflow-hidden border border-slate-100 flex">
-                        <div className="h-full bg-hospital-500 transition-all duration-700" style={{ width: `${pTotal}%` }}></div>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-100 flex">
+                        <div 
+                          className="h-full transition-all duration-700 bg-hospital-500 rounded-full" 
+                          style={{ width: `${Math.max(Number(pTotal), s.total > 0 ? 5 : 0)}%` }}
+                        ></div>
+                      </div>
+                      <div className="flex justify-between text-[8px] font-semibold text-slate-400 uppercase mt-0.5">
+                        <span>New: {s.new} • Revisit: {s.revisit}</span>
+                        <span>Conv: {s.conversionRate}%</span>
                       </div>
                     </div>
                   );
@@ -1310,24 +1475,40 @@ export const AnalyticsDashboard: React.FC = () => {
             </div>
 
             <div>
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Surgery Completed & Revenue Contribution</h4>
-              <div className="space-y-5">
-                {sourceStats.sort((a,b) => b.revenue - a.revenue).slice(0, 5).map((s, idx) => {
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex justify-between items-center">
+                <span>Surgery Completed & Revenue Contribution</span>
+                <span className="text-[9px] font-medium text-slate-400">• Click card to view</span>
+              </h4>
+              <div className="space-y-2">
+                {[...sourceStats].sort((a,b) => b.revenue - a.revenue).slice(0, 5).map((s, idx) => {
                   const maxRev = Math.max(...sourceStats.map(x => x.revenue), 1);
                   const pRev = (s.revenue / maxRev * 100).toFixed(0);
                   return (
-                    <div key={idx} className="bg-slate-50/50 p-4 rounded-2xl border border-slate-50">
-                      <div className="flex justify-between items-end mb-2">
-                        <div className="max-w-[150px]">
-                          <div className="text-[10px] font-black uppercase text-slate-900 truncate">{s.name}</div>
-                          <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{s.completed} Surgeries Done</div>
+                    <div 
+                      key={idx} 
+                      onClick={() => handleSourceCompletedClick(s.name)}
+                      className="p-2.5 rounded-lg border transition-all cursor-pointer group bg-slate-50/50 border-slate-200/70 hover:bg-slate-100/70"
+                    >
+                      <div className="flex justify-between items-end mb-1">
+                        <div className="max-w-[200px]">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold uppercase text-slate-900 truncate group-hover:text-hospital-600 transition-colors">
+                              {s.name}
+                            </span>
+                          </div>
+                          <div className="text-[9px] font-medium text-slate-400 uppercase tracking-wider mt-0.5">
+                            {s.completed} Done ({s.total > 0 ? ((s.completed / s.total) * 100).toFixed(1) : '0'}% Conv.)
+                          </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-sm font-black text-emerald-600">₹{s.revenue.toLocaleString()}</div>
+                          <div className="text-xs font-bold text-emerald-600 font-mono">₹{s.revenue.toLocaleString()}</div>
                         </div>
                       </div>
                       <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pRev}%` }}></div>
+                        <div 
+                          className="h-full bg-emerald-500 rounded-full transition-all duration-700" 
+                          style={{ width: `${Math.max(Number(pRev), s.revenue > 0 ? 5 : 0)}%` }}
+                        ></div>
                       </div>
                     </div>
                   );
@@ -1337,20 +1518,20 @@ export const AnalyticsDashboard: React.FC = () => {
           </div>
 
           {/* Procedure Distribution Section */}
-          <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden flex flex-col">
-            <div className="p-8 border-b bg-slate-50/30">
+          <div className="bg-white rounded-xl shadow-xs border border-slate-200/80 overflow-hidden flex flex-col">
+            <div className="p-3.5 sm:p-4 border-b bg-slate-50/30">
                <div className="flex items-center justify-between">
                  <div>
-                   <h3 className="text-lg font-black text-slate-900 uppercase">Procedure Distribution</h3>
-                   <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Breakdown by Recommended Doctor Procedure</p>
+                   <h3 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-tight">Procedure Distribution</h3>
+                   <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">Breakdown by Recommended Doctor Procedure</p>
                  </div>
-                 <Activity className="w-6 h-6 text-slate-200" />
+                 <Activity className="w-4 h-4 text-slate-400" />
                </div>
             </div>
-            <div className="p-8 space-y-4 flex-1">
+            <div className="p-3.5 sm:p-4 space-y-2.5 flex-1">
               {!reportPermissions?.procedure_trends ? (
-                <div className="flex flex-col items-center justify-center h-full py-8 text-center space-y-2">
-                  <Lock className="w-8 h-8 text-amber-500" />
+                <div className="flex flex-col items-center justify-center h-full py-6 text-center space-y-1.5">
+                  <Lock className="w-6 h-6 text-amber-500" />
                   <span className="text-xs font-bold text-slate-700">Procedure Trends Report Locked</span>
                   <p className="text-[10px] text-slate-400 max-w-xs">Access to procedure trends is turned OFF by Master Admin.</p>
                 </div>
@@ -1371,20 +1552,20 @@ export const AnalyticsDashboard: React.FC = () => {
                   .map(([proc, count], idx) => {
                     const pct = ((count / (totalAssessed || 1)) * 100).toFixed(0);
                     return (
-                      <div key={idx} className="flex items-center gap-4">
-                        <span className="w-32 text-[9px] font-black text-slate-500 uppercase truncate" title={proc}>{proc}</span>
-                        <div className="flex-1 h-2.5 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
+                      <div key={idx} className="flex items-center gap-3">
+                        <span className="w-28 text-[9px] font-semibold text-slate-500 uppercase truncate" title={proc}>{proc}</span>
+                        <div className="flex-1 h-2 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
                           <div className="h-full bg-indigo-500 rounded-full transition-all duration-700" style={{ width: `${pct}%` }}></div>
                         </div>
-                        <span className="w-8 text-right text-xs font-black text-slate-900">{count}</span>
+                        <span className="w-6 text-right text-xs font-bold font-mono text-slate-900">{count}</span>
                       </div>
                     );
                   });
               })()}
               {reportPermissions?.procedure_trends && stats.arrivedDataset.filter(p => p.doctorAssessment?.surgeryProcedure).length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full py-10 opacity-30">
-                  <BarChart3 className="w-12 h-12 mb-2" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">No Procedures Found</span>
+                <div className="flex flex-col items-center justify-center h-full py-8 opacity-30">
+                  <BarChart3 className="w-8 h-8 mb-1" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">No Procedures Found</span>
                 </div>
               )}
             </div>
@@ -1393,38 +1574,38 @@ export const AnalyticsDashboard: React.FC = () => {
       </div>
 
       {/* Counseling Analysis Section */}
-      <div className="space-y-8 animate-in slide-in-from-bottom-6 duration-700">
-        <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+      <div className="space-y-4 sm:space-y-5 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
           <div>
-            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-              <PieChartIcon className="w-7 h-7 text-hospital-600" />
+            <h3 className="text-sm sm:text-base font-bold text-slate-900 uppercase tracking-tight flex items-center gap-2">
+              <PieChartIcon className="w-4 h-4 text-hospital-600" />
               Counseling Analysis
             </h3>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Decision Patterns & Proposal Stages</p>
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Decision Patterns & Proposal Stages</p>
           </div>
-          <div className="p-3 bg-hospital-50 rounded-2xl">
-            <TargetIcon className="w-6 h-6 text-hospital-600" />
+          <div className="p-2 bg-hospital-50 rounded-lg">
+            <TargetIcon className="w-4 h-4 text-hospital-600" />
           </div>
         </div>
 
         {!reportPermissions?.financial_analytics ? (
-          <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 text-center space-y-2">
-            <Lock className="w-8 h-8 text-amber-500 mx-auto" />
+          <div className="bg-white rounded-xl border border-slate-200/80 p-5 text-center space-y-1.5">
+            <Lock className="w-6 h-6 text-amber-500 mx-auto" />
             <span className="text-xs font-bold text-slate-700">Financial Analytics & Counseling Analysis Locked</span>
             <p className="text-[10px] text-slate-400 max-w-sm mx-auto">Access to financial analytics, counseling stages, and revenue metrics is turned OFF by Master Admin.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
              <AnalyticsPieChart 
                data={stats.decisionPatternMix} 
                title="Decision Pattern" 
-               icon={<Activity className="w-5 h-5" />} 
+               icon={<Activity className="w-4 h-4" />} 
                onSegmentClick={(label) => handleCounselingClick('DP', label)}
              />
              <AnalyticsPieChart 
                data={stats.proposalStageMix} 
                title="Proposal Stage" 
-               icon={<LayoutDashboard className="w-5 h-5" />} 
+               icon={<LayoutDashboard className="w-4 h-4" />} 
                onSegmentClick={(label) => handleCounselingClick('PS', label)}
              />
           </div>
@@ -1432,175 +1613,173 @@ export const AnalyticsDashboard: React.FC = () => {
       </div>
 
       {/* Digital vs Traditional Flow Section */}
-      <div className="pb-20 space-y-8 animate-in slide-in-from-bottom-6 duration-700">
-        <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 pb-4 gap-4">
+      <div className="pb-12 space-y-4 sm:space-y-5 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 pb-2.5 gap-2.5">
            <div>
-             <h3 className="text-2xl font-black text-slate-900 uppercase">Digital vs Traditional Flow</h3>
-             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Source Category Comparison (Online vs Offline) - 'New' Patient Activity</p>
+             <h3 className="text-sm sm:text-base font-bold text-slate-900 uppercase">Digital vs Traditional Flow</h3>
+             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Source Category Comparison (Online vs Offline) - 'New' Patient Activity</p>
            </div>
            
-           <div className="flex flex-wrap items-center gap-3">
-              <div className="bg-slate-100 p-1 rounded-xl flex items-center">
+           <div className="flex flex-wrap items-center gap-2">
+              <div className="bg-slate-100 p-0.5 rounded-lg flex items-center border border-slate-200/70">
                  <button 
                    onClick={() => setGraphGranularity('daily')}
-                   className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${graphGranularity === 'daily' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-50'}`}
+                   className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${graphGranularity === 'daily' ? 'bg-white shadow-2xs text-slate-900' : 'text-slate-500'}`}
                  >Daily</button>
                  <button 
                    onClick={() => setGraphGranularity('monthly')}
-                   className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${graphGranularity === 'monthly' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
+                   className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${graphGranularity === 'monthly' ? 'bg-white shadow-2xs text-slate-900' : 'text-slate-500'}`}
                  >Monthly</button>
               </div>
               
               <button 
                 onClick={() => setShowComparison(!showComparison)}
-                className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 border transition-all ${showComparison ? 'bg-indigo-600 text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-400'}`}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase flex items-center gap-1.5 border transition-all cursor-pointer ${showComparison ? 'bg-indigo-600 text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-400'}`}
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${showComparison ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-3 h-3 ${showComparison ? 'animate-spin' : ''}`} />
                 {showComparison ? 'Disable Comparison' : 'Compare Period'}
               </button>
            </div>
         </div>
 
         {showComparison && (
-          <div className="bg-indigo-50/50 p-6 rounded-[2.5rem] border border-indigo-100 flex flex-col md:flex-row items-center gap-4 animate-in slide-in-from-top-4">
-            <div className="flex-1 flex items-center gap-4 w-full">
+          <div className="bg-indigo-50/50 p-3.5 rounded-xl border border-indigo-100 flex flex-col md:flex-row items-center gap-2.5 animate-in slide-in-from-top-2">
+            <div className="flex-1 flex items-center gap-2.5 w-full">
                 <div className="flex-1 relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[8px] font-black text-indigo-400 uppercase">Comp. From</span>
-                  <input type="date" value={compFromDate} onChange={e => setCompFromDate(e.target.value)} className="w-full pl-16 pr-3 py-2.5 bg-white border border-indigo-100 rounded-xl text-xs font-bold outline-none" />
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[8px] font-bold text-indigo-400 uppercase">Comp. From</span>
+                  <input type="date" value={compFromDate} onChange={e => setCompFromDate(e.target.value)} className="w-full pl-16 pr-2.5 py-1.5 bg-white border border-indigo-100 rounded-lg text-xs font-medium outline-none font-mono" />
                 </div>
                 <div className="flex-1 relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[8px] font-black text-indigo-400 uppercase">Comp. To</span>
-                  <input type="date" value={compToDate} onChange={e => setCompToDate(e.target.value)} className="w-full pl-14 pr-3 py-2.5 bg-white border border-indigo-100 rounded-xl text-xs font-bold outline-none" />
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[8px] font-bold text-indigo-400 uppercase">Comp. To</span>
+                  <input type="date" value={compToDate} onChange={e => setCompToDate(e.target.value)} className="w-full pl-14 pr-2.5 py-1.5 bg-white border border-indigo-100 rounded-lg text-xs font-medium outline-none font-mono" />
                 </div>
             </div>
-            <button onClick={handleApplyCompRange} className="px-8 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-indigo-100">Set Comparison</button>
+            <button onClick={handleApplyCompRange} className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold uppercase shadow-2xs cursor-pointer">Set Range</button>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-           <div className="lg:col-span-4 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4">
+           <div className="lg:col-span-4 space-y-3">
               <div 
                 onClick={() => handleKpiClick('Online Traffic')}
-                className="bg-white p-8 rounded-[2.5rem] border border-indigo-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group"
+                className="bg-white p-4 rounded-xl border border-indigo-100 shadow-xs hover:shadow-sm hover:-translate-y-0.5 transition-all cursor-pointer group"
               >
-                <div className="flex justify-between items-start mb-6">
-                  <div className="p-4 rounded-2xl bg-indigo-50 text-indigo-600 group-hover:scale-110 transition-transform">
-                    <Zap className="w-8 h-8" />
+                <div className="flex justify-between items-start mb-3">
+                  <div className="p-2.5 rounded-lg bg-indigo-50 text-indigo-600 group-hover:scale-105 transition-transform">
+                    <Zap className="w-5 h-5" />
                   </div>
                   <div className="text-right">
-                     <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Digital Share (Net New)</span>
-                     <div className="text-2xl font-black text-indigo-600">
-                       {/* Fixed: Explicitly convert operands to Number to satisfy arithmetic type requirements */}
+                     <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Digital Share</span>
+                     <div className="text-lg font-bold text-indigo-600 font-mono">
                        {Number(stats.newPatients) > 0 ? (Math.round((Number(stats.onlineTotal) / Number(stats.newPatients)) * 100)) : 0}%
                      </div>
                   </div>
                 </div>
-                <div className="flex items-end justify-between gap-4 mb-1">
-                  <div className="text-4xl font-black text-slate-900">{stats.onlineTotal}</div>
+                <div className="flex items-end justify-between gap-2 mb-0.5">
+                  <div className="text-2xl font-bold text-slate-900 font-mono">{stats.onlineTotal}</div>
                   {showComparison && stats.comparison && (
-                    <div className={`flex items-center gap-1 text-xs font-black ${calculateGrowth(stats.onlineTotal, stats.comparison.onlineTotal) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {calculateGrowth(stats.onlineTotal, stats.comparison?.onlineTotal) >= 0 ? <TrendingUp className="w-4 h-4"/> : <TrendingDown className="w-4 h-4"/>}
+                    <div className={`flex items-center gap-0.5 text-xs font-bold ${calculateGrowth(stats.onlineTotal, stats.comparison.onlineTotal) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {calculateGrowth(stats.onlineTotal, stats.comparison?.onlineTotal) >= 0 ? <TrendingUp className="w-3.5 h-3.5"/> : <TrendingDown className="w-3.5 h-3.5"/>}
                       {calculateGrowth(stats.onlineTotal, stats.comparison?.onlineTotal).toFixed(1)}%
                     </div>
                   )}
                 </div>
-                <div className="text-xs font-black text-slate-400 uppercase tracking-widest">Online Sources (New Only)</div>
-                <div className="mt-6 pt-6 border-t border-slate-50 flex flex-wrap gap-2">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Online Sources (New Only)</div>
+                <div className="mt-3 pt-2.5 border-t border-slate-50 flex flex-wrap gap-1.5">
                   {['Google / YouTube / Website', 'FB / Insta / WhatsApp', 'Friend + Online'].map(s => (
-                    <span key={s} className="text-[8px] font-black px-2 py-1 rounded-full bg-slate-50 text-slate-400 uppercase">{s}</span>
+                    <span key={s} className="text-[8px] font-semibold px-2 py-0.5 rounded-md bg-slate-50 text-slate-500 uppercase">{s}</span>
                   ))}
                 </div>
               </div>
 
               <div 
                 onClick={() => handleKpiClick('Offline Traffic')}
-                className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group"
+                className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs hover:shadow-sm hover:-translate-y-0.5 transition-all cursor-pointer group"
               >
-                <div className="flex justify-between items-start mb-6">
-                  <div className="p-4 rounded-2xl bg-slate-50 text-slate-600 group-hover:scale-110 transition-transform">
-                    <Landmark className="w-8 h-8" />
+                <div className="flex justify-between items-start mb-3">
+                  <div className="p-2.5 rounded-lg bg-slate-50 text-slate-600 group-hover:scale-105 transition-transform">
+                    <Landmark className="w-5 h-5" />
                   </div>
                   <div className="text-right">
-                     <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Traditional Share (Net New)</span>
-                     <div className="text-2xl font-black text-indigo-600">
-                       {/* Fixed: Explicitly convert operands to Number to satisfy arithmetic type requirements */}
+                     <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Traditional Share</span>
+                     <div className="text-lg font-bold text-indigo-600 font-mono">
                        {Number(stats.newPatients) > 0 ? (Math.round((Number(stats.offlineTotal) / Number(stats.newPatients)) * 100)) : 0}%
                      </div>
                   </div>
                 </div>
-                <div className="flex items-end justify-between gap-4 mb-1">
-                  <div className="text-4xl font-black text-slate-900">{stats.offlineTotal}</div>
+                <div className="flex items-end justify-between gap-2 mb-0.5">
+                  <div className="text-2xl font-bold text-slate-900 font-mono">{stats.offlineTotal}</div>
                   {showComparison && stats.comparison && (
-                    <div className={`flex items-center gap-1 text-xs font-black ${calculateGrowth(stats.offlineTotal, stats.comparison.offlineTotal) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {calculateGrowth(stats.offlineTotal, stats.comparison?.offlineTotal) >= 0 ? <TrendingUp className="w-4 h-4"/> : <TrendingDown className="w-4 h-4"/>}
+                    <div className={`flex items-center gap-0.5 text-xs font-bold ${calculateGrowth(stats.offlineTotal, stats.comparison.offlineTotal) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {calculateGrowth(stats.offlineTotal, stats.comparison?.offlineTotal) >= 0 ? <TrendingUp className="w-3.5 h-3.5"/> : <TrendingDown className="w-3.5 h-3.5"/>}
                       {calculateGrowth(stats.offlineTotal, stats.comparison?.offlineTotal).toFixed(1)}%
                     </div>
                   )}
                 </div>
-                <div className="text-xs font-black text-slate-400 uppercase tracking-widest">Offline Sources (New Only)</div>
-                <div className="mt-6 pt-6 border-t border-slate-50 flex flex-wrap gap-2">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Offline Sources (New Only)</div>
+                <div className="mt-3 pt-2.5 border-t border-slate-50 flex flex-wrap gap-1.5">
                   {['Hospital Billboards', 'Doctor Recommended', 'Self / Old Patient / Relative', 'Others'].map(s => (
-                    <span key={s} className="text-[8px] font-black px-2 py-1 rounded-full bg-slate-50 text-slate-400 uppercase">{s}</span>
+                    <span key={s} className="text-[8px] font-semibold px-2 py-0.5 rounded-md bg-slate-50 text-slate-500 uppercase">{s}</span>
                   ))}
                 </div>
               </div>
            </div>
 
-           <div className="lg:col-span-8 bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm flex flex-col">
-              <div className="flex items-center justify-between mb-8">
+           <div className="lg:col-span-8 bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-xs flex flex-col">
+              <div className="flex items-center justify-between mb-4">
                  <div>
-                   <h4 className="text-sm font-black text-slate-900 uppercase">{graphGranularity === 'monthly' ? 'Monthly New Patient flow' : 'Daily New Patient Comparison'}</h4>
-                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Attribution for 'New' Patient OPD Activity Only</p>
+                   <h4 className="text-xs sm:text-sm font-bold text-slate-900 uppercase">{graphGranularity === 'monthly' ? 'Monthly New Patient flow' : 'Daily New Patient Comparison'}</h4>
+                   <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Attribution for 'New' Patient OPD Activity Only</p>
                  </div>
-                 <div className="flex gap-4">
-                    <div className="flex items-center gap-2">
-                       <div className="w-3 h-3 bg-indigo-600 rounded-full"></div>
-                       <span className="text-[9px] font-black uppercase text-slate-500">Online</span>
+                 <div className="flex gap-3">
+                    <div className="flex items-center gap-1.5">
+                       <div className="w-2.5 h-2.5 bg-indigo-600 rounded-full"></div>
+                       <span className="text-[9px] font-bold uppercase text-slate-500">Online</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                       <div className="w-3 h-3 bg-slate-300 rounded-full"></div>
-                       <span className="text-[9px] font-black uppercase text-slate-500">Offline</span>
+                    <div className="flex items-center gap-1.5">
+                       <div className="w-2.5 h-2.5 bg-slate-300 rounded-full"></div>
+                       <span className="text-[9px] font-bold uppercase text-slate-500">Offline</span>
                     </div>
                  </div>
               </div>
               
-              <div className="flex-1 flex flex-col justify-end gap-2 min-h-[300px]">
+              <div className="flex-1 flex flex-col justify-end gap-1.5 min-h-[220px]">
                  {patientFlowGraphData.map((item) => (
-                   <div key={item.key} className="flex items-center gap-4 group">
-                     <span className="w-20 text-[8px] font-black text-slate-400 uppercase text-right leading-none">
-                       {item.label}
-                     </span>
-                     <div className="flex-1 h-7 flex items-center bg-slate-50/50 rounded-lg px-2 gap-0.5 overflow-hidden">
-                        {item.onlineVol > 0 && (
-                          <div 
-                            className="h-3.5 bg-indigo-600 rounded-full transition-all duration-1000 flex items-center justify-center min-w-[20px] hover:h-4" 
-                            style={{ width: `${item.onlinePercent}%` }}
-                          >
-                            <span className="text-[7px] text-white font-black">{item.onlineVol}</span>
-                          </div>
-                        )}
-                        {item.offlineVol > 0 && (
-                          <div 
-                            className="h-3.5 bg-slate-300 rounded-full transition-all duration-1000 flex items-center justify-center min-w-[20px] hover:h-4" 
-                            style={{ width: `${item.offlinePercent}%` }}
-                          >
-                            <span className="text-[7px] text-slate-600 font-black">{item.offlineVol}</span>
-                          </div>
-                        )}
-                     </div>
-                     <span className="w-10 text-left text-[10px] font-black text-slate-900">{item.total}</span>
-                   </div>
+                    <div key={item.key} className="flex items-center gap-2.5 group">
+                      <span className="w-16 text-[8px] font-bold text-slate-400 uppercase text-right leading-none">
+                        {item.label}
+                      </span>
+                      <div className="flex-1 h-5 flex items-center bg-slate-50/50 rounded px-1.5 gap-0.5 overflow-hidden">
+                         {item.onlineVol > 0 && (
+                           <div 
+                             className="h-2.5 bg-indigo-600 rounded-full transition-all duration-1000 flex items-center justify-center min-w-[16px]" 
+                             style={{ width: `${item.onlinePercent}%` }}
+                           >
+                             <span className="text-[7px] text-white font-bold">{item.onlineVol}</span>
+                           </div>
+                         )}
+                         {item.offlineVol > 0 && (
+                           <div 
+                             className="h-2.5 bg-slate-300 rounded-full transition-all duration-1000 flex items-center justify-center min-w-[16px]" 
+                             style={{ width: `${item.offlinePercent}%` }}
+                           >
+                             <span className="text-[7px] text-slate-600 font-bold">{item.offlineVol}</span>
+                           </div>
+                         )}
+                      </div>
+                      <span className="w-8 text-left text-[10px] font-bold font-mono text-slate-900">{item.total}</span>
+                    </div>
                  ))}
               </div>
-              <div className="mt-8 pt-6 border-t border-slate-50 flex items-center justify-center gap-10">
-                  <div className="flex items-center gap-2">
-                    <CalendarDays className="w-4 h-4 text-slate-300" />
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Scale: {graphGranularity === 'monthly' ? 'Annual Overview' : 'Last 15 Records'}</span>
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-center gap-6">
+                  <div className="flex items-center gap-1.5">
+                    <CalendarDays className="w-3.5 h-3.5 text-slate-300" />
+                    <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Scale: {graphGranularity === 'monthly' ? 'Annual Overview' : 'Last 15 Records'}</span>
                   </div>
                   {showComparison && appliedCompRange && (
-                    <div className="flex items-center gap-2">
-                       <TrendingUp className="w-4 h-4 text-indigo-400" />
-                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Comparing against period start: {formatDate(appliedCompRange.from)}</span>
+                    <div className="flex items-center gap-1.5">
+                       <TrendingUp className="w-3.5 h-3.5 text-indigo-400" />
+                       <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Comparing against: {formatDate(appliedCompRange.from)}</span>
                     </div>
                   )}
               </div>
@@ -1610,37 +1789,37 @@ export const AnalyticsDashboard: React.FC = () => {
 
       {/* Marketing Budget & Cost Analytics Section */}
       {reportPermissions?.financial_analytics ? (
-      <div className="pb-20 space-y-8 animate-in slide-in-from-bottom-6 duration-700">
-        <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+      <div className="pb-12 space-y-4 sm:space-y-5 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
           <div>
-            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-              <Calculator className="w-7 h-7 text-hospital-600" />
+            <h3 className="text-sm sm:text-base font-bold text-slate-900 uppercase tracking-tight flex items-center gap-2">
+              <Calculator className="w-4 h-4 text-hospital-600" />
               Marketing ROI & Cost Analytics
             </h3>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Online Lead Performance & Acquisition Cost</p>
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Online Lead Performance & Acquisition Cost</p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-400 uppercase">Budget ₹</span>
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 uppercase">Budget ₹</span>
               <input 
                 type="number" 
                 value={marketingBudget || ''} 
                 onChange={e => setMarketingBudget(Number(e.target.value))}
                 placeholder="Enter Budget"
-                className="pl-16 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-black outline-none focus:ring-2 focus:ring-hospital-500 w-48 shadow-sm"
+                className="pl-16 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold outline-none focus:ring-1 focus:ring-hospital-500 w-40 shadow-2xs font-mono"
               />
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
           {[
             { 
               label: 'Marketing OPDs', 
               val: stats.onlineTotal, 
               icon: Globe, 
               color: 'indigo', 
-              detail: 'Total Online New Patients',
+              detail: 'Online New Patients',
               category: 'Marketing OPDs'
             },
             { 
@@ -1648,7 +1827,7 @@ export const AnalyticsDashboard: React.FC = () => {
               val: stats.marketingLeads, 
               icon: Target, 
               color: 'blue', 
-              detail: `New: ${stats.marketingLeadsNew} | Revisit: ${stats.marketingLeadsRevisit}`,
+              detail: `New: ${stats.marketingLeadsNew} | Rev: ${stats.marketingLeadsRevisit}`,
               category: 'Marketing Leads'
             },
             { 
@@ -1656,7 +1835,7 @@ export const AnalyticsDashboard: React.FC = () => {
               val: stats.marketingCompleted, 
               icon: CheckCircle, 
               color: 'emerald', 
-              detail: 'Online Completed Surgeries',
+              detail: 'Completed Surgeries',
               category: 'Marketing Surgeries'
             },
             { 
@@ -1674,54 +1853,151 @@ export const AnalyticsDashboard: React.FC = () => {
               detail: 'Budget / Online Surgeries' 
             },
             { 
-              label: 'Total Revenue from Completed Surgeries', 
+              label: 'Realized Revenue', 
               val: `₹${stats.marketingRevenue.toLocaleString()}`, 
               icon: TrendingUp, 
               color: 'teal', 
-              detail: `Net Revenue: ₹${(stats.marketingRevenue - marketingBudget).toLocaleString()} (After Budget Deduction)` 
+              detail: `Net: ₹${(stats.marketingRevenue - marketingBudget).toLocaleString()}` 
             }
           ].map((card, idx) => (
             <div 
               key={idx} 
               onClick={() => card.category && handleKpiClick(card.category)}
-              className={`bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all group ${card.category ? 'cursor-pointer' : ''}`}
+              className={`bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs hover:shadow-sm transition-all group flex flex-col justify-between ${card.category ? 'cursor-pointer' : ''}`}
             >
-              <div className="flex justify-between items-start mb-4">
-                <div className={`p-3 rounded-2xl bg-${card.color}-50 text-${card.color}-600`}>
-                  <card.icon className="w-6 h-6" />
+              <div className="flex justify-between items-start mb-2">
+                <div className={`p-2 rounded-lg bg-${card.color}-50 text-${card.color}-600`}>
+                  <card.icon className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <div className="text-2xl font-black text-slate-900 leading-none mb-2">{card.val}</div>
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{card.label}</div>
-              <div className={`mt-4 pt-4 border-t border-slate-50 text-[9px] font-bold text-${card.color}-600 uppercase`}>
+              <div>
+                <div className="text-lg sm:text-xl font-bold text-slate-900 leading-none mb-1 font-mono truncate">{card.val}</div>
+                <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{card.label}</div>
+              </div>
+              <div className={`mt-2 pt-1.5 border-t border-slate-100 text-[8px] font-semibold text-${card.color}-600 uppercase truncate`}>
                 {card.detail}
               </div>
             </div>
           ))}
         </div>
 
+        {/* Source-Level Marketing ROI & Acquisition Breakdown */}
+        <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-xs space-y-3 mt-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 pb-2.5">
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-tight flex items-center gap-1.5">
+                <Globe className="w-4 h-4 text-hospital-600" />
+                Source-Level Marketing ROI & Acquisition Breakdown
+              </h4>
+              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mt-0.5">
+                Channel-specific patient volume, lead conversion, revenue, and cost allocation
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                Online Attribution
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto table-container w-full">
+            <table className="w-full text-left border-collapse min-w-[900px]">
+              <thead className="bg-slate-50 text-slate-500 text-[9px] font-bold uppercase tracking-wider border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-3">Marketing Source</th>
+                  <th className="py-2.5 px-2.5 text-center">Scheduled</th>
+                  <th className="py-2.5 px-2.5 text-center text-teal-600">New Patients</th>
+                  <th className="py-2.5 px-2.5 text-center">Total Arrivals</th>
+                  <th className="py-2.5 px-2.5 text-center text-indigo-600">S1 Leads</th>
+                  <th className="py-2.5 px-2.5 text-center text-emerald-600">Completed Surgeries</th>
+                  <th className="py-2.5 px-3 text-right">Revenue</th>
+                  <th className="py-2.5 px-3 text-right text-amber-600">Cost / Budget</th>
+                  <th className="py-2.5 px-2.5 text-right">Cost / OPD</th>
+                  <th className="py-2.5 px-2 text-center">Conv %</th>
+                  <th className="py-2.5 px-2.5 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {['Google / YouTube / Website', 'FB / Insta / WhatsApp', 'Friend + Online'].map((mSource) => {
+                  const mData = stats.sources[mSource] || { total: 0, completed: 0, revenue: 0, new: 0, revisit: 0, scheduled: 0, leads: 0 };
+                  const mNew = mData.new || 0;
+                  const mLeads = mData.leads || 0;
+                  const mCompleted = mData.completed || 0;
+                  const mScheduled = mData.scheduled || 0;
+                  const mRevenue = mData.revenue || 0;
+                  const mTotal = mData.total || 0;
+                  const allocatedCost = (stats.onlineTotal > 0 && marketingBudget > 0)
+                    ? Math.round((marketingBudget * mNew) / stats.onlineTotal)
+                    : 0;
+                  const costPerOpd = (marketingBudget > 0 && mNew > 0)
+                    ? Math.round(allocatedCost / mNew)
+                    : null;
+                  const convRate = mLeads > 0 
+                    ? ((mCompleted / mLeads) * 100).toFixed(1) + '%'
+                    : (mNew > 0 ? ((mCompleted / mNew) * 100).toFixed(1) + '%' : '0%');
+
+                  return (
+                    <tr key={mSource} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-2 px-3">
+                        <span className="font-bold uppercase text-[11px] text-slate-800">
+                          {mSource}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2.5 text-center font-bold text-slate-700 font-mono">{mScheduled}</td>
+                      <td className="py-2 px-2.5 text-center font-bold text-teal-700 bg-teal-50/30 font-mono">{mNew}</td>
+                      <td className="py-2 px-2.5 text-center font-medium text-slate-600 font-mono">{mTotal}</td>
+                      <td className="py-2 px-2.5 text-center font-bold text-indigo-600 bg-indigo-50/30 font-mono">{mLeads}</td>
+                      <td className="py-2 px-2.5 text-center font-bold text-emerald-700 bg-emerald-50/30 font-mono">{mCompleted}</td>
+                      <td className="py-2 px-3 text-right font-bold text-slate-900 font-mono">
+                        {mRevenue > 0 ? `₹${mRevenue.toLocaleString()}` : '₹0'}
+                      </td>
+                      <td className="py-2 px-3 text-right font-bold text-amber-700 font-mono">
+                        {marketingBudget > 0 ? `₹${allocatedCost.toLocaleString()}` : <span className="text-slate-400 font-normal">₹0</span>}
+                      </td>
+                      <td className="py-2 px-2.5 text-right font-mono text-xs">
+                        {costPerOpd != null ? `₹${costPerOpd.toLocaleString()}` : <span className="text-slate-400 font-normal">N/A</span>}
+                      </td>
+                      <td className="py-2 px-2 text-center font-bold text-slate-800 font-mono">
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px]">{convRate}</span>
+                      </td>
+                      <td className="py-2 px-2.5 text-center">
+                        <button
+                          onClick={() => handleSourceClick(mSource)}
+                          className="px-2 py-0.5 bg-white border border-slate-200 hover:border-hospital-400 hover:text-hospital-600 text-[9px] font-bold uppercase rounded shadow-2xs transition-all cursor-pointer"
+                        >
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div 
           onClick={() => setTargetPlannerModal({ ...targetPlannerModal, show: true })}
-          className="bg-hospital-50/50 p-8 rounded-[2.5rem] border border-hospital-100 cursor-pointer hover:bg-hospital-100 transition-all group mt-8"
+          className="bg-hospital-50/50 p-4 sm:p-5 rounded-xl border border-hospital-100 cursor-pointer hover:bg-hospital-100 transition-all group mt-4"
         >
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="p-4 bg-white rounded-2xl shadow-sm text-hospital-600 group-hover:scale-110 transition-transform">
-                <Target className="w-8 h-8" />
+          <div className="flex flex-col md:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-white rounded-lg shadow-2xs text-hospital-600 group-hover:scale-105 transition-transform">
+                <Target className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="text-sm font-black text-slate-900 uppercase">Future Target Planner</h4>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">
+                <h4 className="text-xs sm:text-sm font-bold text-slate-900 uppercase">Future Target Planner</h4>
+                <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mt-0.5">
                   Plan your next month's marketing goals based on current performance metrics.
                 </p>
-                <p className="text-[9px] font-black text-hospital-600 uppercase mt-2 flex items-center gap-1">
-                  <Zap className="w-3 h-3" /> Click to start forecasting
+                <p className="text-[9px] font-bold text-hospital-600 uppercase mt-1 flex items-center gap-1">
+                  <Zap className="w-2.5 h-2.5" /> Click to start forecasting
                 </p>
               </div>
             </div>
             <div className="text-right">
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Target Achievement Potential</div>
-              <div className="text-3xl font-black text-hospital-600">
+              <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Achievement Potential</div>
+              <div className="text-lg font-bold text-hospital-600">
                 Forecast
               </div>
             </div>
@@ -1729,9 +2005,9 @@ export const AnalyticsDashboard: React.FC = () => {
         </div>
       </div>
       ) : (
-        <div className="pb-12">
-          <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 text-center space-y-2">
-            <Lock className="w-8 h-8 text-amber-500 mx-auto" />
+        <div className="pb-10">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-5 text-center space-y-1.5">
+            <Lock className="w-6 h-6 text-amber-500 mx-auto" />
             <span className="text-xs font-bold text-slate-700">Financial Analytics & Marketing ROI Locked</span>
             <p className="text-[10px] text-slate-400 max-w-sm mx-auto">Master Admin has turned OFF access to the Financial Analytics / Conversion Report.</p>
           </div>
@@ -1795,41 +2071,41 @@ export const AnalyticsDashboard: React.FC = () => {
 
       {/* Future Target Planner Modal */}
       {targetPlannerModal.show && (
-        <div className="fixed inset-0 z-[150] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-4xl rounded-2xl sm:rounded-[3rem] shadow-2xl overflow-hidden border border-white/20 flex flex-col max-h-[94dvh] sm:max-h-[90vh]">
-            <header className="p-4 sm:p-8 border-b flex justify-between items-center bg-slate-50/50 shrink-0">
+        <div className="fixed inset-0 z-[150] bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[92dvh] sm:max-h-[85vh]">
+            <header className="p-4 sm:p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50/70 shrink-0">
                <div>
-                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-                    <Target className="w-6 h-6 sm:w-7 sm:h-7 text-hospital-600" />
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                    <Target className="w-5 h-5 text-hospital-600" />
                     Future Target Planner
                   </h3>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Forecasting & Resource Planning</p>
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mt-0.5">Forecasting & Resource Planning</p>
                </div>
                <button 
                  onClick={() => setTargetPlannerModal({ ...targetPlannerModal, show: false })}
-                 className="p-3 bg-white border border-slate-100 rounded-2xl text-slate-400 hover:text-slate-900 hover:shadow-md transition-all active:scale-90"
+                 className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-50 transition-all"
                >
-                 <X className="w-6 h-6" />
+                 <X className="w-4 h-4" />
                </button>
             </header>
 
-            <div className="flex-1 overflow-auto p-4 sm:p-8 space-y-8 sm:space-y-10">
+            <div className="flex-1 overflow-auto p-4 sm:p-5 space-y-4 sm:space-y-5">
                {/* Inputs */}
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
-                  <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Reference Period Budget (₹)</label>
-                    <div className="p-3 bg-white border border-slate-200 rounded-xl text-sm font-black text-slate-900">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 bg-slate-50 p-3.5 sm:p-4 rounded-xl border border-slate-200/80">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-0.5">Reference Period Budget (₹)</label>
+                    <div className="p-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-900">
                       ₹{marketingBudget.toLocaleString()}
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Target Surgeries for Next Month</label>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-0.5">Target Surgeries for Next Month</label>
                     <input 
                       type="number" 
                       value={targetPlannerModal.targetSurgeries || ''} 
                       onChange={e => setTargetPlannerModal({ ...targetPlannerModal, targetSurgeries: Number(e.target.value) })}
                       placeholder="Enter Target Number"
-                      className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-black outline-none focus:ring-2 focus:ring-hospital-500"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-1.5 focus:ring-hospital-500 focus:border-hospital-500"
                     />
                   </div>
                </div>
@@ -1862,82 +2138,82 @@ export const AnalyticsDashboard: React.FC = () => {
                  const requiredBudget = targetSurgeries * costPerSurgery;
 
                  return (
-                   <div className="space-y-10">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                   <div className="space-y-4 sm:space-y-5">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
                          {/* Last Month Summary */}
-                         <div className="space-y-6">
-                            <div className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                              <Activity className="w-4 h-4" /> Reference Period Performance
+                         <div className="space-y-2.5">
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-500 tracking-wider">
+                              <Activity className="w-3.5 h-3.5 text-slate-400" /> Reference Period Performance
                             </div>
-                            <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm space-y-4">
-                               <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                                  <span className="text-[10px] font-black text-slate-400 uppercase">Budget Spent</span>
-                                  <span className="text-sm font-black text-slate-900">₹{refBudget.toLocaleString()}</span>
-                               </div>
-                               <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                                  <span className="text-[10px] font-black text-slate-400 uppercase">Online OPD</span>
-                                  <span className="text-sm font-black text-slate-900">{refOPD}</span>
-                               </div>
-                               <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                                  <span className="text-[10px] font-black text-slate-400 uppercase">Leads (Recommended)</span>
-                                  <span className="text-sm font-black text-slate-900">{refLeads}</span>
-                               </div>
-                               <div className="flex justify-between items-center py-2">
-                                  <span className="text-[10px] font-black text-slate-400 uppercase">Surgeries Completed</span>
-                                  <span className="text-sm font-black text-emerald-600">{refCompleted}</span>
-                               </div>
+                            <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs space-y-2">
+                               <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
+                                  <span className="text-[10px] font-semibold text-slate-500 uppercase">Budget Spent</span>
+                                  <span className="text-xs font-bold text-slate-900">₹{refBudget.toLocaleString()}</span>
+                                </div>
+                               <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
+                                  <span className="text-[10px] font-semibold text-slate-500 uppercase">Online OPD</span>
+                                  <span className="text-xs font-bold text-slate-900">{refOPD}</span>
+                                </div>
+                               <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
+                                  <span className="text-[10px] font-semibold text-slate-500 uppercase">Leads (Recommended)</span>
+                                  <span className="text-xs font-bold text-slate-900">{refLeads}</span>
+                                </div>
+                               <div className="flex justify-between items-center py-1.5">
+                                  <span className="text-[10px] font-semibold text-slate-500 uppercase">Surgeries Completed</span>
+                                  <span className="text-xs font-bold text-emerald-600">{refCompleted}</span>
+                                </div>
                             </div>
                          </div>
 
                          {/* Next Month Forecast */}
-                         <div className="space-y-6">
-                            <div className="flex items-center gap-2 text-[10px] font-black uppercase text-hospital-600 tracking-widest">
-                              <TrendingUp className="w-4 h-4" /> Next Month Forecast
+                         <div className="space-y-2.5">
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-hospital-600 tracking-wider">
+                              <TrendingUp className="w-3.5 h-3.5 text-hospital-600" /> Next Month Forecast
                             </div>
-                            <div className="bg-hospital-50/30 border border-hospital-100 rounded-[2rem] p-6 shadow-sm space-y-4">
-                               <div className="flex justify-between items-center py-2 border-b border-hospital-100">
-                                  <span className="text-[10px] font-black text-hospital-400 uppercase">Required Budget</span>
-                                  <span className="text-sm font-black text-hospital-600">₹{Math.round(requiredBudget).toLocaleString()}</span>
-                               </div>
-                               <div className="flex justify-between items-center py-2 border-b border-hospital-100">
-                                  <span className="text-[10px] font-black text-hospital-400 uppercase">Target OPD Required</span>
-                                  <span className="text-sm font-black text-hospital-600">{requiredOPD}</span>
-                               </div>
-                               <div className="flex justify-between items-center py-2 border-b border-hospital-100">
-                                  <span className="text-[10px] font-black text-hospital-400 uppercase">Target Leads</span>
-                                  <span className="text-sm font-black text-hospital-600">{requiredLeads}</span>
-                               </div>
-                               <div className="flex justify-between items-center py-2">
-                                  <span className="text-[10px] font-black text-hospital-400 uppercase">Target Surgeries</span>
-                                  <span className="text-sm font-black text-hospital-600">{targetSurgeries}</span>
-                               </div>
+                            <div className="bg-hospital-50/40 border border-hospital-100 rounded-xl p-3.5 shadow-2xs space-y-2">
+                               <div className="flex justify-between items-center py-1.5 border-b border-hospital-100">
+                                  <span className="text-[10px] font-semibold text-hospital-700 uppercase">Required Budget</span>
+                                  <span className="text-xs font-bold text-hospital-700">₹{Math.round(requiredBudget).toLocaleString()}</span>
+                                </div>
+                               <div className="flex justify-between items-center py-1.5 border-b border-hospital-100">
+                                  <span className="text-[10px] font-semibold text-hospital-700 uppercase">Target OPD Required</span>
+                                  <span className="text-xs font-bold text-hospital-700">{requiredOPD}</span>
+                                </div>
+                               <div className="flex justify-between items-center py-1.5 border-b border-hospital-100">
+                                  <span className="text-[10px] font-semibold text-hospital-700 uppercase">Target Leads</span>
+                                  <span className="text-xs font-bold text-hospital-700">{requiredLeads}</span>
+                                </div>
+                               <div className="flex justify-between items-center py-1.5">
+                                  <span className="text-[10px] font-semibold text-hospital-700 uppercase">Target Surgeries</span>
+                                  <span className="text-xs font-bold text-hospital-700">{targetSurgeries}</span>
+                                </div>
                             </div>
                          </div>
                       </div>
 
                       {/* Summary Insights */}
-                      <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white">
-                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
-                            <div>
-                               <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Efficiency Metric</div>
-                               <div className="text-xl font-black text-hospital-400">
+                      <div className="bg-slate-900 rounded-xl p-4 sm:p-5 text-white shadow-xs">
+                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                            <div className="p-2 rounded-lg bg-white/5">
+                               <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Efficiency Metric</div>
+                               <div className="text-base sm:text-lg font-black text-hospital-400">
                                  {refOPD > 0 ? ((refCompleted / refOPD) * 100).toFixed(1) : 0}%
                                </div>
-                               <div className="text-[8px] font-bold text-slate-500 uppercase mt-1">OPD to Surgery Conversion</div>
+                               <div className="text-[8px] font-semibold text-slate-400 uppercase mt-0.5">OPD to Surgery Conversion</div>
                             </div>
-                            <div>
-                               <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Acquisition Cost</div>
-                               <div className="text-xl font-black text-white">
+                            <div className="p-2 rounded-lg bg-white/5">
+                               <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Acquisition Cost</div>
+                               <div className="text-base sm:text-lg font-black text-white">
                                  ₹{Math.round(costPerSurgery).toLocaleString()}
                                </div>
-                               <div className="text-[8px] font-bold text-slate-500 uppercase mt-1">Per Completed Surgery</div>
+                               <div className="text-[8px] font-semibold text-slate-400 uppercase mt-0.5">Per Completed Surgery</div>
                             </div>
-                            <div>
-                               <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Planning Goal</div>
-                               <div className="text-xl font-black text-emerald-400">
+                            <div className="p-2 rounded-lg bg-white/5">
+                               <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Planning Goal</div>
+                               <div className="text-base sm:text-lg font-black text-emerald-400">
                                  {targetSurgeries > 0 ? 'Ready' : 'Set Target'}
                                </div>
-                               <div className="text-[8px] font-bold text-slate-500 uppercase mt-1">Forecast Status</div>
+                               <div className="text-[8px] font-semibold text-slate-400 uppercase mt-0.5">Forecast Status</div>
                             </div>
                          </div>
                       </div>
@@ -1946,10 +2222,10 @@ export const AnalyticsDashboard: React.FC = () => {
                })()}
             </div>
             
-            <footer className="p-8 border-t bg-slate-50/30 flex justify-end">
+            <footer className="p-3.5 sm:p-4 border-t border-slate-200 bg-slate-50/50 flex justify-end">
                <button 
                  onClick={() => setTargetPlannerModal({ ...targetPlannerModal, show: false })}
-                 className="px-10 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase shadow-xl active:scale-95 transition-all"
+                 className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-all"
                >
                  Close Planner
                </button>

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
-import { Appointment, Patient, SurgeonCode, Condition, Gender } from '../types';
+import { Appointment, Patient, SurgeonCode, Condition, Gender, normalizeSource } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { 
   TrendingUp, Calendar, Phone, Search, CheckCircle2, 
@@ -140,12 +140,10 @@ const sourceConfig = [
   { name: 'Relatives / Friend' },
   { name: 'Hospital Billboards' },
   { name: 'Doctor Recommended' },
-  { name: 'Acquire OPD' },
   { name: 'Others' }
 ];
 
 const SOURCE_DISPLAY_MAP: Record<string, string> = {
-  'Acquire OPD': 'Acquire OPD',
   'Google': 'Google',
   'YouTube': 'YouTube',
   'Website': 'Website',
@@ -162,20 +160,11 @@ const SOURCE_DISPLAY_MAP: Record<string, string> = {
 };
 
 const getSourceDisplay = (source: string | undefined): string => {
-  if (!source) return 'Acquire OPD';
-  const clean = source.trim().toLowerCase().replace(/\s+/g, ' ');
-  if (
-    clean === 'acquire opd' || 
-    clean === 'acqure opd' || 
-    clean === 'acquire_opd' || 
-    clean === 'acqure_opd' || 
-    clean === 'acquireopd' || 
-    clean === 'acqureopd'
-  ) {
-    return 'Acquire OPD';
-  }
+  if (!source) return 'Others';
+  const norm = normalizeSource(source);
+  if (norm === 'Other' || norm === 'Others') return 'Others';
   if (source.startsWith('Other: ')) return 'Others';
-  return SOURCE_DISPLAY_MAP[source] || source;
+  return SOURCE_DISPLAY_MAP[norm] || SOURCE_DISPLAY_MAP[source] || source;
 };
 
 // All unique project/system statuses recognized across Master, Front Office, Doctor, and Counseling workflows
@@ -276,6 +265,7 @@ export interface BookingRecord {
   condition: Condition | string;
   source: string;
   referralPerson?: string | null;
+  sourceDoctorName?: string;
   status: string;
   assignedHospitalId?: string;
   assignedHospitalName?: string;
@@ -363,7 +353,7 @@ export const SalesDashboard: React.FC = () => {
     condition: Condition.Other,
     date: new Date().toISOString().split('T')[0],
     time: '10:00',
-    source: 'Acquire OPD',
+    source: 'Google',
     referralPerson: '',
     sourceDoctorName: '',
     sourceOtherDetails: ''
@@ -654,9 +644,9 @@ export const SalesDashboard: React.FC = () => {
         condition: (booking.condition as Condition) || Condition.Other,
         date: booking.appointmentDate || new Date().toISOString().split('T')[0],
         time: booking.appointmentTime || '10:00',
-        source: 'Acquire OPD',
-        referralPerson: '',
-        sourceDoctorName: '',
+        source: booking.source || 'Google',
+        referralPerson: booking.referralPerson || '',
+        sourceDoctorName: booking.sourceDoctorName || '',
         sourceOtherDetails: ''
       });
       // When editing existing booking, go straight to form
@@ -672,7 +662,7 @@ export const SalesDashboard: React.FC = () => {
         condition: Condition.Other,
         date: new Date().toISOString().split('T')[0],
         time: '10:00',
-        source: 'Acquire OPD',
+        source: 'Google',
         referralPerson: '',
         sourceDoctorName: '',
         sourceOtherDetails: ''
@@ -749,8 +739,7 @@ export const SalesDashboard: React.FC = () => {
         finalHospitalName = doc?.hospitalName || 'Consulting Clinic';
       }
 
-      // Source Rule: When Sales schedules/books an appointment, the system must automatically set source as Acquire OPD
-      const sourceVal = 'Acquire OPD';
+      const sourceVal = bookingFormData.source || 'Others';
 
       // Status is Scheduled by default for new bookings, or preserves Follow-up if editing a follow-up booking
       const assignedStatus = (bookingToEdit?.status === 'Follow-up' || bookingToEdit?.status === 'Follow Up') ? 'Follow-up' : 'Scheduled';
@@ -759,8 +748,8 @@ export const SalesDashboard: React.FC = () => {
         name: bookingFormData.name.trim(),
         mobile: bookingFormData.mobile.trim(),
         source: sourceVal,
-        sourceDoctorName: undefined,
-        referral_person: null,
+        sourceDoctorName: bookingFormData.source === 'Doctor Recommended' ? bookingFormData.sourceDoctorName : undefined,
+        referral_person: (bookingFormData.source === 'Referral' || bookingFormData.source === 'Relatives / Friend') ? bookingFormData.referralPerson : null,
         condition: bookingFormData.condition as Condition,
         date: bookingFormData.date,
         time: bookingFormData.time,
@@ -1966,20 +1955,19 @@ export const SalesDashboard: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest flex items-center justify-between">
-                          <span>Lead Source</span>
-                          <span className="text-[9px] font-black uppercase text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
-                            Auto: Acquire OPD
-                          </span>
+                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">
+                          Lead Source
                         </label>
-                        <input 
-                          type="text" 
-                          readOnly 
-                          disabled
-                          value="Acquire OPD" 
-                          className="w-full border-b-2 border-slate-200 p-2 text-sm font-bold bg-slate-100 text-slate-700 outline-none cursor-not-allowed select-none rounded-t" 
-                          title="Appointments scheduled by Sales are automatically set to Acquire OPD"
-                        />
+                        <select 
+                          className="w-full border-b-2 border-slate-100 p-2 font-bold bg-white outline-none focus:border-rose-500" 
+                          value={bookingFormData.source} 
+                          onChange={e => setBookingFormData({ ...bookingFormData, source: e.target.value })}
+                        >
+                          <option value="">Select Lead Source...</option>
+                          {sourceConfig.map(s => (
+                            <option key={s.name} value={s.name}>{s.name}</option>
+                          ))}
+                        </select>
                       </div>
 
                       {getSourceDisplay(bookingFormData.source) === 'Doctor Recommended' && (

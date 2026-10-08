@@ -21,10 +21,12 @@ export type DashboardKey =
   | 'master_reports' 
   | 'analytics_hub' 
   | 'analytics_give_access'
+  | 'doctor_performance'
   | 'front_office' 
   | 'doctor' 
   | 'doctor_appointments'
   | 'doctor_availability'
+  | 'doctor_profile'
   | 'package' 
   | 'sales';
 
@@ -299,12 +301,22 @@ export const normalizeSource = (source?: string | null): string => {
   if (
     clean === 'acquire opd' || 
     clean === 'acqure opd' || 
+    clean === 'acqire opd' || 
+    clean === 'aquire opd' ||
     clean === 'acquire_opd' || 
     clean === 'acqure_opd' || 
     clean === 'acquireopd' || 
-    clean === 'acqureopd'
+    clean === 'acqureopd' ||
+    clean.includes('acquire opd') ||
+    clean.includes('acqure opd') ||
+    clean.includes('aquire opd') ||
+    clean.includes('acqire opd') ||
+    clean.includes('acquireopd') ||
+    clean.includes('acqureopd') ||
+    (clean.includes('acquire') && clean.includes('opd')) ||
+    (clean.includes('acqure') && clean.includes('opd'))
   ) {
-    return 'Acquire OPD';
+    return 'Other';
   }
   return source.trim();
 };

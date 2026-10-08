@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
 import { SurgeonCode, PainSeverity, Affordability, ConversionReadiness, Patient, DoctorAssessment, Appointment } from '../types';
-import { Stethoscope, Check, ChevronRight, ChevronLeft, User, Calendar, Save, Briefcase, CreditCard, Activity, Tag, FileText, Database, Clock, Share2, ShieldCheck, Search, Filter, History, ClipboardList, RefreshCcw, Upload, Trash2, Loader2 } from 'lucide-react';
+import { Stethoscope, Check, ChevronRight, ChevronLeft, User, Calendar, Save, Briefcase, CreditCard, Activity, Tag, FileText, Database, Clock, Share2, ShieldCheck, Search, Filter, History, ClipboardList, RefreshCcw, Upload, Trash2, Loader2, Plus, CheckCircle2 } from 'lucide-react';
 
 const PROCEDURES = [
   "Lap Cholecystectomy",
@@ -18,6 +18,106 @@ const PROCEDURES = [
 ];
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+interface DayColorTheme {
+  cardBg: string;
+  cardBorder: string;
+  cardHover: string;
+  accentBar: string;
+  dayTitle: string;
+  dateBadge: string;
+  breakBtn: string;
+  footerBadge: string;
+  timeInputFocus: string;
+  statusBadge: string;
+}
+
+const DAY_COLOR_THEMES: Record<string, DayColorTheme> = {
+  Monday: {
+    cardBg: 'bg-sky-50/70',
+    cardBorder: 'border-sky-200/90',
+    cardHover: 'hover:border-sky-400 hover:shadow-sky-100/50',
+    accentBar: 'bg-sky-500',
+    dayTitle: 'text-sky-950',
+    dateBadge: 'bg-sky-100 text-sky-800 border-sky-200',
+    breakBtn: 'text-sky-700 bg-sky-100/80 hover:bg-sky-200 border-sky-200',
+    footerBadge: 'text-sky-900 bg-sky-100/80 border-sky-200',
+    timeInputFocus: 'focus:border-sky-500 focus:ring-sky-100',
+    statusBadge: 'text-sky-700'
+  },
+  Tuesday: {
+    cardBg: 'bg-emerald-50/70',
+    cardBorder: 'border-emerald-200/90',
+    cardHover: 'hover:border-emerald-400 hover:shadow-emerald-100/50',
+    accentBar: 'bg-emerald-500',
+    dayTitle: 'text-emerald-950',
+    dateBadge: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    breakBtn: 'text-emerald-700 bg-emerald-100/80 hover:bg-emerald-200 border-emerald-200',
+    footerBadge: 'text-emerald-900 bg-emerald-100/80 border-emerald-200',
+    timeInputFocus: 'focus:border-emerald-500 focus:ring-emerald-100',
+    statusBadge: 'text-emerald-700'
+  },
+  Wednesday: {
+    cardBg: 'bg-violet-50/70',
+    cardBorder: 'border-violet-200/90',
+    cardHover: 'hover:border-violet-400 hover:shadow-violet-100/50',
+    accentBar: 'bg-violet-500',
+    dayTitle: 'text-violet-950',
+    dateBadge: 'bg-violet-100 text-violet-800 border-violet-200',
+    breakBtn: 'text-violet-700 bg-violet-100/80 hover:bg-violet-200 border-violet-200',
+    footerBadge: 'text-violet-900 bg-violet-100/80 border-violet-200',
+    timeInputFocus: 'focus:border-violet-500 focus:ring-violet-100',
+    statusBadge: 'text-violet-700'
+  },
+  Thursday: {
+    cardBg: 'bg-amber-50/70',
+    cardBorder: 'border-amber-200/90',
+    cardHover: 'hover:border-amber-400 hover:shadow-amber-100/50',
+    accentBar: 'bg-amber-500',
+    dayTitle: 'text-amber-950',
+    dateBadge: 'bg-amber-100 text-amber-800 border-amber-200',
+    breakBtn: 'text-amber-800 bg-amber-100/80 hover:bg-amber-200 border-amber-200',
+    footerBadge: 'text-amber-900 bg-amber-100/80 border-amber-200',
+    timeInputFocus: 'focus:border-amber-500 focus:ring-amber-100',
+    statusBadge: 'text-amber-700'
+  },
+  Friday: {
+    cardBg: 'bg-teal-50/70',
+    cardBorder: 'border-teal-200/90',
+    cardHover: 'hover:border-teal-400 hover:shadow-teal-100/50',
+    accentBar: 'bg-teal-500',
+    dayTitle: 'text-teal-950',
+    dateBadge: 'bg-teal-100 text-teal-800 border-teal-200',
+    breakBtn: 'text-teal-700 bg-teal-100/80 hover:bg-teal-200 border-teal-200',
+    footerBadge: 'text-teal-900 bg-teal-100/80 border-teal-200',
+    timeInputFocus: 'focus:border-teal-500 focus:ring-teal-100',
+    statusBadge: 'text-teal-700'
+  },
+  Saturday: {
+    cardBg: 'bg-indigo-50/70',
+    cardBorder: 'border-indigo-200/90',
+    cardHover: 'hover:border-indigo-400 hover:shadow-indigo-100/50',
+    accentBar: 'bg-indigo-500',
+    dayTitle: 'text-indigo-950',
+    dateBadge: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    breakBtn: 'text-indigo-700 bg-indigo-100/80 hover:bg-indigo-200 border-indigo-200',
+    footerBadge: 'text-indigo-900 bg-indigo-100/80 border-indigo-200',
+    timeInputFocus: 'focus:border-indigo-500 focus:ring-indigo-100',
+    statusBadge: 'text-indigo-700'
+  },
+  Sunday: {
+    cardBg: 'bg-rose-50/70',
+    cardBorder: 'border-rose-200/90',
+    cardHover: 'hover:border-rose-400 hover:shadow-rose-100/50',
+    accentBar: 'bg-rose-500',
+    dayTitle: 'text-rose-950',
+    dateBadge: 'bg-rose-100 text-rose-800 border-rose-200',
+    breakBtn: 'text-rose-700 bg-rose-100/80 hover:bg-rose-200 border-rose-200',
+    footerBadge: 'text-rose-900 bg-rose-100/80 border-rose-200',
+    timeInputFocus: 'focus:border-rose-500 focus:ring-rose-100',
+    statusBadge: 'text-rose-700'
+  }
+};
 
 const formatToDateTime = (dateString: string | undefined | null): string => {
   if (!dateString) return '';
@@ -58,9 +158,10 @@ export const DoctorDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   
   // Current active view synced with side menu
-  const activeTab: 'patients' | 'appointments' | 'availability' = useMemo(() => {
+  const activeTab: 'patients' | 'appointments' | 'availability' | 'profile' = useMemo(() => {
     if (activeDashboard === 'doctor_appointments') return 'appointments';
     if (activeDashboard === 'doctor_availability') return 'availability';
+    if (activeDashboard === 'doctor_profile') return 'profile';
     return 'patients';
   }, [activeDashboard]);
 
@@ -775,21 +876,21 @@ export const DoctorDashboard: React.FC = () => {
                   </div>
 
                   {isSurgery && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-4 sm:p-6 bg-green-50/50 rounded-lg border border-green-100 animate-in fade-in">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 p-4 sm:p-6 bg-emerald-50/40 rounded-2xl border border-emerald-100/80 animate-in fade-in">
                       <div className="sm:col-span-2">
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Procedures</label>
-                        <select required={isSurgery} value={formState.surgeryProcedure || ''} onChange={e => setFormState(s => ({...s, surgeryProcedure: e.target.value}))} className="w-full p-2 border border-gray-300 rounded-md bg-white">
+                        <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1.5 tracking-wider">Procedures</label>
+                        <select required={isSurgery} value={formState.surgeryProcedure || ''} onChange={e => setFormState(s => ({...s, surgeryProcedure: e.target.value}))} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-hospital-500/20 focus:border-hospital-500 cursor-pointer">
                           <option value="">Select Procedure...</option>
                           {PROCEDURES.map(p => <option key={p} value={p}>{p}</option>)}
                         </select>
                       </div>
                       {formState.surgeryProcedure === 'Other' && (
                         <div className="sm:col-span-2 animate-in slide-in-from-top-2 duration-200">
-                          <label className="block text-xs font-bold text-hospital-600 uppercase mb-2">Specific Procedure Name</label>
+                          <label className="block text-[11px] font-bold text-hospital-700 uppercase mb-1.5 tracking-wider">Specific Procedure Name</label>
                           <input 
                             required 
                             type="text" 
-                            className="w-full p-2 border border-hospital-200 rounded-md bg-white focus:border-hospital-500 outline-none" 
+                            className="w-full px-3 py-2.5 bg-white border border-hospital-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-hospital-500/20 focus:border-hospital-500 placeholder:font-normal placeholder:text-slate-400" 
                             value={formState.otherSurgeryName || ''} 
                             onChange={e => setFormState(s => ({...s, otherSurgeryName: e.target.value}))} 
                             placeholder="Enter specific procedure name..." 
@@ -797,37 +898,37 @@ export const DoctorDashboard: React.FC = () => {
                         </div>
                       )}
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Pain Severity</label>
-                        <select required={isSurgery} value={formState.painSeverity || ''} onChange={e => setFormState(s => ({...s, painSeverity: e.target.value as PainSeverity}))} className="w-full p-2 border border-gray-300 rounded-md bg-white">
+                        <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1.5 tracking-wider">Pain Severity</label>
+                        <select required={isSurgery} value={formState.painSeverity || ''} onChange={e => setFormState(s => ({...s, painSeverity: e.target.value as PainSeverity}))} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-hospital-500/20 focus:border-hospital-500 cursor-pointer">
                           <option value="">Select...</option>
                           {Object.values(PainSeverity).map(v => <option key={v} value={v}>{v}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Affordability</label>
-                        <select required={isSurgery} value={formState.affordability || ''} onChange={e => setFormState(s => ({...s, affordability: e.target.value as Affordability}))} className="w-full p-2 border border-gray-300 rounded-md bg-white">
+                        <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1.5 tracking-wider">Affordability</label>
+                        <select required={isSurgery} value={formState.affordability || ''} onChange={e => setFormState(s => ({...s, affordability: e.target.value as Affordability}))} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-hospital-500/20 focus:border-hospital-500 cursor-pointer">
                           <option value="">Select...</option>
                           {Object.values(Affordability).map(v => <option key={v} value={v}>{v}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Conversion Readiness</label>
-                        <select required={isSurgery} value={formState.conversionReadiness || ''} onChange={e => setFormState(s => ({...s, conversionReadiness: e.target.value as ConversionReadiness}))} className="w-full p-2 border border-gray-300 rounded-md bg-white">
+                        <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1.5 tracking-wider">Conversion Readiness</label>
+                        <select required={isSurgery} value={formState.conversionReadiness || ''} onChange={e => setFormState(s => ({...s, conversionReadiness: e.target.value as ConversionReadiness}))} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-hospital-500/20 focus:border-hospital-500 cursor-pointer">
                           <option value="">Select...</option>
                           {Object.values(ConversionReadiness).map(v => <option key={v} value={v}>{v}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Tentative Surgery Date</label>
+                        <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1.5 tracking-wider">Tentative Surgery Date</label>
                         {schedulingPermissions?.doctor ? (
                           <input 
                             type="date" 
                             value={formState.tentativeSurgeryDate || ''} 
                             onChange={e => setFormState(s => ({...s, tentativeSurgeryDate: e.target.value}))} 
-                            className="w-full p-2 border border-gray-300 rounded-md" 
+                            className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-hospital-500/20 focus:border-hospital-500 font-mono" 
                           />
                         ) : (
-                          <div className="p-2.5 bg-slate-100 border border-slate-200 rounded-md text-xs text-slate-500 font-bold flex items-center gap-1.5">
+                          <div className="px-3 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-500 font-bold flex items-center gap-1.5">
                             <span className="text-amber-600 font-black">Locked:</span> Surgery scheduling disabled by Master Admin
                           </div>
                         )}
@@ -836,23 +937,23 @@ export const DoctorDashboard: React.FC = () => {
                   )}
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Clinical Findings & Notes</label>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1.5 tracking-wider">Clinical Findings & Notes</label>
                     <textarea
                       value={formState.notes || ''}
                       onChange={e => setFormState(s => ({...s, notes: e.target.value}))}
-                      className="w-full p-2 border border-gray-300 rounded-md min-h-[120px]"
+                      className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:ring-2 focus:ring-hospital-500/20 focus:border-hospital-500 min-h-[110px] placeholder:text-slate-400"
                       placeholder="Enter clinical observations..."
                     ></textarea>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Digital Signature</label>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1.5 tracking-wider">Digital Signature</label>
                     <input
                       type="text"
                       required
                       value={formState.doctorSignature || ''}
                       onChange={e => setFormState(s => ({...s, doctorSignature: e.target.value}))}
-                      className="w-full p-2 border border-gray-300 rounded-md font-serif"
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-hospital-500/20 focus:border-hospital-500 font-serif"
                       placeholder="Type your full name to sign"
                     />
                   </div>
@@ -1013,339 +1114,388 @@ export const DoctorDashboard: React.FC = () => {
             </div>
           )}
         </div>
-      ) : (
-        /* Doctor Availability & Profile Photo settings view */
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
-          {/* Bio Profile Photo Column */}
-          <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col items-center text-center">
-            <h3 className="text-sm font-black uppercase text-slate-400 tracking-wider mb-6 flex items-center gap-1.5">
-              <User className="w-4 h-4 text-hospital-600" /> Identity photo
-            </h3>
-            
-            <div className="relative group mb-4">
-              {loggedInDoctor.photoUrl ? (
-                <img 
-                  src={loggedInDoctor.photoUrl} 
-                  alt="Doctor" 
-                  className="w-32 h-32 rounded-3xl object-cover border-4 border-white shadow-md transition-transform duration-300 group-hover:scale-105"
-                />
-              ) : (
-                <div className="w-32 h-32 rounded-3xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-405 gap-1.5">
-                  <User className="w-8 h-8 text-slate-400" />
-                  <span className="text-[9px] font-bold">No Photo</span>
-                </div>
-              )}
+      ) : activeTab === 'profile' ? (
+        /* Dedicated Doctor Profile View */
+        <div className="max-w-4xl mx-auto bg-white rounded-2xl p-6 sm:p-8 border border-slate-100 shadow-sm space-y-6 animate-in fade-in duration-300">
+          <div className="border-b border-slate-100 pb-4 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-black uppercase text-hospital-600 tracking-wider">Doctor Identity & Credentials</span>
+              <h3 className="text-xl font-black text-slate-900">Doctor Profile</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Manage identity details, contact information, and profile picture.</p>
             </div>
-
-            <label className="cursor-pointer bg-hospital-50 hover:bg-hospital-100 text-hospital-700 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm">
-              <Upload className="w-3.5 h-3.5" /> Upload Photo
-              <input 
-                type="file" 
-                accept="image/*" 
-                className="hidden" 
-                onChange={handlePhotoUpload} 
-              />
-            </label>
-            <p className="text-[9px] text-slate-400 mt-2">Accepted formats: JPEG, PNG, WEBP (Max 2MB)</p>
-            {photoError && <p className="text-[10px] text-rose-500 font-bold mt-1">{photoError}</p>}
-
-            <div className="w-full border-t border-slate-100 my-6"></div>
-
-            <div className="w-full text-left space-y-3.5 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-              <div>
-                <span className="block text-[8px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1">Email ID</span>
-                <span className="text-xs font-black text-slate-700">{loggedInDoctor.email}</span>
-              </div>
-              <div>
-                <span className="block text-[8px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1">Contact Number</span>
-                <span className="text-xs font-black text-slate-700 font-mono">{loggedInDoctor.mobile || 'N/A'}</span>
-              </div>
-              <div>
-                <span className="block text-[8px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1">Clinic Role</span>
-                <span className="text-[9px] font-black text-slate-700 bg-hospital-100 text-hospital-700 px-2.5 py-0.5 rounded-full border border-hospital-200 uppercase tracking-wide">
-                  {loggedInDoctor.role}
-                </span>
-              </div>
+            <div className="w-10 h-10 rounded-2xl bg-hospital-50 border border-hospital-100 flex items-center justify-center text-hospital-600">
+              <User className="w-5 h-5" />
             </div>
           </div>
 
-          {/* Availability days and calendar settings */}
-          <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-100 shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-sm font-black uppercase text-slate-800 tracking-wider flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-hospital-600" /> Weekly Advanced Scheduler
-                </h3>
-                <p className="text-slate-400 text-xs">True 7-day weekly calendar with exact dates, daily working hours, customizable breaks, status, and holidays.</p>
+          <div className="flex flex-col md:flex-row items-center md:items-start gap-8 bg-slate-50/60 p-6 rounded-2xl border border-slate-200/60">
+            {/* Identity Photo & Upload */}
+            <div className="flex flex-col items-center text-center shrink-0">
+              <div className="relative group mb-4">
+                {loggedInDoctor.photoUrl ? (
+                  <img 
+                    src={loggedInDoctor.photoUrl} 
+                    alt="Doctor" 
+                    className="w-36 h-36 rounded-3xl object-cover border-4 border-white shadow-md transition-transform duration-300 group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="w-36 h-36 rounded-3xl bg-white border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 gap-2">
+                    <User className="w-10 h-10 text-slate-400" />
+                    <span className="text-[10px] font-bold">No Photo</span>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full border border-emerald-100">Saved in Database</span>
+
+              <label className="cursor-pointer bg-hospital-600 hover:bg-hospital-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm">
+                <Upload className="w-3.5 h-3.5" /> Upload Photo
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="hidden" 
+                  onChange={handlePhotoUpload} 
+                />
+              </label>
+              <p className="text-[9px] text-slate-400 mt-2">Accepted formats: JPEG, PNG, WEBP (Max 2MB)</p>
+              {photoError && <p className="text-[10px] text-rose-500 font-bold mt-1">{photoError}</p>}
+            </div>
+
+            {/* Profile Info Fields */}
+            <div className="flex-1 w-full space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1.5">Doctor Name</span>
+                  <span className="text-sm font-black text-slate-900">{getFormattedDoctorName(loggedInDoctor.name)}</span>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1.5">Clinic Role</span>
+                  <span className="inline-block text-[10px] font-black text-hospital-700 bg-hospital-50 px-2.5 py-1 rounded-md border border-hospital-200 uppercase tracking-wider">
+                    {loggedInDoctor.role}
+                  </span>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1.5">Email ID</span>
+                  <span className="text-sm font-black text-slate-800">{loggedInDoctor.email || 'N/A'}</span>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1.5">Contact Number</span>
+                  <span className="text-sm font-black text-slate-800 font-mono">{loggedInDoctor.mobile || 'N/A'}</span>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs sm:col-span-2">
+                  <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1.5">Doctor Account ID</span>
+                  <span className="text-xs font-mono font-bold text-slate-600">{loggedInDoctor.id}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Doctor Availability Mode - Dedicated Full Width Weekly Advanced Scheduler */
+        <div className="w-full bg-white rounded-2xl p-4 sm:p-6 md:p-8 border border-slate-100 shadow-sm space-y-6 animate-in fade-in duration-300">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-slate-100">
+            <div>
+              <h3 className="text-base sm:text-lg font-black uppercase text-slate-900 tracking-wider flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-hospital-600 shrink-0" /> WEEKLY ADVANCED SCHEDULER
+              </h3>
+              <p className="text-slate-500 text-xs mt-1">Configure consultation hours, breaks, holidays, and availability for each day of the week.</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[10px] text-emerald-700 font-bold uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">Saved in Database</span>
+            </div>
+          </div>
+
+          {/* General Available Days Selector */}
+          <div className="space-y-2">
+            <span className="block text-[10px] font-black uppercase text-slate-400 tracking-widest">General Available Days</span>
+            <div className="flex flex-wrap gap-2">
+              {WEEKDAYS.map(day => {
+                const isChecked = availableDays.includes(day);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => toggleDay(day)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-extrabold border transition-all cursor-pointer ${
+                      isChecked 
+                        ? 'bg-hospital-600 text-white border-hospital-600 shadow-xs' 
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Active Week Calendar Header & Navigation Controls */}
+          <div className="space-y-4 pt-2">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+              <div>
+                <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest">Active Week View</span>
+                <div className="text-sm font-black text-slate-900 mt-0.5">{weekRangeLabel}</div>
+              </div>
+              <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs w-full md:w-auto justify-between md:justify-start">
+                <button
+                  type="button"
+                  onClick={handlePrevWeek}
+                  className="px-3 py-1.5 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                  title="Previous Week"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Previous Week</span><span className="sm:hidden">Prev</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTodayWeek}
+                  className="px-3 py-1.5 bg-hospital-600 hover:bg-hospital-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+                  title="Return to Current Week"
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNextWeek}
+                  className="px-3 py-1.5 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                  title="Next Week"
+                >
+                  <span className="hidden sm:inline">Next Week</span><span className="sm:hidden">Next</span> <ChevronRight className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
 
-            {/* Weekdays picker checkboxes */}
-            <div>
-              <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest mb-3">General Available Days</span>
-              <div className="flex flex-wrap gap-2">
-                {WEEKDAYS.map(day => {
-                  const isChecked = availableDays.includes(day);
+            {/* 7 Days Weekly Scheduler Grid / Cards - Distinct Color Per Day & Exactly 3 Cards Per Row */}
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <span className="block text-[11px] font-black uppercase text-slate-500 tracking-widest">Weekly Day Schedules (7 Days)</span>
+                <span className="text-[10px] font-bold text-slate-600 bg-white px-3 py-1 rounded-full border border-slate-200 uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
+                  <span className="w-2 h-2 rounded-full bg-sky-500 inline-block" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                  <span className="w-2 h-2 rounded-full bg-violet-500 inline-block" />
+                  <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+                  <span className="w-2 h-2 rounded-full bg-teal-500 inline-block" />
+                  <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" />
+                  <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
+                  Color-Coded Days • 3 Cards Per Row
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
+                {weekDays.map((wd) => {
+                  const ds = daySchedules.find(s => s.day === wd.weekday) || {
+                    day: wd.weekday,
+                    status: "Available",
+                    startTime: "09:00",
+                    endTime: "17:00",
+                    breaks: [{ startTime: "13:00", endTime: "14:00" }]
+                  };
+                  const theme = DAY_COLOR_THEMES[wd.weekday] || DAY_COLOR_THEMES.Monday;
+
                   return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => toggleDay(day)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                        isChecked 
-                          ? 'bg-hospital-600 text-white border-hospital-600 shadow-sm' 
-                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                      }`}
+                    <div 
+                      key={wd.isoDate} 
+                      className={`${theme.cardBg} border ${theme.cardBorder} rounded-2xl p-4 space-y-3 shadow-2xs ${theme.cardHover} hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden`}
                     >
-                      {day}
-                    </button>
+                      {/* Top colored accent indicator */}
+                      <div className={`absolute top-0 left-0 right-0 h-1.5 ${theme.accentBar}`} />
+
+                      <div className="space-y-3 pt-1">
+                        {/* Day Header */}
+                        <div className="flex justify-between items-center pb-2.5 border-b border-slate-200/80">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`w-2.5 h-2.5 rounded-full ${theme.accentBar} shrink-0 shadow-xs`} />
+                            <div className={`text-xs sm:text-sm font-black uppercase tracking-wide truncate ${theme.dayTitle}`}>{wd.weekday}</div>
+                            <div className={`text-[10px] sm:text-xs font-extrabold font-mono px-2 py-0.5 rounded-lg border shrink-0 ${theme.dateBadge}`}>
+                              {wd.dateNum} {wd.monthStr} {wd.dateObj.getFullYear()}
+                            </div>
+                          </div>
+                          <select
+                            value={ds.status}
+                            onChange={(e) => updateDayScheduleField(wd.weekday, "status", e.target.value)}
+                            className="text-[11px] font-extrabold border border-slate-200 bg-white rounded-xl px-2.5 py-1 text-slate-700 outline-none focus:ring-2 focus:ring-hospital-500 shadow-2xs cursor-pointer shrink-0"
+                          >
+                            <option value="Available">Available</option>
+                            <option value="Unavailable">Unavailable</option>
+                            <option value="Holiday">Holiday</option>
+                            <option value="Leave">Leave</option>
+                          </select>
+                        </div>
+
+                        {/* Day Working Hours & Breaks */}
+                        {ds.status === "Available" ? (
+                          <div className="space-y-3 pt-0.5">
+                            {/* Working Hours */}
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-[8px] uppercase font-black text-slate-400 mb-1">Start Time</label>
+                                <input
+                                  type="time"
+                                  value={ds.startTime || "09:00"}
+                                  onChange={(e) => updateDayScheduleField(wd.weekday, "startTime", e.target.value)}
+                                  className={`w-full bg-white border border-slate-200 px-2 py-1.5 rounded-xl text-[11px] font-bold text-slate-800 font-mono focus:border-hospital-500 focus:ring-2 ${theme.timeInputFocus} outline-none shadow-2xs`}
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[8px] uppercase font-black text-slate-400 mb-1">End Time</label>
+                                <input
+                                  type="time"
+                                  value={ds.endTime || "17:00"}
+                                  onChange={(e) => updateDayScheduleField(wd.weekday, "endTime", e.target.value)}
+                                  className={`w-full bg-white border border-slate-200 px-2 py-1.5 rounded-xl text-[11px] font-bold text-slate-800 font-mono focus:border-hospital-500 focus:ring-2 ${theme.timeInputFocus} outline-none shadow-2xs`}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Breaks List */}
+                            <div className="space-y-1.5 pt-0.5">
+                              <div className="flex justify-between items-center">
+                                <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider">Breaks</span>
+                                <button
+                                  type="button"
+                                  onClick={() => addBreakToDay(wd.weekday)}
+                                  className={`text-[9px] font-extrabold px-2 py-0.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1 border ${theme.breakBtn}`}
+                                >
+                                  + Add Break
+                                </button>
+                              </div>
+
+                              <div className="space-y-1.5 max-h-[130px] overflow-y-auto pr-0.5 scrollbar-thin">
+                                {(ds.breaks || []).map((b: any, bIdx: number) => (
+                                  <div key={bIdx} className="flex items-center gap-1.5 bg-white border border-slate-200 px-2 py-1 rounded-xl shadow-2xs">
+                                    <span className="text-[8px] font-bold text-slate-400 uppercase shrink-0">B{bIdx + 1}:</span>
+                                    <input
+                                      type="time"
+                                      value={b.startTime}
+                                      onChange={(e) => updateBreakTime(wd.weekday, bIdx, "startTime", e.target.value)}
+                                      className="bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded-lg text-[10px] font-semibold text-slate-800 font-mono outline-none focus:border-hospital-500 w-[58px]"
+                                    />
+                                    <span className="text-slate-400 text-[10px] shrink-0">-</span>
+                                    <input
+                                      type="time"
+                                      value={b.endTime}
+                                      onChange={(e) => updateBreakTime(wd.weekday, bIdx, "endTime", e.target.value)}
+                                      className="bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded-lg text-[10px] font-semibold text-slate-800 font-mono outline-none focus:border-hospital-500 w-[58px]"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => removeBreakFromDay(wd.weekday, bIdx)}
+                                      className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-1 rounded-lg ml-auto transition-colors cursor-pointer shrink-0"
+                                      title="Delete break"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                                {(ds.breaks || []).length === 0 && (
+                                  <p className="text-[10px] text-slate-400 italic py-0.5">No scheduled breaks.</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-slate-100/90 text-slate-600 text-center py-8 rounded-2xl text-xs font-mono font-bold mt-1 border border-slate-200/60 flex flex-col items-center justify-center gap-1">
+                            <span className="text-xl">
+                              {ds.status === "Holiday" ? "🎉" : ds.status === "Leave" ? "📴" : "❌"}
+                            </span>
+                            <span className="text-xs font-black uppercase tracking-wider text-slate-700">
+                              {ds.status === "Holiday" ? "Public Holiday" : ds.status === "Leave" ? "Leave Period" : "Closed / Unavailable"}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="pt-2.5 border-t border-slate-200/60 text-[10px] text-slate-400 font-bold flex justify-between items-center mt-2">
+                        <span className="uppercase tracking-wider text-[9px]">Target Date:</span>
+                        <span className={`font-mono text-[11px] font-black px-2 py-0.5 rounded-md border ${theme.footerBadge}`}>{wd.isoDate}</span>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
             </div>
+          </div>
 
-            {/* True Weekly Calendar View with Week Navigation */}
-            <div className="space-y-4 pt-2">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-                <div>
-                  <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest">Active Week View</span>
-                  <div className="text-xs font-extrabold text-slate-900 mt-0.5">{weekRangeLabel}</div>
-                </div>
-                <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 shadow-xs">
-                  <button
-                    type="button"
-                    onClick={handlePrevWeek}
-                    className="px-3 py-1.5 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
-                    title="Previous Week"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" /> Previous Week
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleTodayWeek}
-                    className="px-3 py-1.5 bg-hospital-600 hover:bg-hospital-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
-                    title="Return to Current Week"
-                  >
-                    Today
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleNextWeek}
-                    className="px-3 py-1.5 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
-                    title="Next Week"
-                  >
-                    Next Week <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+          <div className="border-t border-slate-100 my-4"></div>
+
+          {/* Block Vacation / Emergency / Holiday Dates */}
+          <div className="bg-slate-50/80 border border-slate-200/80 p-4 sm:p-5 rounded-2xl space-y-3">
+            <span className="block text-[10px] font-black uppercase text-slate-500 tracking-widest">Block Vacation / Emergency / Holiday Dates</span>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[8px] uppercase font-bold text-slate-400 mb-0.5">Select Date</label>
+                <input 
+                  type="date" 
+                  value={blockedDateInput} 
+                  onChange={e => setBlockedDateInput(e.target.value)} 
+                  className="w-full bg-white border border-slate-200 p-2 rounded-lg text-xs font-bold font-mono outline-none text-slate-800"
+                />
               </div>
-
-              {/* 7 Days Weekly Grid with Exact Dates and Horizontal Scroll support */}
-              <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest pt-1">Detail Schedules by Date & Day (7 Days)</span>
-              
-              <div className="overflow-x-auto pb-2 scrollbar-thin">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-w-[280px]">
-                  {weekDays.map((wd) => {
-                    const ds = daySchedules.find(s => s.day === wd.weekday) || {
-                      day: wd.weekday,
-                      status: "Available",
-                      startTime: "09:00",
-                      endTime: "17:00",
-                      breaks: [{ startTime: "13:00", endTime: "14:00" }]
-                    };
-
-                    return (
-                      <div key={wd.isoDate} className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 space-y-3 shadow-sm hover:border-hospital-400 transition-all flex flex-col justify-between">
-                        <div>
-                          <div className="flex justify-between items-start gap-2 mb-2 pb-2 border-b border-slate-200/60">
-                            <div>
-                              <div className="text-xs font-black text-slate-900">{wd.formattedDate}</div>
-                              <div className="text-[10px] text-hospital-600 font-mono font-bold">{wd.isoDate}</div>
-                            </div>
-                            <select
-                              value={ds.status}
-                              onChange={(e) => updateDayScheduleField(wd.weekday, "status", e.target.value)}
-                              className="text-[10px] font-extrabold border border-slate-200 bg-white rounded-lg px-2 py-1 text-slate-700 outline-none focus:border-hospital-500 shadow-xs"
-                            >
-                              <option value="Available">Available</option>
-                              <option value="Unavailable">Unavailable</option>
-                              <option value="Holiday">Holiday</option>
-                              <option value="Leave">Leave</option>
-                            </select>
-                          </div>
-
-                          {ds.status === "Available" ? (
-                            <div className="space-y-3 pt-1">
-                              {/* Start and end times */}
-                              <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                  <label className="block text-[8px] uppercase font-extrabold text-slate-400 mb-0.5">Start Time</label>
-                                  <input
-                                    type="time"
-                                    value={ds.startTime || "09:00"}
-                                    onChange={(e) => updateDayScheduleField(wd.weekday, "startTime", e.target.value)}
-                                    className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-[11px] font-bold text-slate-800 font-mono"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-[8px] uppercase font-extrabold text-slate-400 mb-0.5">End Time</label>
-                                  <input
-                                    type="time"
-                                    value={ds.endTime || "17:00"}
-                                    onChange={(e) => updateDayScheduleField(wd.weekday, "endTime", e.target.value)}
-                                    className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-[11px] font-bold text-slate-800 font-mono"
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Breaks list */}
-                              <div className="space-y-1.5">
-                                <div className="flex justify-between items-center">
-                                  <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider">Breaks</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => addBreakToDay(wd.weekday)}
-                                    className="text-[9px] font-extrabold text-hospital-600 hover:text-hospital-800 bg-hospital-50 px-2 py-0.5 rounded-md"
-                                  >
-                                    + Add Break
-                                  </button>
-                                </div>
-
-                                <div className="space-y-1">
-                                  {(ds.breaks || []).map((b: any, bIdx: number) => (
-                                    <div key={bIdx} className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-lg">
-                                      <input
-                                        type="time"
-                                        value={b.startTime}
-                                        onChange={(e) => updateBreakTime(wd.weekday, bIdx, "startTime", e.target.value)}
-                                        className="bg-transparent text-[10px] font-semibold text-slate-700 w-16 font-mono outline-none"
-                                      />
-                                      <span className="text-slate-400 text-[10px]">-</span>
-                                      <input
-                                        type="time"
-                                        value={b.endTime}
-                                        onChange={(e) => updateBreakTime(wd.weekday, bIdx, "endTime", e.target.value)}
-                                        className="bg-transparent text-[10px] font-semibold text-slate-700 w-16 font-mono outline-none"
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => removeBreakFromDay(wd.weekday, bIdx)}
-                                        className="text-rose-500 hover:text-rose-700 ml-auto p-0.5"
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                      </button>
-                                    </div>
-                                  ))}
-                                  {(ds.breaks || []).length === 0 && (
-                                    <p className="text-[10px] text-slate-400 italic">No scheduled breaks.</p>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="bg-slate-200 text-slate-600 text-center py-5 rounded-xl text-xs font-mono font-bold mt-2">
-                              {ds.status === "Holiday" ? "🎉 Public Holiday" : ds.status === "Leave" ? "📴 Leave Period" : "❌ Closed"}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="pt-2 border-t border-slate-200/60 text-[9px] text-slate-400 font-bold flex justify-between items-center">
-                          <span>Target Date:</span>
-                          <span className="font-mono text-slate-700">{wd.isoDate}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+              <div>
+                <label className="block text-[8px] uppercase font-bold text-slate-400 mb-0.5">Block Category</label>
+                <select
+                  value={blockedReasonInput}
+                  onChange={e => setBlockedReasonInput(e.target.value)}
+                  className="w-full bg-white border border-slate-200 p-2 rounded-lg text-xs font-bold outline-none text-slate-800 cursor-pointer"
+                >
+                  <option value="Vacation">Vacation Leave</option>
+                  <option value="Emergency Leave">Emergency Leave</option>
+                  <option value="Public Holiday">Public Holiday</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <button 
+                  type="button" 
+                  onClick={addBlockedDateItem}
+                  className="w-full py-2 bg-slate-900 text-white rounded-lg text-xs font-black uppercase tracking-wider hover:bg-slate-800 transition-colors shadow-xs cursor-pointer"
+                >
+                  Block Date
+                </button>
               </div>
             </div>
 
-            <div className="border-t border-slate-100 my-4"></div>
-
-            {/* Leaves and vacations manager */}
-            <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl space-y-3">
-              <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest">Block Vacation / Emergency / Holiday Dates</span>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[8px] uppercase font-bold text-slate-400 mb-0.5">Select Date</label>
-                  <input 
-                    type="date" 
-                    value={blockedDateInput} 
-                    onChange={e => setBlockedDateInput(e.target.value)} 
-                    className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-xs font-bold font-mono outline-none text-slate-700"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[8px] uppercase font-bold text-slate-400 mb-0.5">Block Category</label>
-                  <select
-                    value={blockedReasonInput}
-                    onChange={e => setBlockedReasonInput(e.target.value)}
-                    className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-xs font-bold outline-none text-slate-700"
-                  >
-                    <option value="Vacation">Vacation Leave</option>
-                    <option value="Emergency Leave">Emergency Leave</option>
-                    <option value="Public Holiday">Public Holiday</option>
-                  </select>
-                </div>
-                <div className="flex items-end">
+            {/* Blocked Date Chips */}
+            <div className="flex flex-wrap gap-2 mt-2">
+              {blockedDates.map(b => (
+                <span 
+                  key={b.date} 
+                  className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 border border-rose-100 px-2.5 py-1 rounded-lg text-[11px] font-semibold shadow-2xs"
+                >
+                  <span className="font-mono">{b.date}</span>
+                  <span className="bg-rose-100 text-[8px] px-1.5 py-0.5 rounded font-black tracking-wide text-rose-800 uppercase shrink-0">
+                    {b.category || "Blocked"}
+                  </span>
                   <button 
                     type="button" 
-                    onClick={addBlockedDateItem}
-                    className="w-full py-1.5 bg-slate-900 text-white rounded-lg text-xs font-black uppercase tracking-wider hover:bg-slate-800 transition-colors shadow-sm"
+                    onClick={() => removeBlockedDateItem(b.date)}
+                    className="text-rose-400 hover:text-rose-900 transition-colors cursor-pointer"
                   >
-                    Block Date
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
-                </div>
-              </div>
-
-              {/* Blocked Date Chips */}
-              <div className="flex flex-wrap gap-2 mt-2">
-                {blockedDates.map(b => (
-                  <span 
-                    key={b.date} 
-                    className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 border border-rose-100 px-2.5 py-1 rounded-lg text-[11px] font-semibold shadow-xs"
-                  >
-                    <span className="font-mono">{b.date}</span>
-                    <span className="bg-rose-100 text-[8px] px-1.5 py-0.5 rounded font-black tracking-wide text-rose-800 uppercase shrink-0">
-                      {b.category || "Blocked"}
-                    </span>
-                    <button 
-                      type="button" 
-                      onClick={() => removeBlockedDateItem(b.date)}
-                      className="text-rose-400 hover:text-rose-900 transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </span>
-                ))}
-                {blockedDates.length === 0 && (
-                  <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest mt-1">No custom blocked dates added</p>
-                )}
-              </div>
-            </div>
-
-            <button 
-              type="button" 
-              disabled={isSavingAvailability}
-              onClick={handleSaveAvailability}
-              className="w-full py-3 bg-hospital-600 text-white rounded-xl font-bold text-xs uppercase shadow-lg hover:bg-hospital-700 disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              {isSavingAvailability ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Saving Schedule...</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  <span>Save Advanced Schedule Setting</span>
-                </>
+                </span>
+              ))}
+              {blockedDates.length === 0 && (
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">No custom blocked dates added</p>
               )}
-            </button>
+            </div>
           </div>
+
+          <button 
+            type="button" 
+            disabled={isSavingAvailability}
+            onClick={handleSaveAvailability}
+            className="w-full py-3.5 bg-hospital-600 text-white rounded-xl font-bold text-xs uppercase shadow-md hover:bg-hospital-700 disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            {isSavingAvailability ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Saving Schedule...</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                <span>Save Advanced Schedule Setting</span>
+              </>
+            )}
+          </button>
         </div>
       )}
     </div>

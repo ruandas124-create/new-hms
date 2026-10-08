@@ -664,8 +664,8 @@ export const MasterScheduling: React.FC = () => {
   const [apptDate, setApptDate] = useState(new Date().toISOString().split('T')[0]);
   const [apptTime, setApptTime] = useState('');
   const [isTimeSelectorOpen, setIsTimeSelectorOpen] = useState(true);
-  const acquireOpd = 'OPD'; // Read-only / unchangeable
-  const [source, setSource] = useState('Acquire OPD');
+  const visitType = 'OPD'; // Default visit type
+  const [source, setSource] = useState('Google');
   const [referralPerson, setReferralPerson] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -765,8 +765,8 @@ export const MasterScheduling: React.FC = () => {
     setApptDate(app.date || new Date().toISOString().split('T')[0]);
     setApptTime(app.time || '');
     setIsTimeSelectorOpen(true);
-    setSource('Acquire OPD');
-    setReferralPerson('');
+    setSource(app.source || 'Google');
+    setReferralPerson(app.referral_person || '');
     setFormError(null);
     setShowBookModal(true);
   };
@@ -1119,10 +1119,10 @@ export const MasterScheduling: React.FC = () => {
           date: apptDate,
           time: apptTime,
           bookingType: originalApp?.bookingType || 'Scheduled',
-          visit_type: originalApp?.visit_type || acquireOpd,
+          visit_type: originalApp?.visit_type || visitType,
           condition: condition || Condition.Other,
-          source: 'Acquire OPD',
-          referral_person: null,
+          source: source || 'Google',
+          referral_person: referralPerson || null,
           assignment_type: assignmentType,
           doctor_id: finalDoctorId,
           hospital_id: finalHospitalId,
@@ -1143,10 +1143,10 @@ export const MasterScheduling: React.FC = () => {
           date: apptDate,
           time: apptTime,
           bookingType: 'Scheduled',
-          visit_type: acquireOpd,
+          visit_type: visitType,
           condition: condition || Condition.Other,
-          source: 'Acquire OPD',
-          referral_person: null,
+          source: source || 'Google',
+          referral_person: referralPerson || null,
           assignment_type: assignmentType,
           doctor_id: finalDoctorId,
           hospital_id: finalHospitalId,
@@ -1180,7 +1180,7 @@ export const MasterScheduling: React.FC = () => {
       setApptDate(new Date().toISOString().split('T')[0]);
       setApptTime('');
       setIsTimeSelectorOpen(true);
-      setSource('Acquire OPD');
+      setSource('Google');
       setReferralPerson('');
       setCondition(Condition.Other);
       setPatientMode('new');
@@ -1302,7 +1302,7 @@ export const MasterScheduling: React.FC = () => {
               setApptDate(new Date().toISOString().split('T')[0]);
               setApptTime('');
               setIsTimeSelectorOpen(true);
-              setSource('Acquire OPD');
+              setSource('Google');
               setReferralPerson('');
               setCondition(Condition.Other);
               setPatientMode('new');
@@ -1980,10 +1980,10 @@ export const MasterScheduling: React.FC = () => {
                       />
                     </div>
 
-                    {/* Acquire OPD (Read-only / Locked) */}
+                    {/* Visit Type (Read-only / Locked) */}
                     <div>
                       <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest flex items-center justify-between">
-                        <span>Acquire OPD</span>
+                        <span>Visit Type</span>
                         <span className="inline-flex items-center gap-1 text-[9px] font-bold text-slate-400">
                           <Lock className="w-2.5 h-2.5" /> Locked
                         </span>
@@ -1992,9 +1992,9 @@ export const MasterScheduling: React.FC = () => {
                         type="text" 
                         readOnly 
                         disabled
-                        value={acquireOpd} 
+                        value={visitType} 
                         className="w-full border-b-2 border-slate-200 p-2 text-sm font-bold bg-slate-100 text-slate-600 outline-none cursor-not-allowed select-none rounded-t" 
-                        title="Acquire OPD is read-only and unchangeable"
+                        title="Visit Type is OPD"
                       />
                     </div>
 
@@ -2445,22 +2445,20 @@ export const MasterScheduling: React.FC = () => {
                       )}
                     </div>
 
-                    {/* Source: Automatically set as Acquire OPD for Master Admin bookings */}
+                    {/* Source */}
                     <div>
-                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest flex items-center justify-between">
-                        <span>Source</span>
-                        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-hospital-700 bg-hospital-50 px-2 py-0.5 rounded-full border border-hospital-200">
-                          <Lock className="w-2.5 h-2.5" /> Auto: Acquire OPD
-                        </span>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">
+                        Source
                       </label>
-                      <input 
-                        type="text" 
-                        readOnly 
-                        disabled
-                        value="Acquire OPD" 
-                        className="w-full border-b-2 border-slate-200 p-2 text-sm font-bold bg-slate-100 text-slate-700 outline-none cursor-not-allowed select-none rounded-t" 
-                        title="Bookings scheduled by Master Admin automatically set Source to Acquire OPD"
-                      />
+                      <select
+                        value={source}
+                        onChange={e => setSource(e.target.value)}
+                        className="w-full border-b-2 border-slate-100 p-2 text-sm font-bold bg-white outline-none focus:border-hospital-500"
+                      >
+                        {['Google', 'Website', 'Facebook', 'Instagram', 'YouTube', 'WhatsApp', 'Referral', 'Walking', 'Relatives / Friend', 'Hospital Billboards', 'Doctor Recommended', 'Others'].map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>
@@ -2469,7 +2467,7 @@ export const MasterScheduling: React.FC = () => {
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="w-full py-4 bg-hospital-600 hover:bg-hospital-700 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:scale-[1.01] transition-all mt-6 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-3 px-5 bg-hospital-600 hover:bg-hospital-700 active:scale-[0.99] text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm transition-all mt-6 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
                 >
                   {isSubmitting ? (
                     <>

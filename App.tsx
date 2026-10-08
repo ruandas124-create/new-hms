@@ -6,6 +6,7 @@ import { Login } from './components/Login';
 import { MasterDashboard } from './views/MasterDashboard';
 import { AnalyticsDashboard } from './views/AnalyticsDashboard';
 import { GiveAccessView } from './views/GiveAccessView';
+import { DoctorPerformanceView } from './views/DoctorPerformanceView';
 import { FrontOfficeDashboard } from './views/FrontOfficeDashboard';
 import { DoctorDashboard } from './views/DoctorDashboard';
 import { PackageTeamDashboard } from './views/PackageTeamDashboard';
@@ -90,6 +91,8 @@ const MainApp: React.FC = () => {
         return <MasterDashboard />;
       case 'analytics_hub':
         return <AnalyticsDashboard />;
+      case 'doctor_performance':
+        return <DoctorPerformanceView />;
       case 'analytics_give_access':
         return <GiveAccessView />;
       case 'front_office':
@@ -97,6 +100,7 @@ const MainApp: React.FC = () => {
       case 'doctor':
       case 'doctor_appointments':
       case 'doctor_availability':
+      case 'doctor_profile':
         return <DoctorDashboard />;
       case 'package':
         return <PackageTeamDashboard />;

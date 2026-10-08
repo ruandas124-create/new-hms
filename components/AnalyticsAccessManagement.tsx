@@ -4,7 +4,7 @@ import { StaffUser } from '../types';
 import { 
   Building2, Activity, Plus, X, Search, Shield, Lock, Eye, EyeOff, User, 
   MapPin, CheckCircle2, XCircle, Briefcase, Users, Loader2, AlertCircle,
-  Stethoscope, ShieldCheck, Check, AlertTriangle
+  Stethoscope, ShieldCheck, Check, AlertTriangle, Pencil
 } from 'lucide-react';
 
 type AccessFormType = 'Doctor' | 'Package' | 'FrontOffice' | null;
@@ -18,6 +18,20 @@ export const AnalyticsAccessManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   
+  // Edit State
+  const [editingUser, setEditingUser] = useState<StaffUser | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    mobile: '',
+    email: '',
+    password: '',
+    specialization: 'General Surgeon'
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showEditPassword, setShowEditPassword] = useState(false);
+
   // Form State
   const [formData, setFormData] = useState({
     name: '',
@@ -150,8 +164,74 @@ export const AnalyticsAccessManagement: React.FC = () => {
     }
   };
 
+  const handleStartEdit = (user: StaffUser) => {
+    setEditError('');
+    setShowEditPassword(false);
+    setEditingUser(user);
+    setEditFormData({
+      name: user.name || '',
+      mobile: user.mobile && user.mobile !== 'N/A' ? user.mobile : '',
+      email: user.email && user.email !== 'N/A' ? user.email : '',
+      specialization: user.specialization || 'General Surgeon',
+      password: user.password || ''
+    });
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    
+    if (!editFormData.name.trim()) {
+      setEditError('Full Name is required.');
+      return;
+    }
+
+    setIsSavingEdit(true);
+    setEditError('');
+
+    try {
+      const trimmedName = editFormData.name.trim();
+      const payload: Partial<StaffUser> = {
+        name: trimmedName,
+        mobile: editFormData.mobile.trim() || 'N/A',
+        email: editFormData.email.trim().toLowerCase() || 'N/A',
+        specialization: editingUser.role === 'DOCTOR' ? (editFormData.specialization.trim() || 'General Surgeon') : editingUser.specialization,
+      };
+
+      if (editFormData.password.trim()) {
+        payload.password = editFormData.password.trim();
+      }
+
+      await updateStaff(editingUser.id, payload);
+
+      setSuccessMessage(`Account for "${trimmedName}" updated successfully.`);
+      setEditingUser(null);
+      setTimeout(() => {
+        setSuccessMessage('');
+      }, 4000);
+    } catch (err) {
+      console.error('Failed to update staff user:', err);
+      setEditError('Failed to save changes. Please try again.');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      {/* Top Banner Alert / Success Notice */}
+      {successMessage && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-2xl flex items-center justify-between gap-3 text-xs font-bold animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{successMessage}</span>
+          </div>
+          <button onClick={() => setSuccessMessage('')} className="p-1 text-emerald-500 hover:text-emerald-800 cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Top Banner Alert / Error Notice */}
       {errorMessage && (
         <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-2xl flex items-center justify-between gap-3 text-xs font-bold animate-in fade-in">
@@ -468,7 +548,17 @@ export const AnalyticsAccessManagement: React.FC = () => {
                       </div>
                     </td>
                     <td className="py-3.5 px-5 font-bold text-slate-900">
-                      <div>{user.name}</div>
+                      <div className="flex items-center gap-1.5 group">
+                        <span className="font-extrabold text-slate-900">{user.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleStartEdit(user)}
+                          className="p-1 text-slate-400 hover:text-hospital-600 hover:bg-hospital-50 rounded-lg transition-colors cursor-pointer"
+                          title="Edit Name"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                       {user.specialization && (
                         <div className="text-[10px] font-medium text-slate-400">{user.specialization}</div>
                       )}
@@ -488,18 +578,30 @@ export const AnalyticsAccessManagement: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-3.5 px-5 text-right">
-                      <button
-                        disabled={togglingUserId === user.id}
-                        onClick={() => handleToggleAccess(user)}
-                        className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 ${
-                          user.accessStatus === 'Active' 
-                            ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200'
-                            : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200'
-                        }`}
-                      >
-                        {togglingUserId === user.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                        {togglingUserId === user.id ? 'Updating...' : (user.accessStatus === 'Active' ? 'Revoke Access' : 'Restore Access')}
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEdit(user)}
+                          className="text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 hover:text-hospital-700 border border-slate-200 hover:border-slate-300 px-3 py-1.5 rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                          title="Edit Name & Details"
+                        >
+                          <Pencil className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={togglingUserId === user.id}
+                          onClick={() => handleToggleAccess(user)}
+                          className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 ${
+                            user.accessStatus === 'Active' 
+                              ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200'
+                              : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200'
+                          }`}
+                        >
+                          {togglingUserId === user.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                          {togglingUserId === user.id ? 'Updating...' : (user.accessStatus === 'Active' ? 'Revoke Access' : 'Restore Access')}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -508,6 +610,142 @@ export const AnalyticsAccessManagement: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* EDIT ACCESS USER MODAL */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[94dvh] overflow-y-auto border border-slate-100">
+            <div className="flex items-center justify-between p-5 sm:p-6 border-b border-slate-100 bg-slate-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-hospital-100 text-hospital-700">
+                  <Pencil className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    Edit {editingUser.role === 'DOCTOR' ? 'Doctor' : editingUser.role === 'FRONT_OFFICE' ? 'Front Office' : 'Package Team'} Account
+                  </h3>
+                  <p className="text-[11px] text-slate-400 font-medium">Update name and access details for {tenantHospitalName}</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setEditingUser(null)} 
+                className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {editError && (
+              <div className="mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{editError}</span>
+              </div>
+            )}
+            
+            <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Full Name / Doctor Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  required
+                  type="text"
+                  value={editFormData.name}
+                  onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-hospital-500 outline-none transition-all"
+                  placeholder={editingUser.role === 'DOCTOR' ? 'Dr. Full Name' : 'Staff Full Name'}
+                  autoFocus
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Editing the name will update this account across the hospital directory, queue, and reports.
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={editFormData.email}
+                  onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-hospital-500 outline-none transition-all"
+                  placeholder="user@hospital.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Mobile Number
+                </label>
+                <input
+                  type="tel"
+                  value={editFormData.mobile}
+                  onChange={(e) => setEditFormData({...editFormData, mobile: e.target.value})}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-hospital-500 outline-none transition-all"
+                  placeholder="10-digit mobile number"
+                />
+              </div>
+
+              {editingUser.role === 'DOCTOR' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Specialization
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.specialization}
+                    onChange={(e) => setEditFormData({...editFormData, specialization: e.target.value})}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-hospital-500 outline-none transition-all"
+                    placeholder="e.g. General Surgeon, Proctologist"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showEditPassword ? "text" : "password"}
+                    value={editFormData.password}
+                    onChange={(e) => setEditFormData({...editFormData, password: e.target.value})}
+                    className="w-full px-3.5 py-2.5 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold font-mono focus:bg-white focus:ring-2 focus:ring-hospital-500 outline-none transition-all"
+                    placeholder="Leave unchanged or enter new password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEditPassword(prev => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                  >
+                    {showEditPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="px-5 py-2.5 text-xs font-extrabold text-white bg-hospital-600 hover:bg-hospital-700 rounded-xl transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+                >
+                  {isSavingEdit && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {isSavingEdit ? 'Saving Changes...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
