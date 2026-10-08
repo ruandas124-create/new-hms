@@ -7,9 +7,8 @@ import {
   Banknote, Trash2, Clock, X, Share2, Stethoscope, LayoutList, Columns, 
   Search, Phone, Filter, Tag, CalendarClock, Ban, ChevronLeft, ChevronRight, 
   LayoutPanelLeft, MessageSquareQuote, FileText, ChevronDown, AlertCircle, 
-  RefreshCcw, Database, Gauge, AlertTriangle, Sparkles, RotateCcw, Loader2
+  RefreshCcw, Database, Gauge, AlertTriangle, RotateCcw, Loader2
 } from 'lucide-react';
-import { generateCounselingStrategy } from '../services/geminiService';
 
 const lostReasons = [
   "Not Accepting for Surgery",
@@ -118,51 +117,8 @@ export const PackageTeamDashboard: React.FC = () => {
   };
 
   const [proposal, setProposal] = useState<Partial<PackageProposal>>(initialProposalState);
-  const [isGeneratingStrategy, setIsGeneratingStrategy] = useState(false);
   const [isSavingProposal, setIsSavingProposal] = useState(false);
   const [isSavingOutcome, setIsSavingOutcome] = useState(false);
-
-  const handleGenerateAIStrategy = async () => {
-    if (!selectedPatient) return;
-    setIsGeneratingStrategy(true);
-    try {
-      const patientForAI: Patient = {
-        ...selectedPatient,
-        packageProposal: {
-          decisionPattern: proposal.decisionPattern || 'Standard',
-          objectionIdentified: proposal.objectionIdentified || '',
-          counselingStrategy: proposal.counselingStrategy || '',
-          followUpDate: proposal.followUpDate || '',
-          proposalCreatedAt: proposal.proposalCreatedAt || new Date().toISOString(),
-          modeOfPayment: proposal.modeOfPayment,
-          packageAmount: proposal.packageAmount,
-          preOpInvestigation: proposal.preOpInvestigation,
-          surgeryMedicines: proposal.surgeryMedicines,
-          equipment: proposal.equipment,
-          icuCharges: proposal.icuCharges,
-          roomType: proposal.roomType,
-          stayDays: proposal.stayDays,
-          postFollowUp: proposal.postFollowUp,
-          postFollowUpCount: proposal.postFollowUpCount,
-          surgeryDate: proposal.surgeryDate,
-          remarks: proposal.remarks,
-          outcome: proposal.outcome,
-          outcomeDate: proposal.outcomeDate,
-          lostReason: proposal.lostReason,
-          proposalStage: proposal.proposalStage
-        }
-      };
-      const strategy = await generateCounselingStrategy(patientForAI);
-      setProposal(prev => ({
-        ...prev,
-        counselingStrategy: strategy
-      }));
-    } catch (err) {
-      console.error("Failed to generate counseling strategy:", err);
-    } finally {
-      setIsGeneratingStrategy(false);
-    }
-  };
 
   useEffect(() => {
     if (selectedPatient?.id) {
@@ -1025,35 +981,6 @@ export const PackageTeamDashboard: React.FC = () => {
                               </select>
                               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                             </div>
-                          </div>
-                          <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-3">
-                            <div className="flex items-center justify-between flex-wrap gap-2">
-                              <label className="text-[10px] font-bold uppercase text-slate-600 tracking-wider flex items-center gap-1.5">
-                                <Sparkles className="w-3.5 h-3.5 text-indigo-600 animate-pulse" /> AI Counseling Strategy
-                              </label>
-                              <button
-                                type="button"
-                                onClick={handleGenerateAIStrategy}
-                                disabled={isGeneratingStrategy}
-                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all active:scale-95 cursor-pointer disabled:cursor-not-allowed"
-                              >
-                                {isGeneratingStrategy ? (
-                                  <>
-                                    <RefreshCcw className="w-3 h-3 animate-spin" /> Generating...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Sparkles className="w-3 h-3" /> Auto-Generate
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                            <textarea 
-                              className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium min-h-[90px] outline-none focus:border-indigo-500 transition-colors"
-                              value={proposal.counselingStrategy || ''} 
-                              onChange={e => setProposal({...proposal, counselingStrategy: e.target.value})} 
-                              placeholder="Click 'Auto-Generate' above to produce a personalized, psychologist-approved sales counseling pitch based on the patient's readiness, pain level, and financial situation..."
-                            />
                           </div>
                           <div>
                             <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1.5 flex items-center gap-1.5">
