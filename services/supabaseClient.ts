@@ -47,48 +47,36 @@ export const resilientFetch: typeof fetch = async (input, init) => {
     ? input
     : (input instanceof URL ? input.toString() : (input as Request).url);
   const isSupabaseRequest = urlString.includes('supabase.co') || urlString.startsWith(supabaseUrl);
-  const canUseProxy = typeof window !== 'undefined' && Boolean(window.location?.origin);
 
-  // If previous requests demonstrated direct connection failure, route directly via proxy
-  if (isSupabaseRequest && canUseProxy && preferProxy) {
-    try {
-      const proxyUrl = buildProxiedUrl(urlString);
-      const res = await fetch(proxyUrl, init);
-      if (res && res.status < 500) {
-        return res;
-      }
-    } catch {
-      // If proxy temporarily hiccups, fall back to direct attempt
-      preferProxy = false;
-    }
-  }
-
+  // Direct fetch first
   try {
     const res = await fetch(input, init);
-    return res;
+    if (res && res.status < 500) {
+      return res;
+    }
   } catch (directErr: any) {
-    // If browser direct fetch failed with TypeError: Failed to fetch (CORS/Adblock/CSP/Network)
-    if (isSupabaseRequest && canUseProxy) {
+    if (isSupabaseRequest && typeof window !== 'undefined') {
       try {
         const proxyUrl = buildProxiedUrl(urlString);
         const proxyRes = await fetch(proxyUrl, init);
-        if (proxyRes) {
-          preferProxy = true; // Remember proxy success for future queries
+        if (proxyRes && (proxyRes.ok || proxyRes.status < 500)) {
           return proxyRes;
         }
       } catch {
-        // Both direct and proxy failed
+        // proxy attempt failed
       }
     }
 
-    // Attempt a quick retry after short backoff for transient glitches
+    // Quick retry after short backoff
     try {
-      await new Promise(resolve => setTimeout(resolve, 600));
+      await new Promise(resolve => setTimeout(resolve, 500));
       return await fetch(input, init);
     } catch {
       throw directErr;
     }
   }
+
+  return await fetch(input, init);
 };
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {

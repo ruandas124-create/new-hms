@@ -70,11 +70,13 @@ export const GiveAccessView: React.FC = () => {
   // Filter users who belong to this hospital's downstream accounts
   const hospitalUsers = useMemo(() => {
     return staffUsers.filter(u => {
-      const matchesTenant = u.hospital_id === tenantHospitalId;
+      const matchesTenant = u.hospital_id === tenantHospitalId ||
+        (u.hospitalName && tenantHospitalName && u.hospitalName.toLowerCase().includes(tenantHospitalName.toLowerCase())) ||
+        (tenantHospitalName && u.name && tenantHospitalName.toLowerCase().includes(u.name.toLowerCase()));
       const isDownstreamRole = u.role === 'DOCTOR' || u.role === 'FRONT_OFFICE' || u.role === 'PACKAGE' || u.role === 'PACKAGE_TEAM';
-      return matchesTenant || (u.grantedBy === 'Analytics Hub' && isDownstreamRole);
+      return (matchesTenant && isDownstreamRole) || (u.grantedBy === 'Analytics Hub' && isDownstreamRole) || (matchesTenant && u.id !== tenantHospitalId);
     });
-  }, [staffUsers, tenantHospitalId]);
+  }, [staffUsers, tenantHospitalId, tenantHospitalName]);
 
   // Existing counts
   const activeDoctors = useMemo(() => {

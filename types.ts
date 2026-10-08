@@ -320,3 +320,27 @@ export const normalizeSource = (source?: string | null): string => {
   }
   return source.trim();
 };
+
+export const normalizeToIsoDate = (dateString: string | undefined | null): string => {
+  if (!dateString) return '';
+  const datePart = dateString.split('T')[0].trim();
+  const parts = datePart.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 2 && parts[2].length === 4) {
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+    if (parts[0].length === 4) {
+      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    }
+  }
+  const slashParts = datePart.split('/');
+  if (slashParts.length === 3) {
+    if (slashParts[0].length === 2 && slashParts[2].length === 4) {
+      return `${slashParts[2]}-${slashParts[1].padStart(2, '0')}-${slashParts[0].padStart(2, '0')}`;
+    }
+    if (slashParts[0].length === 4) {
+      return `${slashParts[0]}-${slashParts[1].padStart(2, '0')}-${slashParts[2].padStart(2, '0')}`;
+    }
+  }
+  return datePart;
+};

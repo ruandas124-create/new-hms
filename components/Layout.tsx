@@ -50,6 +50,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     localStorage.removeItem("hms_hospital_email");
     localStorage.removeItem("hms_hospital_name");
     localStorage.removeItem("hms_hospital_id");
+    localStorage.removeItem("hms_hospital_tenant_id");
+    localStorage.removeItem("hms_hospital_role");
     setCurrentUserRole(null);
   };
 

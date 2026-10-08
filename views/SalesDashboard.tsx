@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
-import { Appointment, Patient, SurgeonCode, Condition, Gender, normalizeSource } from '../types';
+import { Appointment, Patient, SurgeonCode, Condition, Gender, normalizeSource, normalizeToIsoDate } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { 
   TrendingUp, Calendar, Phone, Search, CheckCircle2, 
@@ -570,8 +570,9 @@ export const SalesDashboard: React.FC = () => {
 
       const matchesHospital = selectedHospitalFilter === 'ALL' || booking.assignedHospitalId === selectedHospitalFilter;
       const matchesDoctor = selectedDoctorFilter === 'ALL' || booking.assignedDoctorId === selectedDoctorFilter;
-      const bookingDate = (booking.appointmentDate || '').split('T')[0].trim();
-      const matchesDate = !dateFilter || bookingDate === dateFilter;
+      const bookingDate = normalizeToIsoDate(booking.appointmentDate);
+      const targetDate = normalizeToIsoDate(dateFilter);
+      const matchesDate = !dateFilter || (bookingDate && targetDate ? bookingDate === targetDate : bookingDate === dateFilter);
 
       return matchesSearch && matchesStatus && matchesHospital && matchesDoctor && matchesDate;
     });

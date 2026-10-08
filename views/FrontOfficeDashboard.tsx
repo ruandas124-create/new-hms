@@ -9,7 +9,7 @@ import {
   Facebook, Youtube, Globe, Clock, Users as UsersIcon,
   Share2, History, BadgeInfo, FileText, CreditCard, Clock3, Stethoscope,
   Filter, FileSpreadsheet, Briefcase, AlertTriangle, RefreshCcw, Loader2,
-  ChevronLeft, ChevronRight, RotateCcw
+  ChevronLeft, ChevronRight, RotateCcw, AlertCircle
 } from 'lucide-react';
 
 const getTodayLocalIso = (): string => {
@@ -54,6 +54,30 @@ const formatDate = (dateString: string | undefined | null): string => {
     return datePart;
   }
   return dateString;
+};
+
+const normalizeToIsoDate = (dateString: string | undefined | null): string => {
+  if (!dateString) return '';
+  const datePart = dateString.split('T')[0].trim();
+  const parts = datePart.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 2 && parts[2].length === 4) {
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+    if (parts[0].length === 4) {
+      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    }
+  }
+  const slashParts = datePart.split('/');
+  if (slashParts.length === 3) {
+    if (slashParts[0].length === 2 && slashParts[2].length === 4) {
+      return `${slashParts[2]}-${slashParts[1].padStart(2, '0')}-${slashParts[0].padStart(2, '0')}`;
+    }
+    if (slashParts[0].length === 4) {
+      return `${slashParts[0]}-${slashParts[1].padStart(2, '0')}-${slashParts[2].padStart(2, '0')}`;
+    }
+  }
+  return datePart;
 };
 
 const SOURCE_DISPLAY_MAP: Record<string, string> = {
@@ -123,9 +147,11 @@ const getHistoryStatus = (p: Patient): string => {
 };
 
 const isDoctorAvailableOnDate = (doctor: any, dateString: string | undefined): boolean => {
-  if (!dateString || !doctor || !doctor.id || doctor.role === 'DEACTIVATED_DOCTOR') {
+  if (!doctor || !doctor.id || doctor.role === 'DEACTIVATED_DOCTOR' || doctor.accessStatus === 'Revoked') {
     return false;
   }
+
+  if (!dateString) return true;
 
   const availability = doctor.availability || {};
   const formattedDate = dateString.split('T')[0];
@@ -156,29 +182,23 @@ const isDoctorAvailableOnDate = (doctor: any, dateString: string | undefined): b
   if (Array.isArray(availability.daySchedules) && availability.daySchedules.length > 0) {
     const dayConfig = availability.daySchedules.find((ds: any) => ds.day?.toLowerCase() === weekday.toLowerCase());
     if (dayConfig) {
-      if (dayConfig.status !== 'Available') return false;
-    } else if (Array.isArray(availability.availableDays) && availability.availableDays.length > 0) {
-      if (!availability.availableDays.some((d: string) => d.toLowerCase() === weekday.toLowerCase())) {
-        return false;
-      }
-    } else {
-      return false;
+      return dayConfig.status === 'Available';
     }
-  } else if (Array.isArray(availability.availableDays) && availability.availableDays.length > 0) {
-    if (!availability.availableDays.some((d: string) => d.toLowerCase() === weekday.toLowerCase())) {
-      return false;
-    }
-  } else {
-    return false;
+  }
+
+  // 4. Check availableDays
+  if (Array.isArray(availability.availableDays) && availability.availableDays.length > 0) {
+    return availability.availableDays.some((d: string) => d.toLowerCase() === weekday.toLowerCase());
   }
 
   return true;
 };
 
 const getAvailableSlotsForDoctorAndDate = (doctor: any, dateString: string | undefined): string[] => {
-  if (!dateString || !doctor || !doctor.id) return [];
+  if (!doctor || !doctor.id) return [];
 
-  if (!isDoctorAvailableOnDate(doctor, dateString)) return [];
+  const defaultSlots = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'];
+  if (!dateString) return defaultSlots;
 
   const availability = doctor.availability || {};
   const dateObj = new Date(dateString + 'T00:00:00');
@@ -194,19 +214,15 @@ const getAvailableSlotsForDoctorAndDate = (doctor: any, dateString: string | und
       shiftStart = dayConfig.startTime || shiftStart;
       shiftEnd = dayConfig.endTime || shiftEnd;
       breaksList = dayConfig.breaks || [];
-    } else {
-      return [];
     }
   }
-
-  if (!shiftStart || !shiftEnd) return [];
 
   const [sh, sm] = shiftStart.split(':').map(Number);
   const [eh, em] = shiftEnd.split(':').map(Number);
   const startMinutes = (isNaN(sh) ? 9 : sh) * 60 + (isNaN(sm) ? 0 : sm);
   const endMinutes = (isNaN(eh) ? 17 : eh) * 60 + (isNaN(em) ? 0 : em);
 
-  if (startMinutes >= endMinutes) return [];
+  if (startMinutes >= endMinutes) return defaultSlots;
 
   const slotsList: string[] = [];
   for (let min = startMinutes; min < endMinutes; min += 30) {
@@ -228,13 +244,14 @@ const getAvailableSlotsForDoctorAndDate = (doctor: any, dateString: string | und
     }
   }
 
-  return slotsList;
+  return slotsList.length > 0 ? slotsList : defaultSlots;
 };
 
 export const FrontOfficeDashboard: React.FC = () => {
   const { 
     patients, addPatient, updatePatient, deletePatient, convertAppointment,
-    appointments, addAppointment, updateAppointment, staffUsers, isLoading
+    appointments, addAppointment, updateAppointment, staffUsers, isLoading,
+    currentTenantId, currentUserStaff
   } = useHospital();
   
   const [activeTab, setActiveTab] = useState<'REGISTRATION' | 'APPOINTMENTS' | 'GLOBAL_SEARCH'>('APPOINTMENTS');
@@ -249,7 +266,6 @@ export const FrontOfficeDashboard: React.FC = () => {
   const [opdEndDate, setOpdEndDate] = useState(todayIso);
   const [apptStartDate, setApptStartDate] = useState(todayIso);
   const [apptEndDate, setApptEndDate] = useState(todayIso);
-  const [opdDoctorFilter, setOpdDoctorFilter] = useState('ALL');
   const [isTabLoading, setIsTabLoading] = useState(false);
 
   // Dashboard entry effect: Whenever user enters/re-enters Front Office, default to Scheduled Roster
@@ -326,8 +342,28 @@ export const FrontOfficeDashboard: React.FC = () => {
 
   const [bookingData, setBookingData] = useState<Partial<Appointment> & { sourceOtherDetails?: string }>({
     name: '', source: '', sourceDoctorName: '', sourceOtherDetails: '', condition: undefined, mobile: '',
-    date: '', time: '', bookingType: 'Scheduled'
+    date: getTodayLocalIso(), time: '', bookingType: 'Scheduled'
   });
+
+  const [feedbackBanner, setFeedbackBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [bookingModalError, setBookingModalError] = useState<string | null>(null);
+  const [patientModalError, setPatientModalError] = useState<string | null>(null);
+  const [showAllApptDates, setShowAllApptDates] = useState<boolean>(false);
+
+  const availableHospitals = React.useMemo(() => {
+    const map = new Map<string, string>();
+    (staffUsers || []).forEach(u => {
+      if (u.role === 'HOSPITAL' || u.role === 'ANALYTICS' || u.role === 'ANALYTICS_HUB') {
+        map.set(u.id, u.name);
+      }
+    });
+    (staffUsers || []).forEach(u => {
+      if (u.hospital_id && (u.hospitalName || (u as any).hospital_name)) {
+        map.set(u.hospital_id, u.hospitalName || (u as any).hospital_name);
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [staffUsers]);
 
   const sourceConfig = [
     { name: "Google / YouTube / Website", icon: <Chrome className="w-4 h-4 text-blue-500" /> },
@@ -376,8 +412,17 @@ export const FrontOfficeDashboard: React.FC = () => {
     setEditingId(null); 
     setOriginatingAppointmentId(null); 
     setStep(1); 
+    setPatientModalError(null);
   };
-  const resetBookingForm = () => { setBookingData({ name: '', source: '', sourceDoctorName: '', sourceOtherDetails: '', condition: undefined, mobile: '', date: '', time: '', bookingType: 'Scheduled' }); setEditingId(null); };
+  const resetBookingForm = () => { 
+    setBookingData({ 
+      name: '', source: '', sourceDoctorName: '', sourceOtherDetails: '', condition: undefined, mobile: '', 
+      date: getTodayLocalIso(), time: '', bookingType: 'Scheduled',
+      hospital_id: undefined, hospitalName: undefined, assignedDoctorId: undefined, assignedDoctorName: undefined
+    }); 
+    setEditingId(null); 
+    setBookingModalError(null);
+  };
 
   const handleEdit = (item: any) => {
     if (activeTab === 'APPOINTMENTS') {
@@ -480,8 +525,16 @@ export const FrontOfficeDashboard: React.FC = () => {
       setOpdStartDate(new Date().toISOString().split('T')[0]); 
       setOpdEndDate(new Date().toISOString().split('T')[0]); 
       setActiveTab('REGISTRATION'); 
+      setFeedbackBanner({
+        type: 'success',
+        message: `Patient ${item.name} marked as Arrived (Revisit) successfully!`
+      });
+      setTimeout(() => setFeedbackBanner(null), 6000);
     } catch (error) { 
-      alert("Failed to create revisit record."); 
+      setFeedbackBanner({
+        type: 'error',
+        message: "Failed to create revisit record in database. Please check connection and try again."
+      });
     } finally {
       setIsSubmittingRevisitArrived(false);
     }
@@ -489,7 +542,12 @@ export const FrontOfficeDashboard: React.FC = () => {
 
   const handleRevisitScheduleSubmit = async () => {
     if (!revisitPatient || !revisitScheduleData.date || !revisitScheduleData.time || isSubmittingRevisitSchedule) {
-      if (!revisitScheduleData.date || !revisitScheduleData.time) alert("Please select date and time.");
+      if (!revisitScheduleData.date || !revisitScheduleData.time) {
+        setFeedbackBanner({
+          type: 'error',
+          message: "Please select both date and time to schedule revisit."
+        });
+      }
       return;
     }
     setIsSubmittingRevisitSchedule(true);
@@ -514,8 +572,16 @@ export const FrontOfficeDashboard: React.FC = () => {
       setApptStartDate(revisitScheduleData.date);
       setApptEndDate(revisitScheduleData.date);
       setActiveTab('APPOINTMENTS');
-    } catch (error) {
-      alert("Failed to schedule revisit.");
+      setFeedbackBanner({
+        type: 'success',
+        message: `Revisit scheduled for ${item.name} on ${revisitScheduleData.date} at ${revisitScheduleData.time}!`
+      });
+      setTimeout(() => setFeedbackBanner(null), 6000);
+    } catch (error: any) {
+      setFeedbackBanner({
+        type: 'error',
+        message: `Failed to schedule revisit: ${error?.message || 'Database error'}`
+      });
     } finally {
       setIsSubmittingRevisitSchedule(false);
     }
@@ -524,24 +590,89 @@ export const FrontOfficeDashboard: React.FC = () => {
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmittingBooking) return;
-    const isBasicValid = bookingData.name && bookingData.mobile && bookingData.date && bookingData.time && bookingData.source && bookingData.condition;
-    if (!isBasicValid) return alert("Please provide all details.");
-    
+    setBookingModalError(null);
+
+    if (!bookingData.name?.trim()) {
+      setBookingModalError("Please provide patient full name.");
+      return;
+    }
+    const cleanMobile = (bookingData.mobile || '').replace(/\D/g, '');
+    if (!cleanMobile || cleanMobile.length < 10) {
+      setBookingModalError("Please provide a valid 10-digit mobile number.");
+      return;
+    }
+    if (!bookingData.condition) {
+      setBookingModalError("Please select primary complaint / condition.");
+      return;
+    }
+    if (!bookingData.date) {
+      setBookingModalError("Please select appointment date.");
+      return;
+    }
+    if (!bookingData.time) {
+      setBookingModalError("Please select appointment time slot.");
+      return;
+    }
+    if (!bookingData.source) {
+      setBookingModalError("Please select lead source.");
+      return;
+    }
+
     const displaySource = getSourceDisplay(bookingData.source);
-    if (displaySource === 'Doctor Recommended' && !bookingData.sourceDoctorName) return alert("Please provide the Doctor Name.");
-    if (displaySource === 'Others' && !bookingData.sourceOtherDetails) return alert("Please provide source details.");
+    if (displaySource === 'Doctor Recommended' && !bookingData.sourceDoctorName?.trim()) {
+      setBookingModalError("Please provide the Doctor Name for Doctor Recommended source.");
+      return;
+    }
+    if (displaySource === 'Others' && !bookingData.sourceOtherDetails?.trim()) {
+      setBookingModalError("Please provide source details for Others.");
+      return;
+    }
 
     setIsSubmittingBooking(true);
     try {
-      const payload = { ...bookingData, bookingType: 'Scheduled' }; 
-      if (displaySource === 'Others' && payload.sourceOtherDetails) payload.source = `Other: ${payload.sourceOtherDetails}`;
+      const selectedDoc = (staffUsers || []).find(u => u.id === bookingData.assignedDoctorId);
+      const resolvedHospId = bookingData.hospital_id || selectedDoc?.hospital_id || currentTenantId || currentUserStaff?.hospital_id || undefined;
+      const resolvedHospName = bookingData.hospitalName || selectedDoc?.hospitalName || (selectedDoc as any)?.hospital_name || currentUserStaff?.hospitalName || undefined;
+
+      const payload = { 
+        ...bookingData, 
+        mobile: cleanMobile,
+        hospital_id: resolvedHospId,
+        hospitalName: resolvedHospName,
+        assignedDoctorId: bookingData.assignedDoctorId || undefined,
+        assignedDoctorName: selectedDoc ? selectedDoc.name : (bookingData.assignedDoctorName || 'General OPD'),
+        bookingType: 'Scheduled' as const,
+        status: 'Scheduled'
+      }; 
+
+      if (displaySource === 'Others' && payload.sourceOtherDetails) {
+        payload.source = `Other: ${payload.sourceOtherDetails}`;
+      }
       
-      if (editingId && activeTab === 'APPOINTMENTS') await updateAppointment({ ...payload, id: editingId } as Appointment);
-      else await addAppointment(payload as any);
+      if (editingId && activeTab === 'APPOINTMENTS') {
+        await updateAppointment({ ...payload, id: editingId } as Appointment);
+      } else {
+        await addAppointment(payload as any);
+      }
+
+      const apptDateIso = normalizeToIsoDate(payload.date);
+      if (apptDateIso) {
+        setApptStartDate(apptDateIso);
+        setApptEndDate(apptDateIso);
+      }
+
       setShowBookingForm(false);
       resetBookingForm();
-    } catch (err) {
-      alert("Failed to save appointment. Please try again.");
+
+      setFeedbackBanner({
+        type: 'success',
+        message: `Appointment successfully ${editingId ? 'updated' : 'scheduled'} for ${payload.name} on ${formatDate(payload.date)} at ${payload.time}!`
+      });
+      setTimeout(() => setFeedbackBanner(null), 6000);
+    } catch (err: any) {
+      console.error("Booking submission error:", err);
+      const errMsg = err?.message || err?.error_description || (typeof err === 'string' ? err : 'Failed to save appointment. Please check connection and try again.');
+      setBookingModalError(`Booking Failed: ${errMsg}`);
     } finally {
       setIsSubmittingBooking(false);
     }
@@ -552,8 +683,16 @@ export const FrontOfficeDashboard: React.FC = () => {
     setUpdatingApptTypeId(appt.id);
     try {
       await updateAppointment({ ...appt, bookingType: newType }); 
+      setFeedbackBanner({
+        type: 'success',
+        message: `Updated appointment type to ${newType}.`
+      });
+      setTimeout(() => setFeedbackBanner(null), 4000);
     } catch (err) {
-      alert("Failed to update booking status.");
+      setFeedbackBanner({
+        type: 'error',
+        message: "Failed to update booking status in database."
+      });
     } finally {
       setUpdatingApptTypeId(null);
     }
@@ -562,21 +701,39 @@ export const FrontOfficeDashboard: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmittingPatient) return;
+    setPatientModalError(null);
+
     if (step === 1 && !editingId) {
-      if (!formData.name || formData.age == null || !formData.gender || !formData.mobile || !formData.condition) return alert("Please complete all mandatory fields.");
+      if (!formData.name || formData.age == null || !formData.gender || !formData.mobile || !formData.condition) {
+        setPatientModalError("Please complete all mandatory fields: Full Name, Age, Gender, Mobile Number, Condition.");
+        return;
+      }
       
       const displaySource = getSourceDisplay(formData.source);
-      if (displaySource === 'Doctor Recommended' && !formData.sourceDoctorName) return alert("Please provide the Doctor Name.");
-      if (displaySource === 'Others' && !formData.sourceOtherDetails) return alert("Please provide details for the source.");
-      if (formData.hasInsurance === 'Yes' && !formData.insuranceName) return alert("Please provide the Insurance Name.");
+      if (displaySource === 'Doctor Recommended' && !formData.sourceDoctorName) {
+        setPatientModalError("Please provide the Doctor Name for Doctor Recommended source.");
+        return;
+      }
+      if (displaySource === 'Others' && !formData.sourceOtherDetails) {
+        setPatientModalError("Please provide details for the source.");
+        return;
+      }
+      if (formData.hasInsurance === 'Yes' && !formData.insuranceName) {
+        setPatientModalError("Please provide the Insurance Provider Name.");
+        return;
+      }
       
       const isRevisit = patients.some(p => p.mobile === formData.mobile);
       setFormData(prev => ({ ...prev, visit_type: isRevisit ? 'Revisit' : 'New' }));
       
-      setStep(2); return;
+      setStep(2); 
+      return;
     }
     
-    if (!formData.id) return alert("Case Number is required.");
+    if (!formData.id) {
+      setPatientModalError("File Number / Case Number is required.");
+      return;
+    }
     const dataToSave = { ...formData };
     
     const displaySource = getSourceDisplay(dataToSave.source);
@@ -592,41 +749,62 @@ export const FrontOfficeDashboard: React.FC = () => {
       else { 
         if (patients.some(p => p.id === formData.id)) {
           setIsSubmittingPatient(false);
-          return alert("File Number already exists."); 
+          setPatientModalError(`File Number ${formData.id} already exists. Please choose a different File Number.`);
+          return;
         }
         if (originatingAppointmentId) {
           await convertAppointment(originatingAppointmentId, dataToSave as any); 
         }
         else await addPatient(dataToSave as any); 
       }
+
+      const regDateIso = normalizeToIsoDate(dataToSave.entry_date);
+      if (regDateIso) {
+        setOpdStartDate(regDateIso);
+        setOpdEndDate(regDateIso);
+      }
+
       setShowForm(false); 
       resetForm();
-    } catch (err) {
-      alert("Failed to save patient registration. Please try again.");
+      setFeedbackBanner({
+        type: 'success',
+        message: `Patient ${dataToSave.name} (${dataToSave.id}) successfully ${editingId ? 'updated' : 'registered in OPD'}!`
+      });
+      setTimeout(() => setFeedbackBanner(null), 6000);
+    } catch (err: any) {
+      const errMsg = err?.message || 'Failed to save patient registration. Please try again.';
+      setPatientModalError(errMsg);
     } finally {
       setIsSubmittingPatient(false);
     }
   };
 
   const filteredPatients = patients.filter(p => {
-    if (p.status !== 'Arrived') return false;
-    const pDate = (p.entry_date || '').split('T')[0];
-    if (opdStartDate && pDate < opdStartDate) return false;
-    if (opdEndDate && pDate > opdEndDate) return false;
-    if (opdDoctorFilter !== 'ALL' && p.doctorAssessment?.assignedDoctorId !== opdDoctorFilter) return false;
+    const pDate = normalizeToIsoDate(p.entry_date);
+    if (opdStartDate && pDate && pDate < opdStartDate) return false;
+    if (opdEndDate && pDate && pDate > opdEndDate) return false;
     const sTerm = searchTerm.toLowerCase().trim(); 
     return !sTerm || 
       p.name.toLowerCase().includes(sTerm) || 
       p.id.toLowerCase().includes(sTerm) || 
       p.mobile.includes(sTerm) ||
+      (p.condition && p.condition.toLowerCase().includes(sTerm)) ||
+      (p.source && p.source.toLowerCase().includes(sTerm)) ||
+      (p.status && p.status.toLowerCase().includes(sTerm)) ||
       (p.doctorAssessment?.assignedDoctorName && p.doctorAssessment.assignedDoctorName.toLowerCase().includes(sTerm));
-  }).sort((a, b) => (b.entry_date || '').localeCompare(a.entry_date || ''));
+  }).sort((a, b) => {
+    const keyA = (normalizeToIsoDate(a.entry_date) || '') + (a.arrivalTime || '');
+    const keyB = (normalizeToIsoDate(b.entry_date) || '') + (b.arrivalTime || '');
+    return keyB.localeCompare(keyA);
+  });
 
   const filteredAppointments = appointments.filter(a => { 
     const sTerm = searchTerm.toLowerCase().trim(); 
-    const aDate = (a.date || '').split('T')[0];
-    if (apptStartDate && aDate < apptStartDate) return false;
-    if (apptEndDate && aDate > apptEndDate) return false;
+    const aDate = normalizeToIsoDate(a.date);
+    if (!showAllApptDates && !sTerm) {
+      if (apptStartDate && aDate && aDate < apptStartDate) return false;
+      if (apptEndDate && aDate && aDate > apptEndDate) return false;
+    }
     return !sTerm || 
       a.name.toLowerCase().includes(sTerm) || 
       a.mobile.includes(sTerm) ||
@@ -636,13 +814,17 @@ export const FrontOfficeDashboard: React.FC = () => {
       (a.status && a.status.toLowerCase().includes(sTerm)) ||
       (a.assignedDoctorName && a.assignedDoctorName.toLowerCase().includes(sTerm)) ||
       (a.hospitalName && a.hospitalName.toLowerCase().includes(sTerm)); 
-  }).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  }).sort((a, b) => {
+    const keyA = (normalizeToIsoDate(a.date) || '') + (a.time || '');
+    const keyB = (normalizeToIsoDate(b.date) || '') + (b.time || '');
+    return showAllApptDates ? keyB.localeCompare(keyA) : keyA.localeCompare(keyB);
+  });
 
   const combinedHistoryData = [
     ...patients.map(p => ({ 
       ...p, 
       recordType: 'Registration' as const, 
-      displayDate: p.updated_at || p.registeredAt, 
+      displayDate: p.updated_at || p.registeredAt || (normalizeToIsoDate(p.entry_date) + 'T' + (p.arrivalTime || '00:00') + ':00'), 
       displayEntryDate: p.entry_date, 
       displayStatus: getHistoryStatus(p) 
     })),
@@ -657,7 +839,7 @@ export const FrontOfficeDashboard: React.FC = () => {
       updated_at: a.createdAt,
       entry_date: a.date, 
       recordType: 'Appointment' as const, 
-      displayDate: a.date + 'T' + (a.time || '00:00') + ':00', 
+      displayDate: (normalizeToIsoDate(a.date) || a.date) + 'T' + (a.time ? a.time.substring(0, 5) : '00:00') + ':00', 
       displayEntryDate: a.date, 
       displayStatus: a.status || (a.visit_type === 'Revisit' ? 'Revisit' : a.bookingType || 'Scheduled'),
       age: undefined as any,
@@ -692,9 +874,9 @@ export const FrontOfficeDashboard: React.FC = () => {
     if (activeTab === 'GLOBAL_SEARCH') {
       if (historyFilters.type !== 'ALL' && item.recordType !== historyFilters.type) return false;
       if (historyFilters.startDate || historyFilters.endDate) { 
-        const itemDate = item.displayEntryDate || ''; 
-        if (historyFilters.startDate && itemDate < historyFilters.startDate) return false; 
-        if (historyFilters.endDate && itemDate > historyFilters.endDate) return false; 
+        const itemDate = normalizeToIsoDate(item.displayEntryDate); 
+        if (historyFilters.startDate && itemDate && itemDate < historyFilters.startDate) return false; 
+        if (historyFilters.endDate && itemDate && itemDate > historyFilters.endDate) return false; 
       }
       if (historyFilters.source && getSourceDisplay(item.source) !== historyFilters.source) return false;
       if (historyFilters.visitType !== 'ALL' && calculateVisitType(item, patients) !== historyFilters.visitType) return false;
@@ -706,7 +888,11 @@ export const FrontOfficeDashboard: React.FC = () => {
       }
     }
     return true;
-  }).sort((a, b) => new Date(b.displayDate).getTime() - new Date(a.displayDate).getTime());
+  }).sort((a, b) => {
+    const timeA = new Date(a.displayDate).getTime() || 0;
+    const timeB = new Date(b.displayDate).getTime() || 0;
+    return timeB - timeA;
+  });
 
   const handleExportFilteredCSV = () => {
     const headers = ['Type', 'File ID', 'Date', 'Name', 'Age', 'Gender', 'Mobile', 'Source', 'Condition', 'Visit Type', 'Status'];
@@ -726,9 +912,8 @@ export const FrontOfficeDashboard: React.FC = () => {
   const currentActiveDate = activeTab === 'REGISTRATION' ? opdStartDate : activeTab === 'APPOINTMENTS' ? apptStartDate : todayIso;
   const filterInputClasses = "h-10 w-full bg-slate-50 border border-slate-100 rounded-xl px-3 text-[10px] font-bold focus:ring-2 focus:ring-hospital-500 outline-none transition-all appearance-none";
 
-  const todayRegCount = patients.filter(p => (p.entry_date || '').split('T')[0] === todayIso).length;
-  const arrivedCount = patients.filter(p => p.status === 'Arrived' && (p.entry_date || '').split('T')[0] === todayIso).length;
-  const todayApptCount = appointments.filter(a => (a.date || '').split('T')[0] === todayIso).length;
+  const todayRegCount = patients.filter(p => normalizeToIsoDate(p.entry_date) === todayIso).length;
+  const todayApptCount = appointments.filter(a => normalizeToIsoDate(a.date) === todayIso).length;
   const totalCount = patients.length;
 
   return (
@@ -742,8 +927,33 @@ export const FrontOfficeDashboard: React.FC = () => {
         <ExportButtons patients={activeTab === 'GLOBAL_SEARCH' ? (combinedHistoryData as any) : patients} role="front_office" selectedPatient={null} />
       </div>
 
+      {/* Global Notification Feedback Banner */}
+      {feedbackBanner && (
+        <div className={`p-4 rounded-2xl border flex items-center justify-between gap-3 shadow-xs animate-in fade-in duration-300 ${
+          feedbackBanner.type === 'success' 
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+            : 'bg-rose-50 border-rose-200 text-rose-800'
+        }`}>
+          <div className="flex items-center gap-3">
+            {feedbackBanner.type === 'success' ? (
+              <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            )}
+            <span className="text-xs sm:text-sm font-bold">{feedbackBanner.message}</span>
+          </div>
+          <button 
+            type="button"
+            onClick={() => setFeedbackBanner(null)} 
+            className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* KPI Overview Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Today's OPD</span>
@@ -752,17 +962,6 @@ export const FrontOfficeDashboard: React.FC = () => {
           </div>
           <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
             <User className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Arrived / Consultation</span>
-            <div className="text-xl sm:text-2xl font-black text-emerald-600 mt-1 font-mono tabular-nums">{arrivedCount}</div>
-            <span className="text-[10px] text-slate-400 font-medium">In Clinical Queue</span>
-          </div>
-          <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <Clock className="w-5 h-5" />
           </div>
         </div>
 
@@ -865,12 +1064,31 @@ export const FrontOfficeDashboard: React.FC = () => {
               {currentActiveDate !== todayIso && (
                 <button
                   type="button"
-                  onClick={() => handleSingleDateChange(todayIso)}
+                  onClick={() => {
+                    setShowAllApptDates(false);
+                    handleSingleDateChange(todayIso);
+                  }}
                   className="px-3 py-2 bg-hospital-600 hover:bg-hospital-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 active:scale-95 cursor-pointer shrink-0"
                   title="Jump to Today"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Today</span>
+                </button>
+              )}
+
+              {activeTab === 'APPOINTMENTS' && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllApptDates(!showAllApptDates)}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                    showAllApptDates 
+                      ? 'bg-emerald-600 text-white shadow-sm' 
+                      : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                  }`}
+                  title={showAllApptDates ? "Click to view only selected date" : "Click to view all scheduled appointments across all dates"}
+                >
+                  <CalendarCheck className="w-3.5 h-3.5" />
+                  <span>{showAllApptDates ? 'Showing All Dates' : 'View All Dates'}</span>
                 </button>
               )}
             </div>
@@ -893,7 +1111,7 @@ export const FrontOfficeDashboard: React.FC = () => {
             {/* Unified Filter Button */}
             {(() => {
               const activeCount = activeTab === 'REGISTRATION'
-                ? (opdDoctorFilter !== 'ALL' ? 1 : 0) + (opdStartDate !== todayIso || opdEndDate !== todayIso ? 1 : 0)
+                ? (opdStartDate !== todayIso || opdEndDate !== todayIso ? 1 : 0)
                 : activeTab === 'APPOINTMENTS'
                 ? (apptStartDate !== todayIso || apptEndDate !== todayIso ? 1 : 0)
                 : (historyFilters.startDate ? 1 : 0) + (historyFilters.endDate ? 1 : 0) + (historyFilters.source ? 1 : 0) + (historyFilters.visitType !== 'ALL' ? 1 : 0) + (historyFilters.status ? 1 : 0) + (historyFilters.condition ? 1 : 0) + (historyFilters.doctor !== 'ALL' ? 1 : 0) + (historyFilters.type !== 'ALL' ? 1 : 0);
@@ -940,7 +1158,7 @@ export const FrontOfficeDashboard: React.FC = () => {
         {showFilters && (
           <div className="pt-4 border-t border-slate-100 animate-in slide-in-from-top-2 duration-200 space-y-3">
             {activeTab === 'REGISTRATION' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
                 <div>
                   <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">From Date</label>
                   <input 
@@ -959,26 +1177,12 @@ export const FrontOfficeDashboard: React.FC = () => {
                     onChange={e => setOpdEndDate(e.target.value)} 
                   />
                 </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">Consulting Doctor</label>
-                  <select 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white cursor-pointer"
-                    value={opdDoctorFilter} 
-                    onChange={e => setOpdDoctorFilter(e.target.value)}
-                  >
-                    <option value="ALL">All Doctors</option>
-                    {staffUsers?.filter(u => u.role === 'DOCTOR').map(doc => (
-                      <option key={doc.id} value={doc.id}>{doc.name}</option>
-                    ))}
-                  </select>
-                </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
                       setOpdStartDate(todayIso);
                       setOpdEndDate(todayIso);
-                      setOpdDoctorFilter('ALL');
                     }}
                     className="w-full py-2 px-3 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all cursor-pointer"
                   >
@@ -1120,10 +1324,30 @@ export const FrontOfficeDashboard: React.FC = () => {
               ) : displayData.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="p-12 text-center text-slate-400">
-                    <div className="flex flex-col items-center justify-center gap-2">
+                    <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
                       <Calendar className="w-8 h-8 text-slate-300" />
-                      <span className="text-xs font-extrabold text-slate-700">No records found for {formatReadableDate(currentActiveDate || todayIso)}</span>
-                      <span className="text-[11px] text-slate-400">Try choosing a different date or clearing your search filter.</span>
+                      <span className="text-xs font-extrabold text-slate-700">
+                        {activeTab === 'GLOBAL_SEARCH' 
+                          ? 'No records match your search or filter criteria' 
+                          : activeTab === 'APPOINTMENTS' && !showAllApptDates
+                          ? `No scheduled appointments for ${formatReadableDate(currentActiveDate || todayIso)}`
+                          : `No records found for ${formatReadableDate(currentActiveDate || todayIso)}`}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        {activeTab === 'APPOINTMENTS' && appointments.length > 0 && !showAllApptDates
+                          ? `You have ${appointments.length} scheduled appointment(s) on other dates.`
+                          : 'Try choosing a different date or booking a new appointment.'}
+                      </span>
+                      {activeTab === 'APPOINTMENTS' && appointments.length > 0 && !showAllApptDates && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllApptDates(true)}
+                          className="mt-2 px-4 py-2 bg-hospital-600 hover:bg-hospital-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <CalendarCheck className="w-4 h-4" />
+                          <span>View All {appointments.length} Appointments</span>
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -1269,103 +1493,131 @@ export const FrontOfficeDashboard: React.FC = () => {
                  <X className="w-6 h-6" />
                </button>
                <h2 className="text-xl font-black text-slate-850 mb-6 uppercase tracking-tight md:hidden">{editingId ? 'Edit Appointment' : 'Book Appointment'}</h2>
+               {bookingModalError && (
+                 <div className="mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-2xl flex items-center justify-between gap-3 animate-in fade-in">
+                   <div className="flex items-center gap-2">
+                     <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                     <span>{bookingModalError}</span>
+                   </div>
+                   <button type="button" onClick={() => setBookingModalError(null)} className="text-rose-400 hover:text-rose-600 cursor-pointer">
+                     <X className="w-4 h-4" />
+                   </button>
+                 </div>
+               )}
                <form onSubmit={handleBookingSubmit} className="space-y-6">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="md:col-span-2">
-                       <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Full Name</label>
+                       <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Full Name <span className="text-rose-500">*</span></label>
                        <input required className="w-full text-2xl font-black border-b-2 border-slate-100 p-2 outline-none focus:border-hospital-500 placeholder-slate-200" value={bookingData.name || ''} onChange={e => setBookingData({...bookingData, name: e.target.value})} placeholder="Patient Name" />
                     </div>
-                    <div><label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Mobile Number</label><input required type="tel" className="w-full text-xl font-mono border-b-2 border-slate-100 p-2 outline-none focus:border-hospital-500" value={bookingData.mobile || ''} onChange={e => setBookingData({...bookingData, mobile: e.target.value})} placeholder="9988776655" /></div>
-                    <div><label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Primary Complaint</label><select required className="w-full border-b-2 border-slate-100 p-2 outline-none focus:border-hospital-500 text-sm font-bold bg-white" value={bookingData.condition || ''} onChange={e => setBookingData({...bookingData, condition: e.target.value as Condition})}><option value="">Select Condition</option>{Object.values(Condition).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-                    <div><label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Appt Date</label><input required type="date" className="w-full border-b-2 border-slate-100 p-2 text-sm font-bold" value={bookingData.date || ''} onChange={e => setBookingData({...bookingData, date: e.target.value, time: ''})} /></div>
-                    <div><label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Preferred Doctor</label>
-                       <select 
-                         required 
-                         className="w-full border-b-2 border-slate-105 p-2 bg-white text-sm font-bold" 
-                         value={bookingData.assignedDoctorId || ''} 
-                         onChange={e => {
-                           const docId = e.target.value;
-                           const docObj = staffUsers?.find(u => u.id === docId);
-                           setBookingData({
-                             ...bookingData,
-                             assignedDoctorId: docId || undefined,
-                             assignedDoctorName: docObj ? docObj.name : undefined,
-                             time: ''
-                           });
-                         }}
-                       >
-                         <option value="">Select Doctor...</option>
-                            {staffUsers?.filter(u => u.role === 'DOCTOR').map(d => {
-                              const isAvailable = isDoctorAvailableOnDate(d, (typeof bookingData !== 'undefined' ? bookingData.date : undefined) || formData.entry_date);
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Mobile Number <span className="text-rose-500">*</span></label>
+                      <input required type="tel" maxLength={15} className="w-full text-xl font-mono border-b-2 border-slate-100 p-2 outline-none focus:border-hospital-500" value={bookingData.mobile || ''} onChange={e => setBookingData({...bookingData, mobile: e.target.value})} placeholder="9988776655" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Primary Complaint <span className="text-rose-500">*</span></label>
+                      <select required className="w-full border-b-2 border-slate-100 p-2 outline-none focus:border-hospital-500 text-sm font-bold bg-white cursor-pointer" value={bookingData.condition || ''} onChange={e => setBookingData({...bookingData, condition: e.target.value as Condition})}>
+                        <option value="">Select Condition</option>
+                        {Object.values(Condition).map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Appt Date <span className="text-rose-500">*</span></label>
+                      <input required type="date" className="w-full border-b-2 border-slate-100 p-2 text-sm font-bold cursor-pointer" value={bookingData.date || ''} onChange={e => setBookingData({...bookingData, date: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Preferred Doctor</label>
+                      <select 
+                        className="w-full border-b-2 border-slate-100 p-2 bg-white text-sm font-bold outline-none focus:border-hospital-500 cursor-pointer" 
+                        value={bookingData.assignedDoctorId || ''} 
+                        onChange={e => {
+                          const docId = e.target.value;
+                          const docObj = staffUsers?.find(u => u.id === docId);
+                          setBookingData({
+                            ...bookingData,
+                            assignedDoctorId: docId || undefined,
+                            assignedDoctorName: docObj ? docObj.name : (docId ? undefined : 'General OPD')
+                          });
+                        }}
+                      >
+                        <option value="">General OPD / Any Available Doctor</option>
+                        {staffUsers?.filter(u => u.role === 'DOCTOR' && u.accessStatus !== 'Revoked').map(d => {
+                          const isAvailable = isDoctorAvailableOnDate(d, bookingData.date);
+                          return (
+                            <option key={d.id} value={d.id}>
+                              {d.name} {bookingData.date && !isAvailable ? '(Unavailable on Date)' : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Appt Time Slot <span className="text-rose-500">*</span></label>
+                      {(() => {
+                        const selectedDoctor = staffUsers?.find(u => u.id === bookingData.assignedDoctorId);
+                        const slots = getAvailableSlotsForDoctorAndDate(selectedDoctor, bookingData.date);
+                        const effectiveSlots = slots && slots.length > 0 
+                          ? slots 
+                          : ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'];
+                        const bookedSlots = appointments
+                          ?.filter(a => a.assignedDoctorId && bookingData.assignedDoctorId && a.assignedDoctorId === bookingData.assignedDoctorId && a.date === bookingData.date && a.id !== editingId && a.status !== 'Cancelled' && a.status !== 'Junk')
+                          ?.map(a => a.time ? a.time.substring(0, 5) : '') || [];
+
+                        return (
+                          <select
+                            required
+                            className="w-full border-b-2 border-slate-100 p-2 bg-white text-sm font-bold outline-none focus:border-hospital-500 cursor-pointer"
+                            value={bookingData.time || ''}
+                            onChange={e => setBookingData({...bookingData, time: e.target.value})}
+                          >
+                            <option value="">Select Time Slot...</option>
+                            {effectiveSlots.map(s => {
+                              const isBooked = bookedSlots.includes(s);
                               return (
-                                <option key={d.id} value={d.id} disabled={!isAvailable}>
-                                  {d.name} {!isAvailable ? '(Unavailable Today)' : ''}
+                                <option key={s} value={s} disabled={isBooked}>
+                                  {s} {isBooked ? '(Booked)' : ''}
                                 </option>
                               );
-                            })}</select>
-                     </div>
-                     <div>
-                       <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Appt Time</label>
-                       {(() => {
-                         const selectedDoctor = staffUsers?.find(u => u.id === bookingData.assignedDoctorId);
-                         const slots = getAvailableSlotsForDoctorAndDate(selectedDoctor, bookingData.date);
-                         const bookedSlots = appointments
-                           ?.filter(a => a.assignedDoctorId === bookingData.assignedDoctorId && a.date === bookingData.date && a.id !== editingId && a.status !== 'Cancelled' && a.status !== 'Junk')
-                           ?.map(a => a.time ? a.time.substring(0, 5) : '') || [];
-
-                         if (!bookingData.assignedDoctorId) {
-                           return (
-                             <select disabled className="w-full border-b-2 border-slate-100 p-2 bg-slate-50 text-sm font-bold text-slate-400 cursor-not-allowed">
-                               <option value="">Select Preferred Doctor first...</option>
-                             </select>
-                           );
-                         }
-
-                         if (!bookingData.date) {
-                           return (
-                             <select disabled className="w-full border-b-2 border-slate-100 p-2 bg-slate-50 text-sm font-bold text-slate-400 cursor-not-allowed">
-                               <option value="">Select Appt Date first...</option>
-                             </select>
-                           );
-                         }
-
-                         if (slots.length === 0) {
-                           return (
-                             <select disabled className="w-full border-b-2 border-slate-100 p-2 bg-slate-50 text-sm font-bold text-slate-400 cursor-not-allowed">
-                               <option value="">No available time slots for this doctor on the selected date.</option>
-                             </select>
-                           );
-                         }
-
-                         return (
-                           <select
-                             required
-                             className="w-full border-b-2 border-slate-105 p-2 bg-white text-sm font-bold outline-none focus:border-hospital-500 cursor-pointer"
-                             value={bookingData.time || ''}
-                             onChange={e => setBookingData({...bookingData, time: e.target.value})}
-                           >
-                             <option value="">Select Time Slot...</option>
-                             {slots.map(s => {
-                               const isBooked = bookedSlots.includes(s);
-                               return (
-                                 <option key={s} value={s} disabled={isBooked}>
-                                   {s} {isBooked ? '(Booked)' : ''}
-                                 </option>
-                               );
-                             })}
-                           </select>
-                         );
-                       })()}</div>
-                    <div><label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Lead Source</label><select required className="w-full border-b-2 border-slate-100 p-2 text-sm font-bold bg-white" value={getSourceDisplay(bookingData.source) || ''} onChange={e => setBookingData({...bookingData, source: e.target.value})}><option value="">Select Source</option>{sourceConfig.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}</select></div>
+                            })}
+                          </select>
+                        );
+                      })()}
+                    </div>
+                    {availableHospitals.length > 1 && (
+                      <div>
+                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Hospital</label>
+                        <select
+                          className="w-full border-b-2 border-slate-100 p-2 bg-white text-sm font-bold outline-none focus:border-hospital-500 cursor-pointer"
+                          value={bookingData.hospital_id || currentTenantId || ''}
+                          onChange={e => {
+                            const hId = e.target.value;
+                            const hName = availableHospitals.find(h => h.id === hId)?.name;
+                            setBookingData({ ...bookingData, hospital_id: hId, hospitalName: hName });
+                          }}
+                        >
+                          <option value="">Current Hospital</option>
+                          {availableHospitals.map(h => (
+                            <option key={h.id} value={h.id}>{h.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Lead Source <span className="text-rose-500">*</span></label>
+                      <select required className="w-full border-b-2 border-slate-100 p-2 text-sm font-bold bg-white cursor-pointer" value={getSourceDisplay(bookingData.source) || ''} onChange={e => setBookingData({...bookingData, source: e.target.value})}>
+                        <option value="">Select Source</option>
+                        {sourceConfig.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                      </select>
+                    </div>
                     {getSourceDisplay(bookingData.source) === 'Doctor Recommended' && (
                       <div className="md:col-span-2 animate-in slide-in-from-top-2 duration-300">
-                        <label className="block text-[10px] font-black uppercase text-hospital-600 mb-2 tracking-widest">Doctor Name</label>
+                        <label className="block text-[10px] font-black uppercase text-hospital-600 mb-2 tracking-widest">Doctor Name <span className="text-rose-500">*</span></label>
                         <input required className="w-full text-xl font-bold border-b-2 border-hospital-100 p-2 outline-none focus:border-hospital-500 placeholder-slate-200" value={bookingData.sourceDoctorName || ''} onChange={e => setBookingData({...bookingData, sourceDoctorName: e.target.value})} placeholder="Dr. Enter Name" />
                       </div>
                     )}
                     {getSourceDisplay(bookingData.source) === 'Others' && (
                       <div className="md:col-span-2 animate-in slide-in-from-top-2 duration-300">
-                        <label className="block text-[10px] font-black uppercase text-hospital-600 mb-2 tracking-widest">Source Name / Details</label>
+                        <label className="block text-[10px] font-black uppercase text-hospital-600 mb-2 tracking-widest">Source Name / Details <span className="text-rose-500">*</span></label>
                         <input required className="w-full text-xl font-bold border-b-2 border-hospital-100 p-2 outline-none focus:border-hospital-500 placeholder-slate-200" value={bookingData.sourceOtherDetails || ''} onChange={e => setBookingData({...bookingData, sourceOtherDetails: e.target.value})} placeholder="Enter specific source name or details..." />
                       </div>
                     )}
@@ -1378,7 +1630,7 @@ export const FrontOfficeDashboard: React.FC = () => {
                    {isSubmittingBooking ? (
                      <>
                        <Loader2 className="w-4 h-4 animate-spin" />
-                       <span>{editingId ? 'Updating Appointment...' : 'Creating Appointment...'}</span>
+                       <span>{editingId ? 'Updating Appointment...' : 'Saving Appointment to Supabase...'}</span>
                      </>
                    ) : (
                      <span>{editingId ? 'Update Appointment' : 'Create Appointment'}</span>
@@ -1403,6 +1655,17 @@ export const FrontOfficeDashboard: React.FC = () => {
                  <button onClick={() => setShowForm(false)} className="lg:hidden p-2 text-slate-400"><X className="w-6 h-6" /></button>
               </header>
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+                {patientModalError && (
+                  <div className="max-w-3xl mx-auto mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-2xl flex items-center justify-between gap-3 animate-in fade-in">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                      <span>{patientModalError}</span>
+                    </div>
+                    <button type="button" onClick={() => setPatientModalError(null)} className="text-rose-400 hover:text-rose-600 cursor-pointer">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
                 <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-12">
                   {step === 1 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-8">
@@ -1449,11 +1712,11 @@ export const FrontOfficeDashboard: React.FC = () => {
                            }}
                          >
                            <option value="">Select Doctor...</option>
-                            {staffUsers?.filter(u => u.role === 'DOCTOR').map(d => {
-                              const isAvailable = isDoctorAvailableOnDate(d, (typeof bookingData !== 'undefined' ? bookingData.date : undefined) || formData.entry_date);
+                            {staffUsers?.filter(u => u.role === 'DOCTOR' && u.accessStatus !== 'Revoked').map(d => {
+                              const isAvailable = isDoctorAvailableOnDate(d, bookingData.date);
                               return (
-                                <option key={d.id} value={d.id} disabled={!isAvailable}>
-                                  {d.name} {!isAvailable ? '(Unavailable Today)' : ''}
+                                <option key={d.id} value={d.id}>
+                                  {d.name} {bookingData.date && !isAvailable ? '(Unavailable on Date)' : ''}
                                 </option>
                               );
                             })}</select>
@@ -1539,8 +1802,16 @@ export const FrontOfficeDashboard: React.FC = () => {
                     try {
                       await deletePatient(deleteConfirmId); 
                       setDeleteConfirmId(null); 
+                      setFeedbackBanner({
+                        type: 'success',
+                        message: "Record successfully removed."
+                      });
+                      setTimeout(() => setFeedbackBanner(null), 5000);
                     } catch (err) {
-                      alert("Failed to delete patient.");
+                      setFeedbackBanner({
+                        type: 'error',
+                        message: "Failed to delete record from database."
+                      });
                     } finally {
                       setIsDeletingPatient(false);
                     }

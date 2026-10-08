@@ -572,7 +572,17 @@ export const DoctorDashboard: React.FC = () => {
 
   const doctorAppointments = useMemo(() => {
     return (appointments || []).filter(a => {
-      const matchDoc = a.assignedDoctorId === loggedInDoctor.id || a.assignedDoctorName === loggedInDoctor.name;
+      const docId = loggedInDoctor.id;
+      const docName = loggedInDoctor.name ? loggedInDoctor.name.toLowerCase().trim() : '';
+      const docNameWithoutPrefix = docName.replace(/^dr\.?\s*/i, '');
+      const aDocName = (a.assignedDoctorName || '').toLowerCase().trim();
+      const aDocNameWithoutPrefix = aDocName.replace(/^dr\.?\s*/i, '');
+
+      const matchDoc = !!(
+        (docId && (a.assignedDoctorId === docId || a.doctor_id === docId)) ||
+        (docName && aDocName && (aDocName === docName || aDocNameWithoutPrefix === docNameWithoutPrefix))
+      );
+
       if (loggedInDoctor.id === 'static_doctor') {
         return matchDoc || !a.assignedDoctorId;
       }

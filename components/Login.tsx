@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useHospital } from "../context/HospitalContext";
+import { supabase } from "../services/supabaseClient";
 import { HOSPITAL_LOGO_URL } from "../types";
 import { 
   Mail, Lock, Loader2, ChevronRight, ShieldCheck, 
@@ -57,7 +58,7 @@ export const Login: React.FC = () => {
     }
 
     // 2. Check dynamic accounts from staffUsers list by Email OR Mobile Number
-    const foundStaff = staffUsers?.find((s) => {
+    let foundStaff = staffUsers?.find((s) => {
       const sEmail = s.email?.toLowerCase().trim();
       const sMobile = (s.mobile || '').trim();
       const sMobileDigits = sMobile.replace(/\D/g, '');
@@ -75,6 +76,33 @@ export const Login: React.FC = () => {
       return false;
     });
 
+    // Fallback: Query Supabase staff_users table directly if not yet in local state
+    if (!foundStaff) {
+      try {
+        const { data: dbStaff } = await supabase
+          .from('staff_users')
+          .select('*')
+          .or(`email.ilike.${inputLower},mobile.eq.${inputCleaned}`);
+        if (dbStaff && dbStaff.length > 0) {
+          const u = dbStaff[0];
+          foundStaff = {
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            mobile: u.mobile,
+            role: u.role,
+            password: u.password,
+            hospital_id: u.hospital_id,
+            hospitalName: u.hospital_name || u.hospitalName,
+            accessStatus: u.access_status || 'Active',
+            registeredAt: u.registered_at || new Date().toISOString()
+          } as any;
+        }
+      } catch (err) {
+        console.warn('Direct DB lookup fallback error:', err);
+      }
+    }
+
     if (foundStaff) {
       if (foundStaff.role === "DEACTIVATED_DOCTOR") {
         setError("This doctor account has been deactivated by the Hospital Administrator.");
@@ -87,6 +115,11 @@ export const Login: React.FC = () => {
         localStorage.setItem("hms_hospital_email", foundStaff.email || foundStaff.mobile);
         localStorage.setItem("hms_hospital_name", foundStaff.name);
         localStorage.setItem("hms_hospital_id", foundStaff.id);
+        if (foundStaff.hospital_id) {
+          localStorage.setItem("hms_hospital_tenant_id", foundStaff.hospital_id);
+        } else if (foundStaff.role === 'HOSPITAL' || foundStaff.role === 'ANALYTICS' || foundStaff.role === 'ANALYTICS_HUB') {
+          localStorage.setItem("hms_hospital_tenant_id", foundStaff.id);
+        }
         setIsLoading(false);
         return;
       } else {
@@ -97,20 +130,22 @@ export const Login: React.FC = () => {
     }
 
     // 3. Fallback demo support if staff accounts not yet provisioned in DB
-    if ((inputLower === "doctor@hms.com" || inputLower === "doctor") && password === "Doctor@123") {
+    if ((inputLower === "doctor@hms.com" || inputLower === "doctor") && (password === "Doctor@123" || password === "Welcome@123")) {
       setCurrentUserRole("DOCTOR");
-      localStorage.setItem("hms_hospital_email", "doctor@hms.com");
-      localStorage.setItem("hms_hospital_name", "Dr. Demo Physician");
-      localStorage.setItem("hms_hospital_id", "staff_demo_doc");
+      localStorage.setItem("hms_hospital_email", "test123@gmail.com");
+      localStorage.setItem("hms_hospital_name", "Dr. Rupan Das");
+      localStorage.setItem("hms_hospital_id", "jxje5p9d3");
+      localStorage.setItem("hms_hospital_tenant_id", "vrdenfb7k");
       setIsLoading(false);
       return;
     }
 
-    if ((inputLower === "frontoffice@hms.com" || inputLower === "frontoffice" || inputLower === "frontoffice@gmail.com") && (password === "Front@123" || password === "frontoffice@gmail.com")) {
+    if ((inputLower === "frontoffice@hms.com" || inputLower === "frontoffice" || inputLower === "frontoffice@gmail.com") && (password === "Front@123" || password === "frontoffice@gmail.com" || password === "Welcome@123")) {
       setCurrentUserRole("FRONT_OFFICE");
-      localStorage.setItem("hms_hospital_email", "frontoffice@hms.com");
+      localStorage.setItem("hms_hospital_email", "frontoffice@gmail.com");
       localStorage.setItem("hms_hospital_name", "Front Office Reception");
-      localStorage.setItem("hms_hospital_id", "staff_demo_front");
+      localStorage.setItem("hms_hospital_id", "h73fp51wx");
+      localStorage.setItem("hms_hospital_tenant_id", "vrdenfb7k");
       setIsLoading(false);
       return;
     }
