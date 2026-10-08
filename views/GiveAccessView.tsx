@@ -105,6 +105,14 @@ export const GiveAccessView: React.FC = () => {
   const handleOpenForm = (type: AccessFormType) => {
     setErrorMessage('');
     setShowModalPassword(false);
+
+    const hospitalAccount = staffUsers.find(u => u.id === tenantHospitalId || u.hospital_id === tenantHospitalId);
+    const doctorLimit = currentUserStaff?.doctorDashboardLimit ?? hospitalAccount?.doctorDashboardLimit ?? 5;
+
+    if (type === 'Doctor' && activeDoctors.length >= doctorLimit) {
+      setErrorMessage('Doctor Dashboard Limit Reached. You cannot add more Doctor Dashboards. Contact the Acquire OPD Team to increase your limit.');
+      return;
+    }
     if (type === 'FrontOffice' && activeFrontOffice) {
       setErrorMessage(`Policy Limit Reached: Exactly 1 Front Office Dashboard is permitted per Hospital. "${activeFrontOffice.name}" is currently active.`);
       return;
@@ -128,7 +136,14 @@ export const GiveAccessView: React.FC = () => {
     if (!formType) return;
     setErrorMessage('');
 
+    const hospitalAccount = staffUsers.find(u => u.id === tenantHospitalId || u.hospital_id === tenantHospitalId);
+    const doctorLimit = currentUserStaff?.doctorDashboardLimit ?? hospitalAccount?.doctorDashboardLimit ?? 5;
+
     // Strict validation
+    if (formType === 'Doctor' && activeDoctors.length >= doctorLimit) {
+      setErrorMessage('Doctor Dashboard Limit Reached. You cannot add more Doctor Dashboards. Contact the Acquire OPD Team to increase your limit.');
+      return;
+    }
     if (formType === 'FrontOffice' && activeFrontOffice) {
       setErrorMessage('Policy Constraint: Only 1 Front Office Dashboard is permitted for this Hospital.');
       return;

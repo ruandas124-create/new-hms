@@ -230,6 +230,80 @@ export interface Appointment {
   followup_notes?: string;
   notes_list?: { id: string; text: string; date: string; author: string }[];
   followup_history?: { id: string; date: string; status: string; notes?: string; createdAt: string; author: string }[];
+  scheduled_by?: string;
+  scheduled_by_role?: string;
+  doctor_assessment?: any;
+}
+
+/**
+ * Determines who scheduled the appointment:
+ * - If scheduled from Front Office -> "Front Office"
+ * - If scheduled by Sales -> "Acquire OPD Team"
+ */
+export function getScheduleBy(item: any, staffUsers?: any[] | null): string {
+  if (!item) return 'Front Office';
+
+  // 1. Direct explicit scheduled_by field
+  const explicitScheduledBy = 
+    item.scheduled_by || 
+    item.scheduledBy || 
+    item.doctor_assessment?.scheduled_by || 
+    item.doctor_assessment?.scheduledBy;
+
+  if (explicitScheduledBy && typeof explicitScheduledBy === 'string') {
+    const norm = explicitScheduledBy.toLowerCase().trim();
+    if (norm === 'acquire opd team' || norm.includes('acquire') || norm.includes('sales')) {
+      return 'Acquire OPD Team';
+    }
+    if (norm === 'front office' || norm.includes('front') || norm.includes('reception')) {
+      return 'Front Office';
+    }
+    return explicitScheduledBy;
+  }
+
+  // 2. Direct scheduled_by_role
+  const explicitRole = 
+    item.scheduled_by_role || 
+    item.scheduledByRole || 
+    item.doctor_assessment?.scheduled_by_role;
+
+  if (explicitRole && typeof explicitRole === 'string') {
+    const r = explicitRole.toLowerCase().trim();
+    if (r === 'sales') return 'Acquire OPD Team';
+    if (r === 'front_office' || r === 'frontoffice') return 'Front Office';
+  }
+
+  // 3. Username / Remarks / Creator string
+  const creator = (
+    item.username || 
+    item.remarks || 
+    item.doctor_assessment?.username || 
+    item.doctor_assessment?.created_by || 
+    ''
+  ).toString().toLowerCase().trim();
+
+  if (creator) {
+    if (creator.includes('sales') || creator.includes('acquire') || creator.includes('ruandas124')) {
+      return 'Acquire OPD Team';
+    }
+    if (creator.includes('front') || creator.includes('reception') || creator.includes('punyareception') || creator.includes('desk')) {
+      return 'Front Office';
+    }
+    if (staffUsers && Array.isArray(staffUsers)) {
+      const match = staffUsers.find(u => 
+        (u.name && u.name.toLowerCase() === creator) || 
+        (u.email && u.email.toLowerCase() === creator) ||
+        (u.username && u.username.toLowerCase() === creator)
+      );
+      if (match) {
+        if (match.role === 'SALES') return 'Acquire OPD Team';
+        if (match.role === 'FRONT_OFFICE') return 'Front Office';
+      }
+    }
+  }
+
+  // 4. Default: Front Office
+  return 'Front Office';
 }
 
 export interface DaySchedule {
@@ -268,6 +342,7 @@ export interface StaffUser {
   hospital_id?: string;
   hospitalName?: string;
   tenantId?: string;
+  doctorDashboardLimit?: number;
   availability?: {
     availableDays: string[]; // e.g. ["Monday", "Tuesday"]
     startTime: string; // e.g. "09:00"

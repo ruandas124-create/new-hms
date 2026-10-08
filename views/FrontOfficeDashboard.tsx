@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useHospital } from '../context/HospitalContext';
 import { ExportButtons } from '../components/ExportButtons';
-import { Gender, Condition, Patient, Appointment, SurgeonCode, normalizeSource } from '../types';
+import { Gender, Condition, Patient, Appointment, SurgeonCode, normalizeSource, getScheduleBy } from '../types';
 import { 
   PlusCircle, Search, CheckCircle, ArrowLeft, 
   Calendar, Pencil, Trash2, User, 
@@ -561,7 +561,10 @@ export const FrontOfficeDashboard: React.FC = () => {
       date: revisitScheduleData.date,
       time: revisitScheduleData.time,
       bookingType: 'Scheduled',
-      visit_type: 'Revisit'
+      visit_type: 'Revisit',
+      scheduled_by: 'Front Office',
+      scheduled_by_role: 'front_office',
+      username: 'Front Office'
     };
     
     try {
@@ -642,7 +645,10 @@ export const FrontOfficeDashboard: React.FC = () => {
         assignedDoctorId: bookingData.assignedDoctorId || undefined,
         assignedDoctorName: selectedDoc ? selectedDoc.name : (bookingData.assignedDoctorName || 'General OPD'),
         bookingType: 'Scheduled' as const,
-        status: 'Scheduled'
+        status: 'Scheduled',
+        scheduled_by: 'Front Office',
+        scheduled_by_role: 'front_office',
+        username: 'Front Office'
       }; 
 
       if (displaySource === 'Others' && payload.sourceOtherDetails) {
@@ -952,42 +958,6 @@ export const FrontOfficeDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* KPI Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Today's OPD</span>
-            <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1 font-mono tabular-nums">{todayRegCount}</div>
-            <span className="text-[10px] text-slate-400 font-medium">Logged Today</span>
-          </div>
-          <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
-            <User className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Today's Appts</span>
-            <div className="text-xl sm:text-2xl font-black text-blue-600 mt-1 font-mono tabular-nums">{todayApptCount}</div>
-            <span className="text-[10px] text-slate-400 font-medium">Booked for Today</span>
-          </div>
-          <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <CalendarCheck className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Total Directory</span>
-            <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1 font-mono tabular-nums">{totalCount}</div>
-            <span className="text-[10px] text-slate-400 font-medium">Registered Files</span>
-          </div>
-          <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-            <FileText className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
-
       {/* Navigation Segmented Tab Switcher */}
       <div className="flex bg-slate-100/90 p-1 rounded-2xl w-full sm:w-fit shadow-xs overflow-x-auto scrollbar-none gap-1">
         {['REGISTRATION', 'APPOINTMENTS', 'GLOBAL_SEARCH'].map((tab) => (
@@ -1011,86 +981,24 @@ export const FrontOfficeDashboard: React.FC = () => {
       {/* Search and Filters Card */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-xs border border-slate-200/80 flex flex-col gap-4">
         
-        {/* Quick Date Filter Bar for OPD Registry & Scheduled Roster Tabs */}
+        {/* Date Context Indicator for OPD Registry & Scheduled Roster Tabs */}
         {(activeTab === 'REGISTRATION' || activeTab === 'APPOINTMENTS') && (
-          <div className="p-3 bg-slate-50/90 rounded-2xl border border-slate-200/90 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-2xs">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-hospital-100 text-hospital-700 flex items-center justify-center font-bold shrink-0 shadow-2xs">
-                <Calendar className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
-                  {activeTab === 'REGISTRATION' ? 'Registry Date' : 'Schedule Date'}
-                </span>
-                <div className="text-xs font-black text-slate-900 flex items-center gap-2 mt-0.5">
-                  <span>{formatReadableDate(currentActiveDate)}</span>
-                  {currentActiveDate === todayIso && (
-                    <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      Today
-                    </span>
-                  )}
-                </div>
-              </div>
+          <div className="p-3 bg-slate-50/90 rounded-2xl border border-slate-200/90 flex items-center gap-2.5 shadow-2xs">
+            <div className="w-8 h-8 rounded-xl bg-hospital-100 text-hospital-700 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+              <Calendar className="w-4 h-4" />
             </div>
-
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 self-end sm:self-auto w-full sm:w-auto justify-between sm:justify-end">
-              <button
-                type="button"
-                onClick={() => handleSingleDateChange(shiftIsoDate(currentActiveDate, -1))}
-                className="px-2.5 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl border border-slate-200 text-xs font-bold transition-all shadow-2xs flex items-center gap-1 active:scale-95 cursor-pointer shrink-0"
-                title="Previous Day"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span className="hidden md:inline">Prev Day</span>
-              </button>
-
-              <input
-                type="date"
-                value={currentActiveDate}
-                onChange={(e) => e.target.value && handleSingleDateChange(e.target.value)}
-                className="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:border-hospital-500 focus:ring-2 focus:ring-hospital-500/20 shadow-2xs cursor-pointer font-mono shrink-0"
-              />
-
-              <button
-                type="button"
-                onClick={() => handleSingleDateChange(shiftIsoDate(currentActiveDate, 1))}
-                className="px-2.5 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl border border-slate-200 text-xs font-bold transition-all shadow-2xs flex items-center gap-1 active:scale-95 cursor-pointer shrink-0"
-                title="Next Day"
-              >
-                <span className="hidden md:inline">Next Day</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-
-              {currentActiveDate !== todayIso && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAllApptDates(false);
-                    handleSingleDateChange(todayIso);
-                  }}
-                  className="px-3 py-2 bg-hospital-600 hover:bg-hospital-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 active:scale-95 cursor-pointer shrink-0"
-                  title="Jump to Today"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Today</span>
-                </button>
-              )}
-
-              {activeTab === 'APPOINTMENTS' && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllApptDates(!showAllApptDates)}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                    showAllApptDates 
-                      ? 'bg-emerald-600 text-white shadow-sm' 
-                      : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
-                  }`}
-                  title={showAllApptDates ? "Click to view only selected date" : "Click to view all scheduled appointments across all dates"}
-                >
-                  <CalendarCheck className="w-3.5 h-3.5" />
-                  <span>{showAllApptDates ? 'Showing All Dates' : 'View All Dates'}</span>
-                </button>
-              )}
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
+                {activeTab === 'REGISTRATION' ? 'Registry Date' : 'Schedule Date'}
+              </span>
+              <div className="text-xs font-black text-slate-900 flex items-center gap-2 mt-0.5">
+                <span>{formatReadableDate(currentActiveDate)}</span>
+                {currentActiveDate === todayIso && (
+                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Today
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -1308,13 +1216,16 @@ export const FrontOfficeDashboard: React.FC = () => {
                 <th className="p-5 whitespace-nowrap">CONSULTING DOCTOR</th>
                 <th className="p-5 whitespace-nowrap">COMPLAINT</th>
                 <th className="p-5 whitespace-nowrap">STATUS</th>
+                {(activeTab === 'APPOINTMENTS' || activeTab === 'GLOBAL_SEARCH') && (
+                  <th className="p-5 whitespace-nowrap">SCHEDULE BY</th>
+                )}
                 <th className="p-5 text-right whitespace-nowrap">ACTIONS</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isTabLoading || isLoading ? (
                 <tr>
-                  <td colSpan={9} className="p-12 text-center">
+                  <td colSpan={activeTab === 'GLOBAL_SEARCH' ? 10 : 9} className="p-12 text-center">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <Loader2 className="w-7 h-7 text-hospital-600 animate-spin" />
                       <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Loading records for selected date...</span>
@@ -1323,7 +1234,7 @@ export const FrontOfficeDashboard: React.FC = () => {
                 </tr>
               ) : displayData.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-12 text-center text-slate-400">
+                  <td colSpan={activeTab === 'GLOBAL_SEARCH' ? 10 : 9} className="p-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
                       <Calendar className="w-8 h-8 text-slate-300" />
                       <span className="text-xs font-extrabold text-slate-700">
@@ -1454,6 +1365,26 @@ export const FrontOfficeDashboard: React.FC = () => {
                         {item.displayStatus || getHistoryStatus(item)}
                       </span>
                     </td>
+                    {(activeTab === 'APPOINTMENTS' || activeTab === 'GLOBAL_SEARCH') && (
+                      <td className="p-5 whitespace-nowrap">
+                        {(() => {
+                          const schedBy = getScheduleBy(item, staffUsers);
+                          const isAcquire = schedBy === 'Acquire OPD Team';
+                          return (
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase shadow-2xs border ${
+                              isAcquire 
+                                ? 'bg-purple-50 text-purple-700 border-purple-200' 
+                                : 'bg-sky-50 text-sky-700 border-sky-200'
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                isAcquire ? 'bg-purple-500' : 'bg-sky-500'
+                              }`} />
+                              {schedBy}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                    )}
                     <td className="p-5 text-right whitespace-nowrap">
                       <div className="flex justify-end gap-2 items-center">
                         {(activeTab === 'REGISTRATION' || activeTab === 'GLOBAL_SEARCH') && item.recordType === 'Registration' && (

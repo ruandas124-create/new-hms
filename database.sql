@@ -47,7 +47,11 @@ CREATE TABLE IF NOT EXISTS public.himas_appointments (
     
     -- Structured Document Fields (JSONB)
     doctor_assessment JSONB,
-    package_proposal JSONB
+    package_proposal JSONB,
+    
+    -- Scheduler Tracking Fields
+    scheduled_by TEXT,
+    scheduled_by_role TEXT
 );
 
 -- Ensure all columns exist for existing tables
@@ -80,7 +84,9 @@ ADD COLUMN IF NOT EXISTS surgery_date DATE,
 ADD COLUMN IF NOT EXISTS surgery_lost_date DATE,
 ADD COLUMN IF NOT EXISTS completed_surgery DATE,
 ADD COLUMN IF NOT EXISTS doctor_assessment JSONB,
-ADD COLUMN IF NOT EXISTS package_proposal JSONB;
+ADD COLUMN IF NOT EXISTS package_proposal JSONB,
+ADD COLUMN IF NOT EXISTS scheduled_by TEXT,
+ADD COLUMN IF NOT EXISTS scheduled_by_role TEXT;
 
 -- Performance Indexes for himas_appointments
 CREATE INDEX IF NOT EXISTS idx_himas_hospital_id ON public.himas_appointments (hospital_id);
@@ -122,7 +128,8 @@ CREATE TABLE IF NOT EXISTS public.staff_users (
     full_address TEXT,
     access_status TEXT DEFAULT 'Active',
     granted_by TEXT,
-    availability JSONB
+    availability JSONB,
+    doctor_dashboard_limit INTEGER DEFAULT 5
 );
 
 -- Ensure all columns exist for existing staff_users table
@@ -141,7 +148,8 @@ ADD COLUMN IF NOT EXISTS pincode TEXT,
 ADD COLUMN IF NOT EXISTS full_address TEXT,
 ADD COLUMN IF NOT EXISTS access_status TEXT DEFAULT 'Active',
 ADD COLUMN IF NOT EXISTS granted_by TEXT,
-ADD COLUMN IF NOT EXISTS availability JSONB;
+ADD COLUMN IF NOT EXISTS availability JSONB,
+ADD COLUMN IF NOT EXISTS doctor_dashboard_limit INTEGER DEFAULT 5;
 
 CREATE INDEX IF NOT EXISTS idx_staff_email ON public.staff_users (email);
 CREATE INDEX IF NOT EXISTS idx_staff_role ON public.staff_users (role);

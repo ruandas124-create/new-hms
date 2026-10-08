@@ -5,7 +5,7 @@ import {
   Condition, SurgeonCode, PainSeverity, Affordability, ConversionReadiness, 
   ProposalOutcome, Gender, DashboardKey, DashboardPermission,
   SchedulingTarget, SchedulingPermissionsState, ReportPermissionsState,
-  AnalyticsAccountHierarchy, normalizeSource, normalizeToIsoDate
+  AnalyticsAccountHierarchy, normalizeSource, normalizeToIsoDate, getScheduleBy
 } from '../types';
 import { supabase } from '../services/supabaseClient';
 
@@ -613,6 +613,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
   const createAnalyticsAccount = async (accountData: {
     name: string; email: string; mobile?: string; password?: string;
     city?: string; state?: string; address?: string; fullAddress?: string; pincode?: string;
+    doctorDashboardLimit?: number;
   }): Promise<StaffUser> => {
     const newId = `hosp_${Math.random().toString(36).substring(2, 9)}`;
     const newAccount: StaffUser = {
@@ -631,7 +632,8 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       state: accountData.state,
       address: accountData.address,
       fullAddress: accountData.fullAddress,
-      pincode: accountData.pincode
+      pincode: accountData.pincode,
+      doctorDashboardLimit: accountData.doctorDashboardLimit ?? 5
     };
 
     await registerStaff(newAccount);
@@ -1132,6 +1134,11 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
             apptStatus = 'Scheduled';
           }
 
+          const resolvedScheduleBy = getScheduleBy({
+            ...r,
+            doctor_assessment: r.doctor_assessment
+          }, staffData);
+
           return {
             id: r.id || '',
             hospital_id: resolvedHospId,
@@ -1158,7 +1165,10 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
             followup_notes: r.doctor_assessment?.followup_notes || '',
             followup_history: r.doctor_assessment?.followup_history || [],
             notes: r.doctor_assessment?.notes || r.notes || '',
-            notes_list: r.doctor_assessment?.notes_list || []
+            notes_list: r.doctor_assessment?.notes_list || [],
+            scheduled_by: resolvedScheduleBy,
+            scheduled_by_role: r.doctor_assessment?.scheduled_by_role || (resolvedScheduleBy === 'Acquire OPD Team' ? 'sales' : 'front_office'),
+            doctor_assessment: r.doctor_assessment
           };
         });
 
@@ -1207,30 +1217,26 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       const mergedStaff = Array.from(staffMap.values()).map((u: any) => {
         const metaRow = metadataRows.find((m: any) => m.id === `doctor_metadata_${u.id}`);
-        if (metaRow && metaRow.doctor_assessment) {
-          const meta = metaRow.doctor_assessment;
-          return {
-            ...u,
-            photoUrl: meta.photoUrl || u.photoUrl,
-            availability: meta.availability || u.availability,
-            registrationNumber: meta.registrationNumber || u.registrationNumber,
-            specialization: meta.specialization || u.specialization,
-            username: meta.username || u.username,
-            department: meta.department || u.department,
-            accessStatus: meta.accessStatus !== undefined ? meta.accessStatus : (u.accessStatus || 'Active'),
-            grantedBy: meta.grantedBy !== undefined ? meta.grantedBy : (u.grantedBy || undefined),
-            hospital_id: meta.hospital_id || u.hospital_id || undefined,
-            hospitalName: meta.hospitalName || u.hospitalName || undefined,
-            address: meta.address || u.address || undefined,
-            city: meta.city || u.city || undefined,
-            state: meta.state || u.state || undefined,
-            pincode: meta.pincode || u.pincode || undefined,
-            fullAddress: meta.fullAddress || u.fullAddress || undefined,
-          };
-        }
+        const meta = metaRow?.doctor_assessment || {};
         return {
           ...u,
-          accessStatus: u.accessStatus || 'Active',
+          ...meta,
+          doctorDashboardLimit: u.doctor_dashboard_limit !== undefined ? u.doctor_dashboard_limit : (meta.doctorDashboardLimit !== undefined ? meta.doctorDashboardLimit : 5),
+          accessStatus: meta.accessStatus !== undefined ? meta.accessStatus : (u.accessStatus || 'Active'),
+          photoUrl: meta.photoUrl || u.photoUrl,
+          availability: meta.availability || u.availability,
+          registrationNumber: meta.registrationNumber || u.registrationNumber,
+          specialization: meta.specialization || u.specialization,
+          username: meta.username || u.username,
+          department: meta.department || u.department,
+          grantedBy: meta.grantedBy !== undefined ? meta.grantedBy : (u.grantedBy || undefined),
+          hospital_id: meta.hospital_id || u.hospital_id || undefined,
+          hospitalName: meta.hospitalName || u.hospitalName || undefined,
+          address: meta.address || u.address || undefined,
+          city: meta.city || u.city || undefined,
+          state: meta.state || u.state || undefined,
+          pincode: meta.pincode || u.pincode || undefined,
+          fullAddress: meta.fullAddress || u.fullAddress || undefined,
         };
       });
       setAllStaffUsers(mergedStaff);
@@ -1577,6 +1583,17 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         ? (appointmentData.referral_person?.trim() || null)
         : null;
 
+      const isSalesRole = activeRole === 'SALES' || 
+        (typeof window !== 'undefined' && localStorage.getItem('user_role') === 'SALES');
+
+      const resolvedScheduleBy = (appointmentData as any).scheduled_by || 
+        (isSalesRole || (appointmentData.username && appointmentData.username.toLowerCase().includes('sales'))
+          ? 'Acquire OPD Team'
+          : 'Front Office');
+
+      const resolvedScheduleByRole = (appointmentData as any).scheduled_by_role || 
+        (resolvedScheduleBy === 'Acquire OPD Team' ? 'sales' : 'front_office');
+
       const newApptId = `APP-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
       const nowIso = new Date().toISOString();
       const initialStatus = appointmentData.status || appointmentData.bookingType || 'Scheduled';
@@ -1601,6 +1618,8 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           assignedDoctorId: resolvedDoctorId,
           assignedDoctorName: appointmentData.assignedDoctorName || (resolvedAssignmentType === 'hospital' && !resolvedDoctorId ? null : (appointmentData.assignedDoctorName || null)),
           username: activeUsername,
+          scheduled_by: resolvedScheduleBy,
+          scheduled_by_role: resolvedScheduleByRole,
           assignment_type: resolvedAssignmentType,
           doctor_id: resolvedDoctorId,
           hospital_id: resolvedHospitalId,
@@ -1642,7 +1661,10 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         assignedDoctorName: appointmentData.assignedDoctorName || assignedDocObj?.name || undefined,
         hospitalName: resolvedHospitalName || undefined,
         notes: appointmentData.notes || '',
-        notes_list: appointmentData.notes_list || []
+        notes_list: appointmentData.notes_list || [],
+        scheduled_by: resolvedScheduleBy,
+        scheduled_by_role: resolvedScheduleByRole,
+        doctor_assessment: dbRecord.doctor_assessment
       };
 
       // Immediately prepend to local appointments so Scheduled Roster renders it without delay
@@ -1720,6 +1742,13 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       const targetStatus = appointment.status || appointment.bookingType || existingAppt?.status || 'Scheduled';
 
+      const resolvedScheduleBy = appointment.scheduled_by || 
+        existingAppt?.scheduled_by || 
+        getScheduleBy(appointment, allStaffUsers);
+      const resolvedScheduleByRole = appointment.scheduled_by_role || 
+        existingAppt?.scheduled_by_role || 
+        (resolvedScheduleBy === 'Acquire OPD Team' ? 'sales' : 'front_office');
+
       const updateData: any = {
         name: appointment.name,
         mobile: appointment.mobile,
@@ -1739,6 +1768,8 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           assignedDoctorId: resolvedDoctorId,
           assignedDoctorName: appointment.assignedDoctorName || (resolvedAssignmentType === 'hospital' && !resolvedDoctorId ? null : (appointment.assignedDoctorName || null)),
           username: activeUsername,
+          scheduled_by: resolvedScheduleBy,
+          scheduled_by_role: resolvedScheduleByRole,
           assignment_type: resolvedAssignmentType,
           doctor_id: resolvedDoctorId,
           hospital_id: resolvedHospitalId,
@@ -1797,6 +1828,9 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         mobile: staffData.mobile || 'N/A',
         role: staffData.role,
         password: staffData.password,
+        hospital_id: staffData.hospital_id,
+        hospital_name: staffData.hospitalName,
+        doctor_dashboard_limit: staffData.doctorDashboardLimit ?? 5,
         registered_at: new Date().toISOString()
       };
       
@@ -1819,6 +1853,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       if (staffData.grantedBy !== undefined) metadataToSave.grantedBy = staffData.grantedBy;
       if (staffData.hospital_id !== undefined) metadataToSave.hospital_id = staffData.hospital_id;
       if (staffData.hospitalName !== undefined) metadataToSave.hospitalName = staffData.hospitalName;
+      if (staffData.doctorDashboardLimit !== undefined) metadataToSave.doctorDashboardLimit = staffData.doctorDashboardLimit;
       
       if (Object.keys(metadataToSave).length > 0) {
         const recordId = `doctor_metadata_${newStaffId}`;
@@ -1861,7 +1896,8 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         staffData.accessStatus !== undefined ||
         staffData.grantedBy !== undefined ||
         staffData.hospital_id !== undefined ||
-        staffData.hospitalName !== undefined
+        staffData.hospitalName !== undefined ||
+        staffData.doctorDashboardLimit !== undefined
       ) {
         const recordId = `doctor_metadata_${id}`;
         const { data: existing } = await supabase
@@ -1889,6 +1925,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         if (staffData.grantedBy !== undefined) updatedAssessment.grantedBy = staffData.grantedBy;
         if (staffData.hospital_id !== undefined) updatedAssessment.hospital_id = staffData.hospital_id;
         if (staffData.hospitalName !== undefined) updatedAssessment.hospitalName = staffData.hospitalName;
+        if (staffData.doctorDashboardLimit !== undefined) updatedAssessment.doctorDashboardLimit = staffData.doctorDashboardLimit;
 
         if (existing) {
           await supabase
@@ -1920,6 +1957,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       if (staffData.password !== undefined) dbStaffData.password = staffData.password;
       if (staffData.hospital_id !== undefined) dbStaffData.hospital_id = staffData.hospital_id;
       if (staffData.hospitalName !== undefined) dbStaffData.hospital_name = staffData.hospitalName;
+      if (staffData.doctorDashboardLimit !== undefined) dbStaffData.doctor_dashboard_limit = staffData.doctorDashboardLimit;
 
       // Update in-memory state immediately for instantaneous, flicker-free feedback
       setAllStaffUsers(prev => prev.map(u => u.id === id ? { ...u, ...staffData } : u));
