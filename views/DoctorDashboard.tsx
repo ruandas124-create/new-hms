@@ -225,7 +225,6 @@ export const DoctorDashboard: React.FC = () => {
   const [photoError, setPhotoError] = useState('');
   const [isSavingAssessment, setIsSavingAssessment] = useState(false);
   const [isSavingAvailability, setIsSavingAvailability] = useState(false);
-  const [updatingApptId, setUpdatingApptId] = useState<string | null>(null);
   const [isDirectoryCollapsed, setIsDirectoryCollapsed] = useState(false);
 
   const [daySchedules, setDaySchedules] = useState<any[]>(DEFAULT_DAY_SCHEDULES);
@@ -346,9 +345,7 @@ export const DoctorDashboard: React.FC = () => {
     }
 
     let customStatus: string | undefined = undefined;
-    if (formState.quickCode === ('Doctor Done' as any)) {
-      customStatus = 'Doctor Done';
-    } else if (formState.quickCode === SurgeonCode.M1) {
+    if (formState.quickCode === SurgeonCode.M1) {
       customStatus = 'Medication Done';
     } else if (formState.quickCode === SurgeonCode.S1) {
       customStatus = 'Package Proposal';
@@ -1027,7 +1024,6 @@ export const DoctorDashboard: React.FC = () => {
                     <th className="p-4">Facility / Route</th>
                     <th className="p-4">Source</th>
                     <th className="p-4">Status</th>
-                    <th className="p-4 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
@@ -1062,46 +1058,6 @@ export const DoctorDashboard: React.FC = () => {
                         }`}>
                           {appt.status || 'Scheduled'}
                         </span>
-                      </td>
-                      <td className="p-4 text-center whitespace-nowrap">
-                        {appt.status === 'Doctor Done' ? (
-                          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 inline-flex items-center gap-1">
-                            <Check className="w-3 h-3 text-emerald-600" /> Doctor Done
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={updatingApptId === appt.id}
-                            onClick={async () => {
-                              if (updatingApptId) return;
-                              setUpdatingApptId(appt.id);
-                              try {
-                                await updateAppointment({
-                                  ...appt,
-                                  status: 'Doctor Done'
-                                });
-                              } catch (err) {
-                                alert("Failed to update appointment status.");
-                              } finally {
-                                setUpdatingApptId(null);
-                              }
-                            }}
-                            className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 hover:border-emerald-600 rounded-lg text-[11px] font-bold transition-all shadow-xs inline-flex items-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Mark appointment as Doctor Done"
-                          >
-                            {updatingApptId === appt.id ? (
-                              <>
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                                <span>Updating...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Check className="w-3 h-3" />
-                                <span>Mark Doctor Done</span>
-                              </>
-                            )}
-                          </button>
-                        )}
                       </td>
                     </tr>
                   ))}

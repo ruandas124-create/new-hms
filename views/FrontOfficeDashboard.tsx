@@ -339,7 +339,7 @@ export const FrontOfficeDashboard: React.FC = () => {
     { name: "Others", icon: <PlusCircle className="w-4 h-4 text-slate-400" /> }
   ];
 
-  const statusOptions = ['Arrived', 'Doctor Done', 'Medication Done', 'Package Proposal', 'Surgery Scheduled', 'Follow-Up Surgery', 'Surgery Lost', 'Surgery Completed', 'Scheduled', 'Follow Up', 'Revisit'];
+  const statusOptions = ['Arrived', 'Medication Done', 'Package Proposal', 'Surgery Scheduled', 'Follow-Up Surgery', 'Surgery Lost', 'Surgery Completed', 'Scheduled', 'Follow Up', 'Revisit'];
 
   const getStatusClass = (status?: string): string => {
     if (!status) return 'bg-slate-50 text-slate-400';
