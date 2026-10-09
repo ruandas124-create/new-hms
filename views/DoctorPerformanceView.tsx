@@ -1,13 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
 import { SurgeonCode, Patient, StaffUser } from '../types';
-import { 
-  Stethoscope, Calendar, Users, TrendingUp, Banknote, Clock, 
-  Search, Filter, RotateCcw, Download, Printer, ChevronRight, 
-  X, CheckCircle2, AlertCircle, Building2, User, Award, 
-  BarChart3, Activity, ArrowUpRight, FileText, ChevronDown, 
-  CalendarDays, Briefcase, Tag, Layers, Check
-} from 'lucide-react';
+import { formatDateToDDMMMYYYY } from '../utils/dateFormatter';
 
 const parseAmount = (val: any): number => {
   if (!val) return 0;
@@ -281,7 +275,7 @@ export const DoctorPerformanceView: React.FC = () => {
       for (let i = 5; i >= 0; i--) {
         const mDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const ym = mDate.toISOString().slice(0, 7); // e.g. "2026-10"
-        const mLabel = mDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        const mLabel = formatDateToDDMMMYYYY(mDate);
 
         const mConsults = patients.filter(p => {
           const d = (p.entry_date || p.registeredAt || '').slice(0, 7);

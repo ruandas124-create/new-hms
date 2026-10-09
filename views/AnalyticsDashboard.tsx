@@ -5,26 +5,7 @@ import { Patient, SurgeonCode, Condition, DashboardKey, normalizeSource } from '
 import { AnalyticsAccessManagement } from '../components/AnalyticsAccessManagement';
 import { DoctorPerformanceReport } from '../components/DoctorPerformanceReport';
 import { PeriodActivityReport } from '../components/PeriodActivityReport';
-import { 
-  Users, Banknote, Download, Target, RefreshCw, Layers, Search, 
-  Globe, PieChart, ArrowUpRight, CheckCircle,
-  X, Phone, Calendar, Tag, Briefcase, Zap, Landmark, BarChart3, TrendingUp, TrendingDown, CalendarDays,
-  PieChart as PieChartIcon, LayoutDashboard, Target as TargetIcon, Activity, Ban, FileSpreadsheet,
-  Calculator, Lock, Award, User, CheckCircle2, XCircle, ArrowRight, ShieldCheck, AlertCircle, 
-  ExternalLink, Printer, Shield, Crown
-} from 'lucide-react';
-
-const formatDate = (dateString: string | undefined | null): string => {
-  if (!dateString) return '---';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-};
-
-const formatMonth = (dateString: string | undefined | null): string => {
-  if (!dateString) return '---';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
-};
+import { formatDateToDDMMMYYYY } from '../utils/dateFormatter';
 
 const ONLINE_SOURCES = [
   'Google', 'Facebook', 'Instagram', 'WhatsApp', 'YouTube', 'Website', 'Friends / Online',
@@ -585,12 +566,12 @@ export const AnalyticsDashboard: React.FC = () => {
         p.packageProposal?.outcome || 'Pending',
         p.packageProposal?.decisionPattern || '',
         p.packageProposal?.proposalStage || '',
-        formatDate(p.completed_surgery || (p.packageProposal?.outcome === 'Completed' ? p.packageProposal.outcomeDate : null)),
-        formatDate(p.entry_date || p.registeredAt),
-        formatDate(p.surgery_lost_date || (p.packageProposal?.outcome === 'Lost' ? p.packageProposal.outcomeDate : null)),
+                formatDateToDDMMMYYYY(p.completed_surgery || (p.packageProposal?.outcome === 'Completed' ? p.packageProposal.outcomeDate : null)),
+        formatDateToDDMMMYYYY(p.entry_date || p.registeredAt),
+        formatDateToDDMMMYYYY(p.surgery_lost_date || (p.packageProposal?.outcome === 'Lost' ? p.packageProposal.outcomeDate : null)),
         p.packageProposal?.lostReason || '---',
-        formatDate(p.followup_date || p.packageProposal?.followUpDate),
-        formatDate(p.surgery_date || p.packageProposal?.surgeryDate)
+        formatDateToDDMMMYYYY(p.followup_date || p.packageProposal?.followUpDate),
+        formatDateToDDMMMYYYY(p.surgery_date || p.packageProposal?.surgeryDate)
       ]);
     } else {
       headers = ['ID', 'Name', 'Condition', 'Mobile', 'Type', 'Source', 'Status', 'Arrived', 'Affordability', 'Amount'];
@@ -602,7 +583,7 @@ export const AnalyticsDashboard: React.FC = () => {
         p.visit_type || 'OPD',
         getSourceDisplay(p.source),
         p.packageProposal?.outcome || 'Pending',
-        formatDate(p.entry_date),
+                formatDateToDDMMMYYYY(p.entry_date),
         p.doctorAssessment?.affordability || '---',
         p.packageProposal?.packageAmount || '0'
       ]);
@@ -938,10 +919,10 @@ export const AnalyticsDashboard: React.FC = () => {
       let label = key;
       if (performanceTimeframe === 'monthly') {
         const d = new Date(key + '-02');
-        label = isNaN(d.getTime()) ? key : d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+        label = isNaN(d.getTime()) ? key : formatDateToDDMMMYYYY(d).split(' ').slice(1).join(' ');
       } else if (performanceTimeframe === 'daily') {
         const d = new Date(key);
-        label = isNaN(d.getTime()) ? key : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+        label = isNaN(d.getTime()) ? key : formatDateToDDMMMYYYY(d).split(' ').slice(0, 2).join(' ');
       }
 
       return {

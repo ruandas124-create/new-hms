@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useHospital } from '../context/HospitalContext';
 import { ExportButtons } from '../components/ExportButtons';
+import { formatDateToDDMMMYYYY } from '../utils/dateFormatter';
 import { Gender, Condition, Patient, Appointment, SurgeonCode, normalizeSource, getScheduleBy } from '../types';
 import { 
   PlusCircle, Search, CheckCircle, ArrowLeft, 
@@ -39,17 +40,12 @@ const formatReadableDate = (isoDate: string): string => {
   const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
   const today = getTodayLocalIso();
   const isToday = isoDate === today;
-  const formatted = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const formatted = formatDateToDDMMMYYYY(d);
   return isToday ? `Today • ${formatted}` : formatted;
 };
 
 const formatDate = (dateString: string | undefined | null): string => {
-  if (!dateString) return '';
-  const datePart = dateString.split('T')[0];
-  const [y, m, d] = datePart.split('-').map(Number);
-  if (!y || !m || !d) return dateString;
-  const dateObj = new Date(y, m - 1, d);
-  return dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatDateToDDMMMYYYY(dateString);
 };
 
 const normalizeToIsoDate = (dateString: string | undefined | null): string => {
@@ -898,7 +894,7 @@ export const FrontOfficeDashboard: React.FC = () => {
 
   const handleExportFilteredCSV = () => {
     const headers = ['Type', 'File ID', 'Date', 'Name', 'Age', 'Gender', 'Mobile', 'Source', 'Condition', 'Visit Type', 'Status'];
-    const rows = combinedHistoryData.map(item => [item.recordType, (item.id || 'N/A').split('_V')[0], formatDate(item.displayEntryDate), item.name, item.age || '', item.gender || '', item.mobile, item.source, item.condition, calculateVisitType(item, patients), item.displayStatus].map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','));
+    const rows = combinedHistoryData.map(item => [item.recordType, (item.id || 'N/A').split('_V')[0],         formatDateToDDMMMYYYY(item.displayEntryDate), item.name, item.age || '', item.gender || '', item.mobile, item.source, item.condition, calculateVisitType(item, patients), item.displayStatus].map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','));
     const csvContent = [headers.join(','), ...rows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
