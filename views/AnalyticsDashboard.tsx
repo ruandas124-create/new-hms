@@ -5,6 +5,12 @@ import { Patient, SurgeonCode, Condition, DashboardKey, normalizeSource } from '
 import { AnalyticsAccessManagement } from '../components/AnalyticsAccessManagement';
 import { DoctorPerformanceReport } from '../components/DoctorPerformanceReport';
 import { PeriodActivityReport } from '../components/PeriodActivityReport';
+import { 
+  Lock, Activity, BarChart3, PieChart as PieChartIcon, Target as TargetIcon, 
+  LayoutDashboard, RefreshCw, Zap, TrendingUp, TrendingDown, Landmark,
+  CalendarDays, Calculator, Globe, Target, CheckCircle, Banknote,
+  FileSpreadsheet, Search, Printer, X, Calendar, Users, ArrowUpRight, Tag, Phone, Download
+} from 'lucide-react';
 import { formatDateToDDMMMYYYY } from '../utils/dateFormatter';
 
 const ONLINE_SOURCES = [
@@ -525,7 +531,7 @@ export const AnalyticsDashboard: React.FC = () => {
       const dayArrivals = dayNew + dayRevisits;
 
       return [
-        formatDate(date).replace(/,/g, ''),
+        formatDateToDDMMMYYYY(date).replace(/,/g, ''),
         dayArrivals,
         dayNew,
         dayRevisits,
@@ -954,8 +960,8 @@ export const AnalyticsDashboard: React.FC = () => {
       const offlineVol = dayPatients.length - onlineVol;
 
       const label = graphGranularity === 'monthly' 
-        ? formatMonth(key) 
-        : formatDate(key).split(' ')[0] + ' ' + formatDate(key).split(' ')[1];
+        ? formatDateToDDMMMYYYY(key) 
+        : formatDateToDDMMMYYYY(key).split(' ')[0] + ' ' + formatDateToDDMMMYYYY(key).split(' ')[1];
 
       return {
         key,
@@ -1356,11 +1362,11 @@ export const AnalyticsDashboard: React.FC = () => {
                              </td>
                              <td className="p-4 text-[10px] font-bold text-slate-600">{p.packageProposal?.decisionPattern || '---'}</td>
                              <td className="p-4 text-[10px] font-bold text-slate-600">{p.packageProposal?.proposalStage || '---'}</td>
-                             <td className="p-4 text-[10px] font-bold text-teal-600">{formatDate(p.completed_surgery || (p.packageProposal?.outcome === 'Completed' ? p.packageProposal.outcomeDate : null))}</td>
-                             <td className="p-4 text-[10px] font-bold text-slate-500">{formatDate(p.entry_date || p.registeredAt)}</td>
-                             <td className="p-4 text-[10px] font-bold text-rose-600">{formatDate(p.surgery_lost_date || (p.packageProposal?.outcome === 'Lost' ? p.packageProposal.outcomeDate : null))}</td>
-                             <td className="p-4 text-[10px] font-bold text-blue-600">{formatDate(p.followup_date || p.packageProposal?.followUpDate)}</td>
-                             <td className="p-4 text-[10px] font-bold text-emerald-600">{formatDate(p.surgery_date || p.packageProposal?.surgeryDate)}</td>
+                             <td className="p-4 text-[10px] font-bold text-teal-600">{formatDateToDDMMMYYYY(p.completed_surgery || (p.packageProposal?.outcome === 'Completed' ? p.packageProposal.outcomeDate : null))}</td>
+                             <td className="p-4 text-[10px] font-bold text-slate-500">{formatDateToDDMMMYYYY(p.entry_date || p.registeredAt)}</td>
+                             <td className="p-4 text-[10px] font-bold text-rose-600">{formatDateToDDMMMYYYY(p.surgery_lost_date || (p.packageProposal?.outcome === 'Lost' ? p.packageProposal.outcomeDate : null))}</td>
+                             <td className="p-4 text-[10px] font-bold text-blue-600">{formatDateToDDMMMYYYY(p.followup_date || p.packageProposal?.followUpDate)}</td>
+                             <td className="p-4 text-[10px] font-bold text-emerald-600">{formatDateToDDMMMYYYY(p.surgery_date || p.packageProposal?.surgeryDate)}</td>
                            </tr>
                          ))}
                        </tbody>
@@ -1395,7 +1401,7 @@ export const AnalyticsDashboard: React.FC = () => {
                          <div className="flex items-center gap-3">
                            <div className="p-2 bg-white rounded-xl text-slate-400"><Calendar className="w-3.5 h-3.5" /></div>
                            <span className="text-[10px] font-black uppercase text-slate-600">
-                             {p.packageProposal?.outcome === 'Completed' ? formatDate(p.completed_surgery || p.packageProposal?.outcomeDate) : formatDate(p.entry_date)}
+                             {p.packageProposal?.outcome === 'Completed' ? formatDateToDDMMMYYYY(p.completed_surgery || p.packageProposal?.outcomeDate) : formatDateToDDMMMYYYY(p.entry_date)}
                          </span>
                          </div>
                          <div className="flex items-center gap-3">
@@ -1804,7 +1810,7 @@ export const AnalyticsDashboard: React.FC = () => {
                   {showComparison && appliedCompRange && (
                     <div className="flex items-center gap-1.5">
                        <TrendingUp className="w-3.5 h-3.5 text-indigo-400" />
-                       <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Comparing against: {formatDate(appliedCompRange.from)}</span>
+                       <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Comparing against: {formatDateToDDMMMYYYY(appliedCompRange.from)}</span>
                     </div>
                   )}
               </div>
@@ -1988,7 +1994,6 @@ export const AnalyticsDashboard: React.FC = () => {
           {reportPermissions?.period_activity ? (
             <PeriodActivityReport
               stats={stats}
-              formatDate={formatDate}
               parseAmount={parseAmount}
               onExportDaily={handleExportDaily}
             />

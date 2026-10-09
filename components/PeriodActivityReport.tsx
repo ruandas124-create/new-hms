@@ -1,5 +1,6 @@
 import React from 'react';
 import { Download, Calendar, Activity } from 'lucide-react';
+import { formatDateToDDMMMYYYY } from '../utils/dateFormatter';
 import { SurgeonCode, Patient } from '../types';
 
 interface PeriodActivityReportProps {
@@ -7,14 +8,12 @@ interface PeriodActivityReportProps {
     arrivedDataset: Patient[];
     completedDataset: Patient[];
   };
-  formatDate: (dateString: string | undefined | null) => string;
   parseAmount: (amt: any) => number;
   onExportDaily: () => void;
 }
 
 export const PeriodActivityReport: React.FC<PeriodActivityReportProps> = ({
   stats,
-  formatDate,
   parseAmount,
   onExportDaily
 }) => {
@@ -75,7 +74,7 @@ export const PeriodActivityReport: React.FC<PeriodActivityReportProps> = ({
 
                   return (
                     <tr key={i} className="hover:bg-slate-50/70 transition-colors group">
-                      <td className="px-5 py-3.5 text-xs font-bold text-slate-900 font-mono">{formatDate(date)}</td>
+                      <td className="px-5 py-3.5 text-xs font-bold text-slate-900 font-mono">{formatDateToDDMMMYYYY(date)}</td>
                       <td className="px-5 py-3.5 text-xs font-black text-slate-800 text-center font-mono tabular-nums">{dayArrivals}</td>
                       <td className="px-5 py-3.5 text-xs font-bold text-teal-700 text-center font-mono tabular-nums">{dayNew}</td>
                       <td className="px-5 py-3.5 text-xs font-bold text-orange-700 text-center font-mono tabular-nums">{dayRevisits}</td>

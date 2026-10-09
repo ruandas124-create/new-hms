@@ -1,6 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
 import { SurgeonCode, Patient, StaffUser } from '../types';
+import { 
+  TrendingUp, Banknote, CalendarDays, Clock, BarChart3, Award, Stethoscope, 
+  AlertCircle, Building2, ChevronRight, X, Calendar, CheckCircle2,
+  Download, Printer, Search, Filter, RotateCcw, Users
+} from 'lucide-react';
 import { formatDateToDDMMMYYYY } from '../utils/dateFormatter';
 
 const parseAmount = (val: any): number => {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
+import { SurgeonCode, PainSeverity, Affordability, ConversionReadiness, Patient, DoctorAssessment, Appointment } from '../types';
 import { formatDateToDDMMMYYYY, formatDateTimeToDDMMMYYYY } from '../utils/dateFormatter';
 import { Stethoscope, Check, ChevronRight, ChevronLeft, User, Calendar, Save, Briefcase, CreditCard, Activity, Tag, FileText, Database, Clock, Share2, ShieldCheck, Search, Filter, History, ClipboardList, RefreshCcw, Upload, Trash2, Loader2, Plus, CheckCircle2 } from 'lucide-react';
 
