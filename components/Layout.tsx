@@ -260,16 +260,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           <div className="flex items-center gap-2 truncate min-w-0">
             <img 
               src={HOSPITAL_LOGO_URL} 
-              alt="Patient Scheduling Software" 
+              alt="Logo" 
               className="h-7 max-w-[120px] sm:max-w-[150px] w-auto object-contain shrink-0"
               onError={(e) => {
-                // If remote logo fails, hide and show clean text mark
                 (e.currentTarget as HTMLElement).style.display = 'none';
               }}
             />
-            <span className="font-bold text-xs sm:text-sm text-slate-900 tracking-tight truncate hidden xs:inline">
-              Patient Scheduling Software
-            </span>
           </div>
         </div>
 
@@ -308,17 +304,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <div className="shrink-0 flex items-center justify-center">
                 <img 
                   src={HOSPITAL_LOGO_URL} 
-                  alt="Patient Scheduling Software" 
-                  className="h-7 w-auto object-contain max-w-[100px]"
+                  alt="Logo" 
+                  className="h-7 w-auto object-contain max-w-[140px]"
                   onError={(e) => {
                     (e.currentTarget as HTMLElement).style.display = 'none';
                   }}
                 />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-[11px] font-bold text-white tracking-wide truncate">
-                  Patient Scheduling
-                </div>
               </div>
             </div>
 
@@ -402,15 +393,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               );
             })}
 
-            <div className="pt-2.5 border-t border-slate-800/80 mt-2.5 space-y-0.5 w-full">
-              <button 
-                onClick={() => { refreshData(); setIsMobileSidebarOpen(false); }} 
-                className="w-full flex items-center px-2.5 py-2 gap-2.5 text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-900/70 rounded-lg transition-colors cursor-pointer"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${saveStatus === 'saving' ? 'animate-spin text-hospital-400' : ''}`} /> 
-                <span className="text-xs">Sync Realtime Data</span>
-              </button>
-            </div>
+
             
             {/* Notification Card for Package Team */}
             {currentUserRole === 'PACKAGE_TEAM' && pendingWork.length > 0 && (
@@ -482,10 +465,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               </button>
             )}
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <span>Patient Scheduling Software</span>
-                <span>/</span>
-                <span className="text-hospital-600 font-extrabold">{activeItemLabel}</span>
+              <div className="text-xs font-black text-slate-900 tracking-tight">
+                {activeItemLabel}
               </div>
             </div>
           </div>

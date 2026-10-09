@@ -752,6 +752,42 @@ export const AnalyticsDashboard: React.FC = () => {
     });
   };
 
+  const handleDoctorConsultationsClick = () => {
+    const allPatients = doctorPerformanceStats.filteredDoctors.flatMap((d: any) => d.docArrivedRange);
+    setDrillDown({
+      label: `Doctor Consultations (${allPatients.length} Records)`,
+      data: allPatients,
+      viewMode: 'table'
+    });
+  };
+
+  const handleDoctorConversionsClick = () => {
+    const allPatients = doctorPerformanceStats.filteredDoctors.flatMap((d: any) => d.completedInPeriod);
+    setDrillDown({
+      label: `Doctor Converted Surgeries (${allPatients.length} Records)`,
+      data: allPatients,
+      viewMode: 'table'
+    });
+  };
+
+  const handleDoctorConvRateClick = () => {
+    const allPatients = doctorPerformanceStats.filteredDoctors.flatMap((d: any) => d.docArrivedRange);
+    setDrillDown({
+      label: `Doctor Conversion Rate Report (${doctorPerformanceStats.filteredDoctors.length} Doctors)`,
+      data: allPatients,
+      viewMode: 'table'
+    });
+  };
+
+  const handleDoctorSurgeryValueClick = () => {
+    const allPatients = doctorPerformanceStats.filteredDoctors.flatMap((d: any) => d.completedInPeriod);
+    setDrillDown({
+      label: `Doctor Surgery Value & Revenue (${allPatients.length} Records)`,
+      data: allPatients,
+      viewMode: 'table'
+    });
+  };
+
   // 1. Doctor Performance Statistics Calculations and Local Filtering
   const doctorPerformanceStats = useMemo(() => {
     const rawDocs = (staffUsers || []).filter(u => u.role === 'DOCTOR' || u.role === 'DEACTIVATED_DOCTOR');
@@ -1129,10 +1165,6 @@ export const AnalyticsDashboard: React.FC = () => {
       {/* Header Section */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-3 border-b border-slate-100 pb-3.5">
         <div className="shrink-0">
-          <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight uppercase">Analytics Hub</h2>
-          <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider mt-0.5 flex items-center gap-1.5">
-            <RefreshCw className="w-3.5 h-3.5 text-hospital-500" /> Real-Time Hospital Intelligence (All Sources)
-          </p>
         </div>
         
         {/* Hub Tab Switcher and Shared Date Filter */}
@@ -1200,6 +1232,18 @@ export const AnalyticsDashboard: React.FC = () => {
               className="w-full sm:w-auto px-3.5 py-1.5 bg-hospital-600 text-white rounded-lg text-xs font-semibold shadow-2xs hover:bg-hospital-700 active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
             >
               <Search className="w-3.5 h-3.5" /> Apply
+            </button>
+            <button 
+              onClick={handleExportPerformanceExcel}
+              className="w-full sm:w-auto px-3.5 py-1.5 bg-white text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold shadow-2xs hover:bg-emerald-50 active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" /> Export
+            </button>
+            <button 
+              onClick={handleExportPerformancePDF}
+              className="w-full sm:w-auto px-3.5 py-1.5 bg-white text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold shadow-2xs hover:bg-slate-50 active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5" /> Print
             </button>
           </div>
         </div>
@@ -1881,101 +1925,6 @@ export const AnalyticsDashboard: React.FC = () => {
           ))}
         </div>
 
-        {/* Source-Level Marketing ROI & Acquisition Breakdown */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-xs space-y-3 mt-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 pb-2.5">
-            <div>
-              <h4 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-tight flex items-center gap-1.5">
-                <Globe className="w-4 h-4 text-hospital-600" />
-                Source-Level Marketing ROI & Acquisition Breakdown
-              </h4>
-              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mt-0.5">
-                Channel-specific patient volume, lead conversion, revenue, and cost allocation
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
-                Online Attribution
-              </span>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto table-container w-full">
-            <table className="w-full text-left border-collapse min-w-[900px]">
-              <thead className="bg-slate-50 text-slate-500 text-[9px] font-bold uppercase tracking-wider border-b border-slate-200">
-                <tr>
-                  <th className="py-2.5 px-3">Marketing Source</th>
-                  <th className="py-2.5 px-2.5 text-center">Scheduled</th>
-                  <th className="py-2.5 px-2.5 text-center text-teal-600">New Patients</th>
-                  <th className="py-2.5 px-2.5 text-center">Total Arrivals</th>
-                  <th className="py-2.5 px-2.5 text-center text-indigo-600">S1 Leads</th>
-                  <th className="py-2.5 px-2.5 text-center text-emerald-600">Completed Surgeries</th>
-                  <th className="py-2.5 px-3 text-right">Revenue</th>
-                  <th className="py-2.5 px-3 text-right text-amber-600">Cost / Budget</th>
-                  <th className="py-2.5 px-2.5 text-right">Cost / OPD</th>
-                  <th className="py-2.5 px-2 text-center">Conv %</th>
-                  <th className="py-2.5 px-2.5 text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
-                {['Google / YouTube / Website', 'FB / Insta / WhatsApp', 'Friend + Online'].map((mSource) => {
-                  const mData = stats.sources[mSource] || { total: 0, completed: 0, revenue: 0, new: 0, revisit: 0, scheduled: 0, leads: 0 };
-                  const mNew = mData.new || 0;
-                  const mLeads = mData.leads || 0;
-                  const mCompleted = mData.completed || 0;
-                  const mScheduled = mData.scheduled || 0;
-                  const mRevenue = mData.revenue || 0;
-                  const mTotal = mData.total || 0;
-                  const allocatedCost = (stats.onlineTotal > 0 && marketingBudget > 0)
-                    ? Math.round((marketingBudget * mNew) / stats.onlineTotal)
-                    : 0;
-                  const costPerOpd = (marketingBudget > 0 && mNew > 0)
-                    ? Math.round(allocatedCost / mNew)
-                    : null;
-                  const convRate = mLeads > 0 
-                    ? ((mCompleted / mLeads) * 100).toFixed(1) + '%'
-                    : (mNew > 0 ? ((mCompleted / mNew) * 100).toFixed(1) + '%' : '0%');
-
-                  return (
-                    <tr key={mSource} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-2 px-3">
-                        <span className="font-bold uppercase text-[11px] text-slate-800">
-                          {mSource}
-                        </span>
-                      </td>
-                      <td className="py-2 px-2.5 text-center font-bold text-slate-700 font-mono">{mScheduled}</td>
-                      <td className="py-2 px-2.5 text-center font-bold text-teal-700 bg-teal-50/30 font-mono">{mNew}</td>
-                      <td className="py-2 px-2.5 text-center font-medium text-slate-600 font-mono">{mTotal}</td>
-                      <td className="py-2 px-2.5 text-center font-bold text-indigo-600 bg-indigo-50/30 font-mono">{mLeads}</td>
-                      <td className="py-2 px-2.5 text-center font-bold text-emerald-700 bg-emerald-50/30 font-mono">{mCompleted}</td>
-                      <td className="py-2 px-3 text-right font-bold text-slate-900 font-mono">
-                        {mRevenue > 0 ? `₹${mRevenue.toLocaleString()}` : '₹0'}
-                      </td>
-                      <td className="py-2 px-3 text-right font-bold text-amber-700 font-mono">
-                        {marketingBudget > 0 ? `₹${allocatedCost.toLocaleString()}` : <span className="text-slate-400 font-normal">₹0</span>}
-                      </td>
-                      <td className="py-2 px-2.5 text-right font-mono text-xs">
-                        {costPerOpd != null ? `₹${costPerOpd.toLocaleString()}` : <span className="text-slate-400 font-normal">N/A</span>}
-                      </td>
-                      <td className="py-2 px-2 text-center font-bold text-slate-800 font-mono">
-                        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px]">{convRate}</span>
-                      </td>
-                      <td className="py-2 px-2.5 text-center">
-                        <button
-                          onClick={() => handleSourceClick(mSource)}
-                          className="px-2 py-0.5 bg-white border border-slate-200 hover:border-hospital-400 hover:text-hospital-600 text-[9px] font-bold uppercase rounded shadow-2xs transition-all cursor-pointer"
-                        >
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
         <div 
           onClick={() => setTargetPlannerModal({ ...targetPlannerModal, show: true })}
           className="bg-hospital-50/50 p-4 sm:p-5 rounded-xl border border-hospital-100 cursor-pointer hover:bg-hospital-100 transition-all group mt-4"
@@ -2041,6 +1990,10 @@ export const AnalyticsDashboard: React.FC = () => {
               onSelectTimeframe={setPerformanceTimeframe}
               onExportCsv={handleExportPerformanceExcel}
               onPrint={handleExportPerformancePDF}
+              onConsultationsClick={handleDoctorConsultationsClick}
+              onConversionsClick={handleDoctorConversionsClick}
+              onConvRateClick={handleDoctorConvRateClick}
+              onSurgeryValueClick={handleDoctorSurgeryValueClick}
             />
           ) : (
             <div className="bg-white rounded-2xl border border-slate-200 p-6 flex items-center justify-between text-xs font-bold text-slate-500">

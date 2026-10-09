@@ -22,6 +22,10 @@ interface DoctorPerformanceReportProps {
   onSelectTimeframe: (tf: 'daily' | 'weekly' | 'monthly' | 'yearly') => void;
   onExportCsv: () => void;
   onPrint: () => void;
+  onConsultationsClick?: () => void;
+  onConversionsClick?: () => void;
+  onConvRateClick?: () => void;
+  onSurgeryValueClick?: () => void;
 }
 
 export const DoctorPerformanceReport: React.FC<DoctorPerformanceReportProps> = ({
@@ -31,7 +35,11 @@ export const DoctorPerformanceReport: React.FC<DoctorPerformanceReportProps> = (
   timeframe,
   onSelectTimeframe,
   onExportCsv,
-  onPrint
+  onPrint,
+  onConsultationsClick,
+  onConversionsClick,
+  onConvRateClick,
+  onSurgeryValueClick
 }) => {
   const { filteredDoctors, totals } = doctorPerformanceStats;
 
@@ -80,29 +88,16 @@ export const DoctorPerformanceReport: React.FC<DoctorPerformanceReportProps> = (
               </button>
             ))}
           </div>
-
-          {/* Export & Print */}
-          <button
-            onClick={onExportCsv}
-            className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 cursor-pointer"
-            title="Download CSV report"
-          >
-            <Download className="w-3.5 h-3.5" /> Export CSV
-          </button>
-          <button
-            onClick={onPrint}
-            className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 cursor-pointer"
-            title="Print performance directive"
-          >
-            <Printer className="w-3.5 h-3.5" /> Print
-          </button>
         </div>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
-        <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/70">
-          <div className="text-[10px] font-semibold uppercase text-slate-500 tracking-wider">Consultations</div>
+        <div 
+          onClick={onConsultationsClick}
+          className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/70 hover:shadow-sm hover:border-slate-300 transition-all cursor-pointer group"
+        >
+          <div className="text-[10px] font-semibold uppercase text-slate-500 tracking-wider group-hover:text-slate-900 transition-colors">Consultations</div>
           <div className="text-xl font-bold text-slate-900 font-mono tabular-nums mt-0.5">{totals.totalConsultations}</div>
           <div className="text-[10px] text-slate-400 mt-0.5">OPD visits in period</div>
         </div>
@@ -111,8 +106,11 @@ export const DoctorPerformanceReport: React.FC<DoctorPerformanceReportProps> = (
           <div className="text-xl font-bold text-indigo-700 font-mono tabular-nums mt-0.5">{totals.totalPackagesDiscussed}</div>
           <div className="text-[10px] text-indigo-500 mt-0.5">Surgery proposed</div>
         </div>
-        <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100">
-          <div className="text-[10px] font-semibold uppercase text-emerald-700 tracking-wider">Surgeries Done</div>
+        <div 
+          onClick={onConversionsClick}
+          className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100 hover:shadow-sm hover:border-emerald-300 transition-all cursor-pointer group"
+        >
+          <div className="text-[10px] font-semibold uppercase text-emerald-700 tracking-wider group-hover:text-emerald-900 transition-colors">Surgeries Done</div>
           <div className="text-xl font-bold text-emerald-700 font-mono tabular-nums mt-0.5">{totals.totalSurgeriesCompleted}</div>
           <div className="text-[10px] text-emerald-600 mt-0.5">Operated</div>
         </div>
@@ -121,13 +119,19 @@ export const DoctorPerformanceReport: React.FC<DoctorPerformanceReportProps> = (
           <div className="text-xl font-bold text-rose-700 font-mono tabular-nums mt-0.5">{totals.totalSurgeriesLost}</div>
           <div className="text-[10px] text-rose-500 mt-0.5">Dropped / deferred</div>
         </div>
-        <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100">
-          <div className="text-[10px] font-semibold uppercase text-blue-700 tracking-wider">Conversion Rate</div>
+        <div 
+          onClick={onConvRateClick}
+          className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 hover:shadow-sm hover:border-blue-300 transition-all cursor-pointer group"
+        >
+          <div className="text-[10px] font-semibold uppercase text-blue-700 tracking-wider group-hover:text-blue-900 transition-colors">Conversion Rate</div>
           <div className="text-xl font-bold text-blue-700 font-mono tabular-nums mt-0.5">{totals.overallConversionRate}%</div>
           <div className="text-[10px] text-blue-500 mt-0.5">Surg / Consultation</div>
         </div>
-        <div className="bg-amber-50/50 p-3 rounded-xl border border-amber-100">
-          <div className="text-[10px] font-semibold uppercase text-amber-700 tracking-wider">Total Revenue</div>
+        <div 
+          onClick={onSurgeryValueClick}
+          className="bg-amber-50/50 p-3 rounded-xl border border-amber-100 hover:shadow-sm hover:border-amber-300 transition-all cursor-pointer group"
+        >
+          <div className="text-[10px] font-semibold uppercase text-amber-700 tracking-wider group-hover:text-amber-900 transition-colors">Surgery Value</div>
           <div className="text-lg sm:text-xl font-bold text-amber-800 font-mono tabular-nums mt-0.5 truncate">₹{totals.totalRevenueGenerated.toLocaleString()}</div>
           <div className="text-[10px] text-amber-600 mt-0.5">Realized package value</div>
         </div>

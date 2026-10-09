@@ -39,21 +39,17 @@ const formatReadableDate = (isoDate: string): string => {
   const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
   const today = getTodayLocalIso();
   const isToday = isoDate === today;
-  const formatted = d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const formatted = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   return isToday ? `Today • ${formatted}` : formatted;
 };
 
 const formatDate = (dateString: string | undefined | null): string => {
   if (!dateString) return '';
   const datePart = dateString.split('T')[0];
-  const parts = datePart.split('-');
-  if (parts.length === 3) {
-    if (parts[0].length === 2 && parts[2].length === 4) {
-      return `${parts[2]}-${parts[1]}-${parts[0]}`;
-    }
-    return datePart;
-  }
-  return dateString;
+  const [y, m, d] = datePart.split('-').map(Number);
+  if (!y || !m || !d) return dateString;
+  const dateObj = new Date(y, m - 1, d);
+  return dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
 const normalizeToIsoDate = (dateString: string | undefined | null): string => {
@@ -924,13 +920,8 @@ export const FrontOfficeDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">Front Office Operations</h2>
-          <p className="text-slate-500 text-xs sm:text-sm font-medium mt-0.5">Patient Intake, Scheduling & Clinical Registry</p>
-        </div>
-        <ExportButtons patients={activeTab === 'GLOBAL_SEARCH' ? (combinedHistoryData as any) : patients} role="front_office" selectedPatient={null} />
+      {/* Top Header (Heading and Subtitle Removed as requested) */}
+      <div className="flex flex-col sm:flex-row justify-end items-start sm:items-center gap-4">
       </div>
 
       {/* Global Notification Feedback Banner */}
@@ -982,29 +973,23 @@ export const FrontOfficeDashboard: React.FC = () => {
       <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-xs border border-slate-200/80 flex flex-col gap-4">
         
         {/* Date Context Indicator for OPD Registry & Scheduled Roster Tabs */}
-        {(activeTab === 'REGISTRATION' || activeTab === 'APPOINTMENTS') && (
-          <div className="p-3 bg-slate-50/90 rounded-2xl border border-slate-200/90 flex items-center gap-2.5 shadow-2xs">
-            <div className="w-8 h-8 rounded-xl bg-hospital-100 text-hospital-700 flex items-center justify-center font-bold shrink-0 shadow-2xs">
-              <Calendar className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
-                {activeTab === 'REGISTRATION' ? 'Registry Date' : 'Schedule Date'}
-              </span>
-              <div className="text-xs font-black text-slate-900 flex items-center gap-2 mt-0.5">
-                <span>{formatReadableDate(currentActiveDate)}</span>
-                {currentActiveDate === todayIso && (
-                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    Today
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
         <div className="flex flex-col lg:flex-row gap-3 justify-between items-stretch lg:items-center">
-          <div className="flex flex-1 flex-col sm:flex-row gap-2.5 items-stretch sm:items-center w-full">
+          <div className="flex flex-1 flex-col sm:flex-row gap-3 items-stretch sm:items-center w-full">
+            {(activeTab === 'REGISTRATION' || activeTab === 'APPOINTMENTS') && (
+              <div className="p-2.5 bg-slate-50/90 rounded-xl border border-slate-200/90 flex items-center gap-2.5 shadow-2xs shrink-0">
+                <div className="w-7 h-7 rounded-lg bg-hospital-100 text-hospital-700 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+                  <Calendar className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block">
+                    {activeTab === 'REGISTRATION' ? 'Registry Date' : 'Schedule Date'}
+                  </span>
+                  <div className="text-xs font-black text-slate-900 flex items-center gap-2 mt-0.5 whitespace-nowrap">
+                    <span>{formatReadableDate(currentActiveDate)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="relative flex-1 max-w-full sm:max-w-xs">
               <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
               <input 
@@ -1016,34 +1001,36 @@ export const FrontOfficeDashboard: React.FC = () => {
               />
             </div>
 
-            {/* Unified Filter Button */}
-            {(() => {
-              const activeCount = activeTab === 'REGISTRATION'
-                ? (opdStartDate !== todayIso || opdEndDate !== todayIso ? 1 : 0)
-                : activeTab === 'APPOINTMENTS'
-                ? (apptStartDate !== todayIso || apptEndDate !== todayIso ? 1 : 0)
-                : (historyFilters.startDate ? 1 : 0) + (historyFilters.endDate ? 1 : 0) + (historyFilters.source ? 1 : 0) + (historyFilters.visitType !== 'ALL' ? 1 : 0) + (historyFilters.status ? 1 : 0) + (historyFilters.condition ? 1 : 0) + (historyFilters.doctor !== 'ALL' ? 1 : 0) + (historyFilters.type !== 'ALL' ? 1 : 0);
+            {/* Unified Filter Button & Export Panel */}
+            <div className="flex items-center gap-2">
+              {(() => {
+                const activeCount = activeTab === 'REGISTRATION'
+                  ? (opdStartDate !== todayIso || opdEndDate !== todayIso ? 1 : 0)
+                  : activeTab === 'APPOINTMENTS'
+                  ? (apptStartDate !== todayIso || apptEndDate !== todayIso ? 1 : 0)
+                  : (historyFilters.startDate ? 1 : 0) + (historyFilters.endDate ? 1 : 0) + (historyFilters.source ? 1 : 0) + (historyFilters.visitType !== 'ALL' ? 1 : 0) + (historyFilters.status ? 1 : 0) + (historyFilters.condition ? 1 : 0) + (historyFilters.doctor !== 'ALL' ? 1 : 0) + (historyFilters.type !== 'ALL' ? 1 : 0);
 
-              return (
-                <button
-                  type="button"
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`px-3.5 py-2.5 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 ${
-                    showFilters || activeCount > 0 
-                      ? 'bg-hospital-50 border-hospital-300 text-hospital-700 shadow-2xs' 
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  <Filter className="w-3.5 h-3.5 text-hospital-600" />
-                  <span>Filters</span>
-                  {activeCount > 0 && (
-                    <span className="w-5 h-5 rounded-full bg-hospital-600 text-white text-[10px] font-black flex items-center justify-center">
-                      {activeCount}
-                    </span>
-                  )}
-                </button>
-              );
-            })()}
+                return (
+                  <button
+                    type="button"
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`px-3.5 py-2.5 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 ${
+                      showFilters || activeCount > 0 
+                        ? 'bg-hospital-50 border-hospital-300 text-hospital-700 shadow-2xs' 
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Filter className="w-3.5 h-3.5 text-hospital-600" />
+                    <span>Filters</span>
+                    {activeCount > 0 && (
+                      <span className="w-5 h-5 rounded-full bg-hospital-600 text-white text-[10px] font-black flex items-center justify-center">
+                        {activeCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })()}
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto shrink-0">
@@ -1064,7 +1051,13 @@ export const FrontOfficeDashboard: React.FC = () => {
 
         {/* Expandable Unified Filter Panel */}
         {showFilters && (
-          <div className="pt-4 border-t border-slate-100 animate-in slide-in-from-top-2 duration-200 space-y-3">
+          <div className="pt-4 border-t border-slate-100 animate-in slide-in-from-top-2 duration-200 space-y-4">
+            
+            {/* New: Print/Export inside filter panel */}
+            <div className="flex gap-2">
+              <ExportButtons patients={activeTab === 'GLOBAL_SEARCH' ? (combinedHistoryData as any) : patients} role="front_office" selectedPatient={null} />
+            </div>
+
             {activeTab === 'REGISTRATION' && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
                 <div>

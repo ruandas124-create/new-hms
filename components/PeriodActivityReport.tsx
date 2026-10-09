@@ -39,13 +39,6 @@ export const PeriodActivityReport: React.FC<PeriodActivityReportProps> = ({
               Day-by-day arrivals, new vs revisits, surgical leads, and realized revenue
             </p>
           </div>
-          <button 
-            onClick={onExportDaily} 
-            className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer min-h-[40px]" 
-            title="Download Report as CSV"
-          >
-            <Download className="w-4 h-4" /> <span>Export CSV</span>
-          </button>
         </div>
 
         <div className="overflow-x-auto table-container w-full flex-1">
