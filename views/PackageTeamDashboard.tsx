@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useHospital } from '../context/HospitalContext';
 import { ExportButtons } from '../components/ExportButtons';
 import { Patient, PackageProposal, Role, SurgeonCode, ProposalOutcome } from '../types';
+import { formatDateToDDMMMYYYY, formatDateTimeToDDMMMYYYY } from '../utils/dateFormatter';
 import { 
   Briefcase, Calendar, Users, BadgeCheck, User, Activity, ShieldCheck, 
   Banknote, Trash2, Clock, X, Share2, Stethoscope, LayoutList, Columns, 
@@ -31,37 +32,11 @@ const PROPOSAL_STAGES: Record<string, number> = {
 };
 
 const formatToDDMMYYYY = (dateString: string | undefined | null): string => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return '';
-  
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  }).format(date).replace(/\//g, '-');
+  return formatDateToDDMMMYYYY(dateString);
 };
 
 const formatToDateTime = (dateString: string | undefined | null): string => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return '';
-  
-  const formatter = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  });
-
-  const parts = formatter.formatToParts(date);
-  const getPart = (type: string) => parts.find(p => p.type === type)?.value || '';
-  
-  return `${getPart('day')}-${getPart('month')}-${getPart('year')} ${getPart('hour')}:${getPart('minute')}`;
+  return formatDateTimeToDDMMMYYYY(dateString);
 };
 
 export const PackageTeamDashboard: React.FC = () => {

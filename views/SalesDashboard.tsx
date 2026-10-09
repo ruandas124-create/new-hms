@@ -9,6 +9,7 @@ import {
   MessageSquare, Edit3, CalendarCheck, Check,
   Loader2, AlertCircle, RefreshCw
 } from 'lucide-react';
+import { formatDateToDDMMMYYYY } from '../utils/dateFormatter';
 
 const isDoctorAssociatedWithHospital = (doctor: any, hospital: any): boolean => {
   if (!doctor || !hospital) return false;
@@ -850,7 +851,7 @@ export const SalesDashboard: React.FC = () => {
         leadId: item.lead_id,
         note: item.note,
         author: item.created_by_name || 'Sales User',
-        date: item.created_date || (item.created_at ? new Date(item.created_at).toLocaleDateString('en-GB') : ''),
+        date: item.created_date || (item.created_at ? formatDateToDDMMMYYYY(item.created_at) : ''),
         time: item.created_time || (item.created_at ? new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''),
         createdAt: item.created_at || new Date().toISOString(),
         status: ''
@@ -867,7 +868,7 @@ export const SalesDashboard: React.FC = () => {
             leadId: booking.appointmentId || booking.id,
             note: item.notes,
             author: item.author || 'Sales User',
-            date: item.date || (item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-GB') : ''),
+            date: item.date || (item.createdAt ? formatDateToDDMMMYYYY(item.createdAt) : ''),
             time: item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
             createdAt: item.createdAt || new Date().toISOString(),
             status: item.status
@@ -889,7 +890,7 @@ export const SalesDashboard: React.FC = () => {
                 leadId: appt.id,
                 note: item.notes,
                 author: item.author || appt.username || 'Sales User',
-                date: item.date || (item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-GB') : ''),
+                date: item.date || (item.createdAt ? formatDateToDDMMMYYYY(item.createdAt) : ''),
                 time: item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
                 createdAt: item.createdAt || appt.createdAt || new Date().toISOString(),
                 status: item.status
@@ -906,7 +907,7 @@ export const SalesDashboard: React.FC = () => {
               leadId: appt.id,
               note: appt.followup_notes,
               author: appt.username || 'Sales User',
-              date: appt.followup_date || (appt.createdAt ? new Date(appt.createdAt).toLocaleDateString('en-GB') : ''),
+              date: appt.followup_date || (appt.createdAt ? formatDateToDDMMMYYYY(appt.createdAt) : ''),
               time: appt.createdAt ? new Date(appt.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
               createdAt: appt.createdAt || new Date().toISOString(),
               status: appt.status
@@ -1056,7 +1057,7 @@ export const SalesDashboard: React.FC = () => {
 
       const existingList = notesBooking.notesList || [];
       const updatedList = [newNoteObj, ...existingList];
-      const combinedNotesStr = `${newNoteObj.text} (${newNoteObj.author} - ${new Date().toLocaleDateString()})\n${notesBooking.notes || ''}`.trim();
+      const combinedNotesStr = `${newNoteObj.text} (${newNoteObj.author} - ${formatDateToDDMMMYYYY(new Date())})\n${notesBooking.notes || ''}`.trim();
 
       if (notesBooking.appointmentId) {
         const appt = appointments.find(a => a.id === notesBooking.appointmentId);

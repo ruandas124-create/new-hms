@@ -1047,7 +1047,7 @@ export const AnalyticsDashboard: React.FC = () => {
           <div class="header">
             <div class="logo">HMS Hospital Analytics System</div>
             <div class="title">Doctor Performance Directory Report</div>
-            <div class="meta">Generated: ${new Date().toLocaleDateString('en-IN')} | Range: ${appliedRange.from.split('-').reverse().join('-')} to ${appliedRange.to.split('-').reverse().join('-')}</div>
+            <div class="meta">Generated: ${formatDateToDDMMMYYYY(new Date())} | Range: ${formatDateToDDMMMYYYY(appliedRange.from)} to ${formatDateToDDMMMYYYY(appliedRange.to)}</div>
           </div>
           
           <div class="kpis">

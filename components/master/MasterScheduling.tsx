@@ -8,6 +8,7 @@ import {
   Building2, ArrowLeft, X, CheckCircle, ChevronDown, Sparkles, Lock,
   Eye, Pencil, Trash2, MapPin, Tag, CreditCard, Info, Coffee, Loader2
 } from 'lucide-react';
+import { formatDateToDDMMMYYYY } from '../../utils/dateFormatter';
 
 const STATUS_OPTIONS: { label: string; dotClass: string }[] = [
   { label: 'New Leads', dotClass: 'bg-indigo-500' },
@@ -49,7 +50,7 @@ export function formatDisplayDate(dateStr?: string): { dayStr: string; dateForma
     const d = new Date(dateStr + 'T00:00:00');
     if (isNaN(d.getTime())) return { dayStr: '', dateFormatted: dateStr };
     const dayStr = d.toLocaleDateString('en-US', { weekday: 'short' });
-    const dateFormatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const dateFormatted = formatDateToDDMMMYYYY(d);
     return { dayStr, dateFormatted };
   } catch {
     return { dayStr: '', dateFormatted: dateStr };
@@ -2645,7 +2646,7 @@ export const MasterScheduling: React.FC = () => {
                     {viewModalApp.createdAt && (
                       <>
                         <span>•</span>
-                        <span>Logged: {new Date(viewModalApp.createdAt).toLocaleDateString()}</span>
+                        <span>Logged: {formatDateToDDMMMYYYY(new Date(viewModalApp.createdAt))}</span>
                       </>
                     )}
                   </div>
@@ -3029,7 +3030,7 @@ export const MasterScheduling: React.FC = () => {
                     <div className="p-3 rounded-xl border border-slate-100 bg-slate-50/40">
                       <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Registered At</span>
                       <span className="font-bold text-slate-800">
-                        {viewPatientData.patient.registeredAt ? new Date(viewPatientData.patient.registeredAt).toLocaleDateString() : '—'}
+                        {viewPatientData.patient.registeredAt ? formatDateToDDMMMYYYY(viewPatientData.patient.registeredAt) : '—'}
                       </span>
                     </div>
 

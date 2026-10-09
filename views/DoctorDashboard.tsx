@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
-import { SurgeonCode, PainSeverity, Affordability, ConversionReadiness, Patient, DoctorAssessment, Appointment } from '../types';
+import { formatDateToDDMMMYYYY, formatDateTimeToDDMMMYYYY } from '../utils/dateFormatter';
 import { Stethoscope, Check, ChevronRight, ChevronLeft, User, Calendar, Save, Briefcase, CreditCard, Activity, Tag, FileText, Database, Clock, Share2, ShieldCheck, Search, Filter, History, ClipboardList, RefreshCcw, Upload, Trash2, Loader2, Plus, CheckCircle2 } from 'lucide-react';
 
 const PROCEDURES = [
@@ -120,25 +120,7 @@ const DAY_COLOR_THEMES: Record<string, DayColorTheme> = {
 };
 
 const formatToDateTime = (dateString: string | undefined | null): string => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return '';
-  
-  // Use parts-based formatting to ensure absolute consistency for IST
-  const formatter = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  });
-
-  const parts = formatter.formatToParts(date);
-  const getPart = (type: string) => parts.find(p => p.type === type)?.value || '';
-  
-  return `${getPart('day')}-${getPart('month')}-${getPart('year')} ${getPart('hour')}:${getPart('minute')}`;
+  return formatDateTimeToDDMMMYYYY(dateString);
 };
 
 export const DoctorDashboard: React.FC = () => {
@@ -260,7 +242,7 @@ export const DoctorDashboard: React.FC = () => {
         shortWeekday,
         dateNum,
         monthStr,
-        formattedDate: `${weekdayName}, ${dateNum} ${monthStr}`, // e.g. "Monday, 5 Oct"
+        formattedDate: `${d.toLocaleDateString('en-US', { weekday: 'long' })}, ${String(dateNum).padStart(2, '0')} ${monthStr} ${year}`, // e.g. "Monday, 05 Oct 2026"
         isoDate
       });
     }
