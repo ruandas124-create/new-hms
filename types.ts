@@ -341,6 +341,7 @@ export interface StaffUser {
   grantedBy?: string;
   hospital_id?: string;
   hospitalName?: string;
+  primaryComplaint?: string;
   tenantId?: string;
   doctorDashboardLimit?: number;
   availability?: {
