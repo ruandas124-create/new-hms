@@ -1505,8 +1505,8 @@ export const FrontOfficeDashboard: React.FC = () => {
                             {effectiveSlots.map(s => {
                               const isBooked = bookedSlots.includes(s);
                               return (
-                                <option key={s} value={s} disabled={isBooked}>
-                                  {s} {isBooked ? '(Booked)' : ''}
+                                <option key={s} value={s}>
+                                  {s} {isBooked ? '(Booked • Selectable)' : ''}
                                 </option>
                               );
                             })}
