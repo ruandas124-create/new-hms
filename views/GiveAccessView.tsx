@@ -234,12 +234,17 @@ export const GiveAccessView: React.FC = () => {
     setEditError('');
 
     try {
-      const trimmedName = editFormData.name.trim();
+      const isDoctor = editingUser.role === 'DOCTOR';
+      // For doctors: Full Name, Email Address, and Mobile Number are strictly read-only and non-editable
+      const finalName = isDoctor ? (editingUser.name || 'Doctor') : editFormData.name.trim();
+      const finalMobile = isDoctor ? (editingUser.mobile || 'N/A') : (editFormData.mobile.trim() || 'N/A');
+      const finalEmail = isDoctor ? (editingUser.email || 'N/A') : (editFormData.email.trim().toLowerCase() || 'N/A');
+
       const payload: Partial<StaffUser> = {
-        name: trimmedName,
-        mobile: editFormData.mobile.trim() || 'N/A',
-        email: editFormData.email.trim().toLowerCase() || 'N/A',
-        specialization: editingUser.role === 'DOCTOR' ? (editFormData.specialization.trim() || 'General Surgeon') : editingUser.specialization,
+        name: finalName,
+        mobile: finalMobile,
+        email: finalEmail,
+        specialization: isDoctor ? (editFormData.specialization.trim() || 'General Surgeon') : editingUser.specialization,
       };
 
       if (editFormData.password.trim()) {
@@ -255,7 +260,7 @@ export const GiveAccessView: React.FC = () => {
         });
       }
 
-      setSuccessMessage(`Account for "${trimmedName}" updated successfully.`);
+      setSuccessMessage(`Account for "${finalName}" updated successfully.`);
       setEditingUser(null);
       setTimeout(() => {
         setSuccessMessage('');
@@ -896,7 +901,11 @@ export const GiveAccessView: React.FC = () => {
                   <h3 className="text-base font-extrabold text-slate-900">
                     Edit {editingUser.role === 'DOCTOR' ? 'Doctor' : editingUser.role === 'FRONT_OFFICE' ? 'Front Office' : 'Package Team'} Account
                   </h3>
-                  <p className="text-[11px] text-slate-400 font-medium">Update name and access details for {tenantHospitalName}</p>
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    {editingUser.role === 'DOCTOR' 
+                      ? `Doctor credentials are read-only; configure specialization and security for ${tenantHospitalName}` 
+                      : `Update name and access details for ${tenantHospitalName}`}
+                  </p>
                 </div>
               </div>
               <button 
@@ -916,50 +925,141 @@ export const GiveAccessView: React.FC = () => {
             )}
             
             <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
-              {/* Full Name field with prominent edit indicator */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Full Name / Doctor Name <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  required
-                  type="text"
-                  value={editFormData.name}
-                  onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-hospital-500 outline-none transition-all"
-                  placeholder={editingUser.role === 'DOCTOR' ? 'Dr. Full Name' : 'Staff Full Name'}
-                  autoFocus
-                />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Editing the name will update this staff member across the hospital directory, queue, and reports.
-                </p>
-              </div>
+              {/* Full Name field */}
+              {editingUser.role === 'DOCTOR' ? (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Full Name / Doctor Name
+                    </label>
+                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      <Lock className="w-2.5 h-2.5" /> Read-Only
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      readOnly
+                      disabled
+                      aria-readonly="true"
+                      value={editingUser.name || ''}
+                      className="w-full px-3.5 py-2.5 pr-9 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-not-allowed select-none outline-none"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                      <Lock className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Doctor identity is managed by Admin / Master Admin and cannot be edited here.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Full Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={editFormData.name}
+                    onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-hospital-500 outline-none transition-all"
+                    placeholder="Staff Full Name"
+                    autoFocus
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Editing the name will update this staff member across the hospital directory, queue, and reports.
+                  </p>
+                </div>
+              )}
               
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={editFormData.email}
-                  onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-hospital-500 outline-none transition-all"
-                  placeholder="user@hospital.com"
-                />
-              </div>
+              {/* Email Address field */}
+              {editingUser.role === 'DOCTOR' ? (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Email Address
+                    </label>
+                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      <Lock className="w-2.5 h-2.5" /> Read-Only
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="email"
+                      readOnly
+                      disabled
+                      aria-readonly="true"
+                      value={editingUser.email && editingUser.email !== 'N/A' ? editingUser.email : ''}
+                      className="w-full px-3.5 py-2.5 pr-9 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-not-allowed select-none outline-none"
+                      placeholder="Doctor email address"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                      <Lock className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Managed by Admin / Master Admin (Read-Only)
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={editFormData.email}
+                    onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-hospital-500 outline-none transition-all"
+                    placeholder="user@hospital.com"
+                  />
+                </div>
+              )}
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Mobile Number
-                </label>
-                <input
-                  type="tel"
-                  value={editFormData.mobile}
-                  onChange={(e) => setEditFormData({...editFormData, mobile: e.target.value})}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-hospital-500 outline-none transition-all"
-                  placeholder="10-digit mobile number"
-                />
-              </div>
+              {/* Mobile Number field */}
+              {editingUser.role === 'DOCTOR' ? (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Mobile Number
+                    </label>
+                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      <Lock className="w-2.5 h-2.5" /> Read-Only
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="tel"
+                      readOnly
+                      disabled
+                      aria-readonly="true"
+                      value={editingUser.mobile && editingUser.mobile !== 'N/A' ? editingUser.mobile : ''}
+                      className="w-full px-3.5 py-2.5 pr-9 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold font-mono text-slate-700 cursor-not-allowed select-none outline-none"
+                      placeholder="Doctor mobile number"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                      <Lock className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Managed by Admin / Master Admin (Read-Only)
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Mobile Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={editFormData.mobile}
+                    onChange={(e) => setEditFormData({...editFormData, mobile: e.target.value})}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-hospital-500 outline-none transition-all"
+                    placeholder="10-digit mobile number"
+                  />
+                </div>
+              )}
 
               {editingUser.role === 'DOCTOR' && (
                 <div>

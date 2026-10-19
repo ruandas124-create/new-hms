@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { 
   Patient, DoctorAssessment, PackageProposal, Role, StaffUser, Appointment, 
-  Condition, SurgeonCode, PainSeverity, Affordability, ConversionReadiness, 
+  Condition, DEFAULT_CONDITIONS, SurgeonCode, PainSeverity, Affordability, ConversionReadiness, 
   ProposalOutcome, Gender, DashboardKey, DashboardPermission,
   SchedulingTarget, SchedulingPermissionsState, ReportPermissionsState,
   AnalyticsAccountHierarchy, normalizeSource, normalizeToIsoDate, getScheduleBy
@@ -56,6 +56,8 @@ interface HospitalContextType {
   updatePackageProposal: (patientId: string, proposal: PackageProposal) => Promise<void>;
   getPatientById: (id: string) => Patient | undefined;
   fetchFilteredPatients: (filters: PatientFilters, page: number, pageSize: number) => Promise<{ data: Patient[], count: number }>;
+  addRevisitNote: (data: { patientId: string; hospitalId?: string; doctorId?: string; doctorName?: string; note: string; revisitDate?: string; revisitTime?: string; actionType?: 'Scheduled' | 'Arrived' }) => Promise<void>;
+  fetchRevisitNotes: (patientId: string, hospitalId?: string) => Promise<any[]>;
   appointments: Appointment[];
   addAppointment: (appointmentData: Omit<Appointment, 'id' | 'createdAt' | 'hospital_id' | 'status'> & { hospital_id?: string; status?: string }) => Promise<Appointment>;
   updateAppointment: (appointment: Appointment) => Promise<void>;
@@ -70,6 +72,9 @@ interface HospitalContextType {
   isStaffLoaded: boolean;
   systemName: string;
   updateSystemName: (name: string) => void;
+  conditions: string[];
+  addCondition: (name: string) => Promise<{ success: boolean; message: string }>;
+  updateCondition: (oldName: string, newName: string) => Promise<{ success: boolean; message: string }>;
 }
 
 const HospitalContext = createContext<HospitalContextType | undefined>(undefined);
@@ -77,6 +82,7 @@ const STORAGE_KEY_ROLE = 'hms_hospital_role';
 const STORAGE_KEY_PERMS = 'hms_dashboard_permissions';
 const STORAGE_KEY_SCHED_PERMS = 'hms_scheduling_permissions';
 const STORAGE_KEY_REPORT_PERMS = 'hms_report_permissions';
+const STORAGE_KEY_CONDITIONS = 'hms_primary_complaint_conditions';
 const APPOINTMENTS_TABLE = 'himas_appointments';
 export const DEFAULT_STAFF_SEEDS: StaffUser[] = [
   {
@@ -90,6 +96,30 @@ export const DEFAULT_STAFF_SEEDS: StaffUser[] = [
     accessStatus: 'Active',
     grantedBy: 'System Root',
     hospitalName: 'Global Control Center'
+  },
+  {
+    id: 'staff_sales_01',
+    name: 'Sales Executive One',
+    email: 'sales@hms.com',
+    mobile: '+19999990001',
+    role: 'SALES',
+    password: 'Sales@123',
+    registeredAt: '2026-01-01T00:00:00.000Z',
+    accessStatus: 'Active',
+    grantedBy: 'System Root',
+    hospitalName: 'All Hospitals'
+  },
+  {
+    id: 'staff_sales_02',
+    name: 'Sales Executive Two',
+    email: 'sales2@hms.com',
+    mobile: '+19999990002',
+    role: 'SALES',
+    password: 'Sales@123',
+    registeredAt: '2026-01-01T00:00:00.000Z',
+    accessStatus: 'Active',
+    grantedBy: 'System Root',
+    hospitalName: 'All Hospitals'
   }
 ];
 
@@ -104,6 +134,7 @@ export const DEFAULT_PERMISSIONS: Record<DashboardKey, boolean> = {
   doctor_performance: true,
   front_office: true,
   doctor: true,
+  doctor_medication_done: true,
   doctor_appointments: true,
   doctor_availability: true,
   doctor_profile: true,
@@ -135,6 +166,7 @@ export const DASHBOARD_TO_SLUG: Record<DashboardKey, string> = {
   doctor_performance: 'doctor-performance',
   front_office: 'front-office',
   doctor: 'doctor',
+  doctor_medication_done: 'doctor-medication-done',
   doctor_appointments: 'doctor-appointments',
   doctor_availability: 'doctor-availability',
   doctor_profile: 'doctor-profile',
@@ -155,7 +187,9 @@ export const checkPermission = (
   }
 
   if (user && user.grantedBy === 'Master Admin' && user.accessStatus === 'Active') {
-    if (user.role === 'SALES' && dashboard === 'sales') return !!permissions.sales;
+    if (user.role === 'SALES') {
+      return dashboard === 'sales' && !!permissions.sales;
+    }
     if (dashboard === 'analytics_hub' || dashboard === 'doctor_performance') return !!permissions.analytics_hub;
   }
 
@@ -184,9 +218,15 @@ export const checkPermission = (
     return false;
   }
 
-  // 5. DOCTOR: Can access doctor patient queue, appointments, availability, and profile
+  // 5. DOCTOR: Can access doctor patient queue, medication done, appointments, availability, and profile
   if (role === 'DOCTOR') {
-    if (dashboard === 'doctor' || dashboard === 'doctor_appointments' || dashboard === 'doctor_availability' || dashboard === 'doctor_profile') return !!permissions.doctor;
+    if (
+      dashboard === 'doctor' || 
+      dashboard === 'doctor_medication_done' || 
+      dashboard === 'doctor_appointments' || 
+      dashboard === 'doctor_availability' || 
+      dashboard === 'doctor_profile'
+    ) return !!permissions.doctor;
     return false;
   }
 
@@ -249,6 +289,10 @@ const getDashboardFromLocation = (): DashboardKey | null => {
     if (hash === 'analytics' || hash === 'analytics-hub' || hash === 'analytics_hub') return 'analytics_hub';
     if (hash === 'doctor-performance' || hash === 'doctor_performance') return 'doctor_performance';
     if (hash === 'front-office' || hash === 'front_office') return 'front_office';
+    if (hash === 'doctor-medication-done' || hash === 'doctor_medication_done' || hash === 'medication-done' || hash === 'medication_done') return 'doctor_medication_done';
+    if (hash === 'doctor-appointments' || hash === 'doctor_appointments') return 'doctor_appointments';
+    if (hash === 'doctor-availability' || hash === 'doctor_availability') return 'doctor_availability';
+    if (hash === 'doctor-profile' || hash === 'doctor_profile') return 'doctor_profile';
     if (hash === 'doctor') return 'doctor';
     if (hash === 'package') return 'package';
     if (hash === 'sales') return 'sales';
@@ -264,6 +308,10 @@ const getDashboardFromLocation = (): DashboardKey | null => {
     if (path === 'admin') return 'analytics_hub';
     if (path === 'analytics' || path === 'analytics-hub' || path === 'analytics_hub') return 'analytics_hub';
     if (path === 'front-office' || path === 'front_office') return 'front_office';
+    if (path === 'doctor-medication-done' || path === 'doctor_medication_done' || path === 'medication-done' || path === 'medication_done') return 'doctor_medication_done';
+    if (path === 'doctor-appointments' || path === 'doctor_appointments') return 'doctor_appointments';
+    if (path === 'doctor-availability' || path === 'doctor_availability') return 'doctor_availability';
+    if (path === 'doctor-profile' || path === 'doctor_profile') return 'doctor_profile';
     if (path === 'doctor') return 'doctor';
     if (path === 'package') return 'package';
     if (path === 'sales') return 'sales';
@@ -345,7 +393,13 @@ const mapRowToPatient = (row: any): Patient => {
     registeredAt: row.created_at || new Date().toISOString(),
     updated_at: row.updated_at || row.created_at || new Date().toISOString(),
     status_updated_at: row.status_updated_at || null,
-    entry_date: normalizeToIsoDate(row.entry_date || row.doctor_assessment?.appointment_date || row.doctor_assessment?.date || row.created_at?.split('T')[0] || ''),
+    entry_date: normalizeToIsoDate(
+      row.doctor_assessment?.scheduled_date || 
+      row.doctor_assessment?.appointment_date || 
+      row.doctor_assessment?.date || 
+      row.entry_date || 
+      ''
+    ),
     arrivalTime: row.arrival_time ? row.arrival_time.substring(0, 5) : (row.booking_time ? row.booking_time.substring(0, 5) : (row.doctor_assessment?.appointment_time || '')),
     status: (row.booking_status === 'Doctor Done' && (!row.doctor_assessment?.quickCode && !row.doctor_assessment?.assessedAt && !row.doctor_assessment?.doctorSignature))
       ? (row.arrival_time ? 'Arrived' : 'Scheduled')
@@ -420,6 +474,9 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       }
       return 'master_access';
     }
+    if (savedRole === 'SALES') {
+      return 'sales';
+    }
     if (locDash) return locDash;
     return getDefaultDashboardForRole(savedRole as Role);
   });
@@ -428,6 +485,19 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
   const [allStaffUsers, setAllStaffUsers] = useState<StaffUser[]>(DEFAULT_STAFF_SEEDS);
   const [selectedTenantFilter, setSelectedTenantFilter] = useState<string>('ALL');
+
+  const [conditions, setConditions] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_CONDITIONS);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return DEFAULT_CONDITIONS;
+  });
 
   const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') : null;
   
@@ -472,7 +542,25 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       return allPatients;
     }
     if (currentUserRole === 'SALES') {
-      return allPatients;
+      const activeSalesId = currentUserId || (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') : null);
+      const activeSalesStaff = currentUserStaff || (allStaffUsers || []).find(u => u.id === activeSalesId);
+      const activeSalesEmail = (activeSalesStaff?.email || (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_email') : '') || '').toLowerCase().trim();
+      const activeSalesName = (activeSalesStaff?.name || (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_name') : '') || '').toLowerCase().trim();
+
+      return allPatients.filter(p => {
+        const pCreator = (p as any).created_by_user_id || (p as any).creator_id;
+        if (pCreator && activeSalesId && pCreator === activeSalesId) return true;
+
+        return allAppointments.some(a => {
+          if (!((a.patient_id && a.patient_id === p.id) || (a.mobile && a.mobile === p.mobile))) return false;
+          const aCreator = a.created_by_user_id || a.doctor_assessment?.created_by_user_id || a.doctor_assessment?.sales_user_id || a.doctor_assessment?.created_by;
+          if (aCreator && activeSalesId) return aCreator === activeSalesId;
+          const aUsername = (a.username || a.doctor_assessment?.username || '').toLowerCase().trim();
+          if (activeSalesName && aUsername === activeSalesName) return true;
+          if (activeSalesEmail && aUsername === activeSalesEmail) return true;
+          return false;
+        });
+      });
     }
     if (currentUserRole === 'DOCTOR') {
       return allPatients.filter(p => 
@@ -486,7 +574,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       return allPatients.filter(p => !p.hospital_id || p.hospital_id === currentTenantId);
     }
     return allPatients;
-  }, [allPatients, currentUserRole, selectedTenantFilter, currentTenantId, currentDoctorId, currentUserStaff]);
+  }, [allPatients, allAppointments, currentUserRole, selectedTenantFilter, currentTenantId, currentDoctorId, currentUserStaff, allStaffUsers, currentUserId]);
 
   const appointments = useMemo(() => {
     if (currentUserRole === 'MASTER') {
@@ -496,7 +584,28 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       return allAppointments;
     }
     if (currentUserRole === 'SALES') {
-      return allAppointments;
+      const activeSalesId = currentUserId || (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') : null);
+      const activeSalesStaff = currentUserStaff || (allStaffUsers || []).find(u => u.id === activeSalesId);
+      const activeSalesEmail = (activeSalesStaff?.email || (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_email') : '') || '').toLowerCase().trim();
+      const activeSalesName = (activeSalesStaff?.name || (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_name') : '') || '').toLowerCase().trim();
+
+      return allAppointments.filter(a => {
+        const apptCreatorId = a.created_by_user_id || 
+                              a.doctor_assessment?.created_by_user_id || 
+                              a.doctor_assessment?.sales_user_id || 
+                              a.doctor_assessment?.created_by;
+        if (apptCreatorId && activeSalesId) {
+          return apptCreatorId === activeSalesId;
+        }
+
+        if (a.remarks && activeSalesId && a.remarks === activeSalesId) return true;
+
+        const apptUsername = (a.username || a.doctor_assessment?.username || '').toLowerCase().trim();
+        if (activeSalesName && apptUsername && apptUsername === activeSalesName) return true;
+        if (activeSalesEmail && apptUsername && apptUsername === activeSalesEmail) return true;
+
+        return false;
+      });
     }
     if (currentUserRole === 'DOCTOR') {
       return allAppointments.filter(a => {
@@ -882,6 +991,11 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           setActiveDashboardState('master_access');
           window.location.hash = `#/master-access`;
         }
+      } else if (currentUserRole === 'SALES') {
+        if (activeDashboard !== 'sales') {
+          setActiveDashboardState('sales');
+          window.location.hash = `#/sales`;
+        }
       } else {
         const isCurrentAllowed = checkPermission(currentUserRole, activeDashboard, dashboardPermissions, user);
         if (!isCurrentAllowed) {
@@ -955,6 +1069,9 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       if (role === 'MASTER') {
         setActiveDashboardState('master_access');
         window.location.hash = `#/master-access`;
+      } else if (role === 'SALES') {
+        setActiveDashboardState('sales');
+        window.location.hash = `#/sales`;
       } else {
         const primary = getDefaultDashboardForRole(role, user);
         const isAllowed = checkPermission(role, activeDashboard, dashboardPermissions, user);
@@ -994,20 +1111,34 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         const limit = 1000;
         let hasMore = true;
 
+        const activeRole = currentUserRole || 
+          (typeof window !== 'undefined' ? (localStorage.getItem('hms_hospital_role') || localStorage.getItem('user_role')) : null);
+        const isSalesUser = activeRole === 'SALES';
+        const activeSalesId = currentUserId || (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') : null);
+
         while (hasMore) {
-          let { data, error } = await supabase
+          let query = supabase
             .from(APPOINTMENTS_TABLE)
-            .select('*')
+            .select('*');
+
+          if (isSalesUser && activeSalesId) {
+            query = query.or(`doctor_assessment->>created_by_user_id.eq.${activeSalesId},doctor_assessment->>sales_user_id.eq.${activeSalesId},remarks.eq.${activeSalesId},id.eq.config_primary_complaints,id.like.doctor_metadata_%`);
+          }
+
+          let { data, error } = await query
             .order('created_at', { ascending: false })
             .range(from, from + limit - 1);
 
           // If ordered query failed, try simple select without ordering
           if (error) {
             console.warn('[Hospital] Ordered query failed, attempting plain select:', error);
-            const fallback = await supabase
+            let fallbackQuery = supabase
               .from(APPOINTMENTS_TABLE)
-              .select('*')
-              .range(from, from + limit - 1);
+              .select('*');
+            if (isSalesUser && activeSalesId) {
+              fallbackQuery = fallbackQuery.or(`doctor_assessment->>created_by_user_id.eq.${activeSalesId},doctor_assessment->>sales_user_id.eq.${activeSalesId},remarks.eq.${activeSalesId},id.eq.config_primary_complaints,id.like.doctor_metadata_%`);
+            }
+            const fallback = await fallbackQuery.range(from, from + limit - 1);
             data = fallback.data;
             error = fallback.error;
           }
@@ -1077,6 +1208,19 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           localStorage.setItem(STORAGE_KEY_SCHED_PERMS, JSON.stringify(mappedSched));
           localStorage.setItem(STORAGE_KEY_REPORT_PERMS, JSON.stringify(mappedReport));
         }
+
+        const permConditionsRow = permRows.find((r: any) => r.id === 'config_primary_complaints');
+        if (permConditionsRow && permConditionsRow.granted_by) {
+          try {
+            const parsed = JSON.parse(permConditionsRow.granted_by);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setConditions(parsed);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(STORAGE_KEY_CONDITIONS, JSON.stringify(parsed));
+              }
+            }
+          } catch {}
+        }
       }
 
       if (apptError) {
@@ -1087,11 +1231,20 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       const metadataRows = combinedApptRows.filter((r: any) => r.id && r.id.startsWith('doctor_metadata_'));
 
+      const metaConditionsRow = combinedApptRows.find((r: any) => r.id === 'config_primary_complaints');
+      if (metaConditionsRow?.doctor_assessment?.conditions && Array.isArray(metaConditionsRow.doctor_assessment.conditions)) {
+        const list = metaConditionsRow.doctor_assessment.conditions;
+        setConditions(list);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_KEY_CONDITIONS, JSON.stringify(list));
+        }
+      }
+
       // 1. SCHEDULED / APPOINTMENT LEADS (Scheduled Roster)
       // Any record that is not marked as Arrived or purely clinical note metadata
       const appointmentLeads = combinedApptRows
         .filter((r: any) => {
-          if (!r.id || r.id.startsWith('doctor_metadata_') || r.id.startsWith('lead_note_')) return false;
+          if (!r.id || r.id.startsWith('doctor_metadata_') || r.id.startsWith('lead_note_') || r.id === 'config_primary_complaints') return false;
           if (r.booking_status === 'DoctorMetadata' || r.booking_status === 'LeadNote') return false;
 
           const bStatus = (r.booking_status || '').toLowerCase().trim();
@@ -1126,7 +1279,13 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           const resolvedHospName = r.doctor_assessment?.hospitalName || (staffData || []).find((u: any) => u.id === resolvedHospId)?.name || '';
 
           const resolvedSource = normalizeSource(r.source || r.doctor_assessment?.source || 'Other');
-          const resolvedDate = normalizeToIsoDate(r.entry_date || r.doctor_assessment?.appointment_date || r.doctor_assessment?.date || r.created_at?.split('T')[0] || '');
+          const rawScheduledDate = 
+            r.doctor_assessment?.scheduled_date ||
+            r.doctor_assessment?.appointment_date ||
+            r.doctor_assessment?.date ||
+            r.entry_date ||
+            '';
+          const resolvedDate = normalizeToIsoDate(rawScheduledDate);
           const resolvedTime = r.booking_time ? r.booking_time.substring(0, 5) : (r.doctor_assessment?.appointment_time || r.doctor_assessment?.time || '');
 
           let apptStatus = r.booking_status || 'Scheduled';
@@ -1168,6 +1327,9 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
             notes_list: r.doctor_assessment?.notes_list || [],
             scheduled_by: resolvedScheduleBy,
             scheduled_by_role: r.doctor_assessment?.scheduled_by_role || (resolvedScheduleBy === 'Acquire OPD Team' ? 'sales' : 'front_office'),
+            created_by_user_id: r.doctor_assessment?.created_by_user_id || r.doctor_assessment?.sales_user_id || r.doctor_assessment?.created_by || (r.remarks && staffData?.some((u: any) => u.id === r.remarks) ? r.remarks : undefined),
+            sales_user_id: r.doctor_assessment?.sales_user_id || r.doctor_assessment?.created_by_user_id || undefined,
+            remarks: r.remarks || undefined,
             doctor_assessment: r.doctor_assessment
           };
         });
@@ -1178,7 +1340,7 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       // Only patients who have arrived, registered in OPD, or proceeded through clinical stages
       const consolidatedPatients = combinedApptRows
         .filter((r: any) => {
-          if (!r.id || r.id.startsWith('doctor_metadata_') || r.id.startsWith('lead_note_')) return false;
+          if (!r.id || r.id.startsWith('doctor_metadata_') || r.id.startsWith('lead_note_') || r.id === 'config_primary_complaints') return false;
           if (r.booking_status === 'DoctorMetadata' || r.booking_status === 'LeadNote') return false;
 
           const bStatus = (r.booking_status || '').toLowerCase().trim();
@@ -1551,6 +1713,144 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
   const getPatientById = (id: string) => patients.find(p => p.id === id);
   const fetchFilteredPatients = async (filters: PatientFilters, page: number, pageSize: number) => { return { data: patients, count: patients.length }; };
 
+  const addRevisitNote = async (data: {
+    patientId: string;
+    hospitalId?: string;
+    doctorId?: string;
+    doctorName?: string;
+    note: string;
+    revisitDate?: string;
+    revisitTime?: string;
+    actionType?: 'Scheduled' | 'Arrived';
+  }) => {
+    if (!data.patientId || !data.note?.trim()) return;
+    const nowIso = new Date().toISOString();
+    const resolvedHospId = data.hospitalId || currentTenantId || currentUserStaff?.hospital_id || (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_tenant_id') : null) || null;
+    const noteId = `rev_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const docName = data.doctorName || currentUserStaff?.name || (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_name') : null) || 'Doctor';
+    const docId = data.doctorId || currentDoctorId || (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') : null) || null;
+
+    // 1. Insert into revisit_notes in Supabase
+    try {
+      await supabase.from('revisit_notes').insert({
+        id: noteId,
+        patient_id: data.patientId,
+        hospital_id: resolvedHospId,
+        doctor_id: docId,
+        doctor_name: docName,
+        note: data.note.trim(),
+        revisit_date: data.revisitDate || null,
+        revisit_time: data.revisitTime || null,
+        action_type: data.actionType || 'Scheduled',
+        created_at: nowIso,
+        created_by: docName,
+        created_by_name: docName
+      });
+    } catch (e) {
+      console.warn('revisit_notes insert error/notice:', e);
+    }
+
+    // 2. Also insert into lead_notes in Supabase
+    try {
+      await supabase.from('lead_notes').insert({
+        id: noteId,
+        lead_id: data.patientId,
+        hospital_id: resolvedHospId,
+        note: data.note.trim(),
+        created_at: nowIso,
+        created_date: data.revisitDate || new Date().toISOString().split('T')[0],
+        created_time: data.revisitTime || new Date().toTimeString().split(' ')[0].substring(0, 5),
+        created_by: 'doctor',
+        created_by_name: docName
+      });
+    } catch (e) {
+      console.warn('lead_notes sync error/notice:', e);
+    }
+
+    // 3. Update patient's doctorAssessment in himas_appointments
+    try {
+      const existingPatient = patients.find(p => p.id === data.patientId);
+      if (existingPatient) {
+        const existingAssessment = existingPatient.doctorAssessment || {};
+        const existingHistory = (existingAssessment as any).revisit_notes_history || [];
+        const newHistoryItem = {
+          id: noteId,
+          note: data.note.trim(),
+          date: data.revisitDate || new Date().toISOString().split('T')[0],
+          time: data.revisitTime || '',
+          actionType: data.actionType || 'Scheduled',
+          author: docName,
+          createdAt: nowIso
+        };
+        const updatedAssessment = {
+          ...existingAssessment,
+          revisit_note: data.note.trim(),
+          revisit_date: data.revisitDate || null,
+          revisit_time: data.revisitTime || null,
+          revisit_notes_history: [newHistoryItem, ...existingHistory]
+        };
+        await supabase
+          .from(APPOINTMENTS_TABLE)
+          .update({
+            doctor_assessment: updatedAssessment,
+            updated_at: nowIso
+          })
+          .eq('id', data.patientId);
+      }
+    } catch (e) {
+      console.warn('doctor_assessment revisit note sync error:', e);
+    }
+  };
+
+  const fetchRevisitNotes = async (patientId: string, hospitalId?: string): Promise<any[]> => {
+    if (!patientId) return [];
+    try {
+      let query = supabase.from('revisit_notes').select('*').eq('patient_id', patientId);
+      if (hospitalId) {
+        query = query.eq('hospital_id', hospitalId);
+      }
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (!error && data && data.length > 0) {
+        return data;
+      }
+    } catch (e) {
+      console.warn('fetchRevisitNotes error:', e);
+    }
+
+    // Fallback: Query lead_notes table
+    try {
+      let lQuery = supabase.from('lead_notes').select('*').eq('lead_id', patientId);
+      if (hospitalId) {
+        lQuery = lQuery.or(`hospital_id.eq.${hospitalId},hospital_id.is.null`);
+      }
+      const { data: leadData } = await lQuery.order('created_at', { ascending: false });
+      if (leadData && leadData.length > 0) {
+        return leadData.map(n => ({
+          id: n.id,
+          patient_id: n.lead_id,
+          hospital_id: n.hospital_id,
+          doctor_name: n.created_by_name || n.created_by || 'Doctor',
+          note: n.note,
+          revisit_date: n.created_date || '',
+          revisit_time: n.created_time || '',
+          action_type: 'Scheduled',
+          created_at: n.created_at,
+          created_by_name: n.created_by_name || n.created_by
+        }));
+      }
+    } catch (e) {
+      console.warn('lead_notes fallback query error:', e);
+    }
+
+    // Fallback: check in-memory patient doctor_assessment history
+    const existingPatient = patients.find(p => p.id === patientId);
+    if (existingPatient?.doctorAssessment && (existingPatient.doctorAssessment as any).revisit_notes_history) {
+      return (existingPatient.doctorAssessment as any).revisit_notes_history;
+    }
+
+    return [];
+  };
+
   const addAppointment = async (appointmentData: Omit<Appointment, 'id' | 'createdAt' | 'hospital_id' | 'status'> & { hospital_id?: string; status?: string }) => {
     setSaveStatus('saving');
     try {
@@ -1583,20 +1883,33 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         ? (appointmentData.referral_person?.trim() || null)
         : null;
 
+      const activeUserId = (appointmentData as any).created_by_user_id || 
+        currentUserId || 
+        (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') : null) || 
+        null;
+
       const isSalesRole = activeRole === 'SALES' || 
         (typeof window !== 'undefined' && localStorage.getItem('user_role') === 'SALES');
 
-      const resolvedScheduleBy = (appointmentData as any).scheduled_by || 
-        (isSalesRole || (appointmentData.username && appointmentData.username.toLowerCase().includes('sales'))
-          ? 'Acquire OPD Team'
-          : 'Front Office');
+      const isRevisit = (appointmentData as any).visit_type === 'Revisit';
+      const isDoctorBooking = (appointmentData as any).scheduled_by_role === 'doctor';
 
-      const resolvedScheduleByRole = (appointmentData as any).scheduled_by_role || 
-        (resolvedScheduleBy === 'Acquire OPD Team' ? 'sales' : 'front_office');
+      const isSalesAppointmentAdd = !isRevisit && !isDoctorBooking && (isSalesRole || 
+        (appointmentData as any).scheduled_by_role === 'sales' ||
+        (appointmentData as any).sales_user_id ||
+        ((appointmentData as any).scheduled_by && ((appointmentData as any).scheduled_by.toLowerCase().includes('sales') || (appointmentData as any).scheduled_by.toLowerCase().includes('acquire'))) ||
+        ((appointmentData as any).username && (appointmentData as any).username.toLowerCase().includes('sales')) ||
+        (allStaffUsers.some(u => u.role === 'SALES' && (u.id === activeUserId || u.id === (appointmentData as any).created_by_user_id))));
+
+      const resolvedScheduleBy = isSalesAppointmentAdd ? 'Acquire OPD team' : ((appointmentData as any).scheduled_by || 'Front Office');
+
+      const resolvedScheduleByRole = isSalesAppointmentAdd ? 'sales' : ((appointmentData as any).scheduled_by_role || 'front_office');
 
       const newApptId = `APP-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
       const nowIso = new Date().toISOString();
       const initialStatus = appointmentData.status || appointmentData.bookingType || 'Scheduled';
+
+      const activeUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_email') : null) || currentUserStaff?.email || '';
 
       const dbRecord = {
         id: newApptId,
@@ -1620,6 +1933,11 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           username: activeUsername,
           scheduled_by: resolvedScheduleBy,
           scheduled_by_role: resolvedScheduleByRole,
+          created_by_user_id: activeUserId,
+          created_by: activeUserId,
+          sales_user_id: isSalesRole ? activeUserId : ((appointmentData as any).sales_user_id || undefined),
+          created_by_name: activeUsername,
+          created_by_email: activeUserEmail,
           assignment_type: resolvedAssignmentType,
           doctor_id: resolvedDoctorId,
           hospital_id: resolvedHospitalId,
@@ -1633,7 +1951,8 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           followup_notes: appointmentData.followup_notes || null,
           followup_history: appointmentData.followup_history || [],
           notes: appointmentData.notes || null,
-          notes_list: appointmentData.notes_list || []
+          notes_list: appointmentData.notes_list || [],
+          ...((appointmentData.doctor_assessment && typeof appointmentData.doctor_assessment === 'object') ? appointmentData.doctor_assessment : {})
         }
       };
 
@@ -1664,6 +1983,9 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         notes_list: appointmentData.notes_list || [],
         scheduled_by: resolvedScheduleBy,
         scheduled_by_role: resolvedScheduleByRole,
+        created_by_user_id: activeUserId || undefined,
+        sales_user_id: (isSalesRole ? activeUserId : (appointmentData as any).sales_user_id) || undefined,
+        remarks: dbRecord.remarks,
         doctor_assessment: dbRecord.doctor_assessment
       };
 
@@ -1742,12 +2064,21 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       const targetStatus = appointment.status || appointment.bookingType || existingAppt?.status || 'Scheduled';
 
-      const resolvedScheduleBy = appointment.scheduled_by || 
-        existingAppt?.scheduled_by || 
-        getScheduleBy(appointment, allStaffUsers);
-      const resolvedScheduleByRole = appointment.scheduled_by_role || 
-        existingAppt?.scheduled_by_role || 
-        (resolvedScheduleBy === 'Acquire OPD Team' ? 'sales' : 'front_office');
+      const existingScheduledBy = existingAppt?.doctor_assessment?.scheduled_by;
+      const existingScheduledByRole = existingAppt?.doctor_assessment?.scheduled_by_role;
+
+      const isSalesAppointment = !existingScheduledBy && (
+        existingAppt?.scheduled_by_role === 'sales' ||
+        (existingAppt?.scheduled_by && (existingAppt.scheduled_by.toLowerCase().includes('sales') || existingAppt.scheduled_by.toLowerCase().includes('acquire'))) ||
+        existingAppt?.sales_user_id ||
+        appointment.scheduled_by_role === 'sales' ||
+        appointment.sales_user_id ||
+        (appointment.scheduled_by && (appointment.scheduled_by.toLowerCase().includes('sales') || appointment.scheduled_by.toLowerCase().includes('acquire'))) ||
+        (allStaffUsers.some(u => u.role === 'SALES' && (u.id === appointment.created_by_user_id || u.id === appointment.sales_user_id || u.id === existingAppt?.created_by_user_id || u.id === existingAppt?.sales_user_id)))
+      );
+
+      const resolvedScheduleBy = existingScheduledBy || (isSalesAppointment ? 'Acquire OPD team' : (appointment.scheduled_by || getScheduleBy(appointment, allStaffUsers) || 'Front Office'));
+      const resolvedScheduleByRole = existingScheduledByRole || (isSalesAppointment ? 'sales' : (appointment.scheduled_by_role || 'front_office'));
 
       const updateData: any = {
         name: appointment.name,
@@ -1765,11 +2096,12 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         followup_date: resolvedFollowupDate || null,
         updated_at: new Date().toISOString(),
         doctor_assessment: {
+          ...existingAppt?.doctor_assessment,
           assignedDoctorId: resolvedDoctorId,
           assignedDoctorName: appointment.assignedDoctorName || (resolvedAssignmentType === 'hospital' && !resolvedDoctorId ? null : (appointment.assignedDoctorName || null)),
           username: activeUsername,
-          scheduled_by: resolvedScheduleBy,
-          scheduled_by_role: resolvedScheduleByRole,
+          scheduled_by: existingAppt?.doctor_assessment?.scheduled_by || resolvedScheduleBy,
+          scheduled_by_role: existingAppt?.doctor_assessment?.scheduled_by_role || resolvedScheduleByRole,
           assignment_type: resolvedAssignmentType,
           doctor_id: resolvedDoctorId,
           hospital_id: resolvedHospitalId,
@@ -1783,7 +2115,10 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           followup_notes: resolvedFollowupNotes || null,
           followup_history: resolvedFollowupHistory,
           notes: resolvedNotes || null,
-          notes_list: resolvedNotesList
+          notes_list: resolvedNotesList,
+          created_by_user_id: (appointment as any).created_by_user_id || existingAppt?.created_by_user_id || existingAppt?.doctor_assessment?.created_by_user_id || null,
+          sales_user_id: (appointment as any).sales_user_id || existingAppt?.sales_user_id || existingAppt?.doctor_assessment?.sales_user_id || null,
+          created_by: (appointment as any).created_by_user_id || existingAppt?.created_by_user_id || existingAppt?.doctor_assessment?.created_by || null
         }
       };
       const { error } = await supabase.from(APPOINTMENTS_TABLE).update(updateData).eq('id', appointment.id);
@@ -1881,9 +2216,18 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
   const updateStaff = async (id: string, staffData: Partial<StaffUser>) => {
     setSaveStatus('saving');
     try {
+      // Disallow doctors from modifying their own Full Name, Email Address, and Mobile Number.
+      // These profile fields are strictly controlled by authorized Admin or Master Admin.
+      const sanitizedStaffData = { ...staffData };
+      if (currentUserRole === 'DOCTOR') {
+        delete sanitizedStaffData.name;
+        delete sanitizedStaffData.email;
+        delete sanitizedStaffData.mobile;
+      }
+
       if (
-        staffData.photoUrl !== undefined ||
-        staffData.availability !== undefined ||
+        sanitizedStaffData.photoUrl !== undefined ||
+        sanitizedStaffData.availability !== undefined ||
         staffData.registrationNumber !== undefined ||
         staffData.specialization !== undefined ||
         staffData.username !== undefined ||
@@ -1950,19 +2294,19 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       }
 
       const dbStaffData: any = {};
-      if (staffData.name !== undefined) dbStaffData.name = staffData.name;
-      if (staffData.email !== undefined) dbStaffData.email = staffData.email;
-      if (staffData.mobile !== undefined) dbStaffData.mobile = staffData.mobile;
-      if (staffData.role !== undefined) dbStaffData.role = staffData.role;
-      if (staffData.password !== undefined) dbStaffData.password = staffData.password;
-      if (staffData.hospital_id !== undefined) dbStaffData.hospital_id = staffData.hospital_id;
-      if (staffData.hospitalName !== undefined) dbStaffData.hospital_name = staffData.hospitalName;
-      if (staffData.doctorDashboardLimit !== undefined) dbStaffData.doctor_dashboard_limit = staffData.doctorDashboardLimit;
+      if (sanitizedStaffData.name !== undefined) dbStaffData.name = sanitizedStaffData.name;
+      if (sanitizedStaffData.email !== undefined) dbStaffData.email = sanitizedStaffData.email;
+      if (sanitizedStaffData.mobile !== undefined) dbStaffData.mobile = sanitizedStaffData.mobile;
+      if (sanitizedStaffData.role !== undefined) dbStaffData.role = sanitizedStaffData.role;
+      if (sanitizedStaffData.password !== undefined) dbStaffData.password = sanitizedStaffData.password;
+      if (sanitizedStaffData.hospital_id !== undefined) dbStaffData.hospital_id = sanitizedStaffData.hospital_id;
+      if (sanitizedStaffData.hospitalName !== undefined) dbStaffData.hospital_name = sanitizedStaffData.hospitalName;
+      if (sanitizedStaffData.doctorDashboardLimit !== undefined) dbStaffData.doctor_dashboard_limit = sanitizedStaffData.doctorDashboardLimit;
 
       // Update in-memory state immediately for instantaneous, flicker-free feedback
-      setAllStaffUsers(prev => prev.map(u => u.id === id ? { ...u, ...staffData } : u));
-      if (staffData.name) {
-        setAllAppointments(prev => prev.map(a => a.assignedDoctorId === id ? { ...a, assignedDoctorName: staffData.name } : a));
+      setAllStaffUsers(prev => prev.map(u => u.id === id ? { ...u, ...sanitizedStaffData } : u));
+      if (sanitizedStaffData.name) {
+        setAllAppointments(prev => prev.map(a => a.assignedDoctorId === id ? { ...a, assignedDoctorName: sanitizedStaffData.name } : a));
       }
 
       if (Object.keys(dbStaffData).length > 0) {
@@ -1982,6 +2326,95 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
     } catch (err) {
       console.error('Update Staff Error:', err);
       setSaveStatus('error');
+    }
+  };
+
+  const addCondition = async (name: string): Promise<{ success: boolean; message: string }> => {
+    const trimmed = (name || '').trim();
+    if (!trimmed) {
+      return { success: false, message: 'Condition name cannot be empty.' };
+    }
+    if (conditions.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
+      return { success: false, message: `Condition "${trimmed}" already exists.` };
+    }
+
+    const updated = [...conditions, trimmed];
+    setConditions(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_CONDITIONS, JSON.stringify(updated));
+    }
+
+    try {
+      await supabase.from('dashboard_permissions').upsert({
+        id: 'config_primary_complaints',
+        user_id: 'global',
+        role: 'MASTER',
+        dashboard: 'master',
+        permission: 'primary_complaints',
+        granted_by: JSON.stringify(updated),
+        status: true,
+        updated_at: new Date().toISOString()
+      });
+
+      await supabase.from(APPOINTMENTS_TABLE).upsert({
+        id: 'config_primary_complaints',
+        name: 'System Config - Primary Complaints',
+        mobile: '0000000000',
+        booking_status: 'DoctorMetadata',
+        doctor_assessment: { conditions: updated },
+        updated_at: new Date().toISOString()
+      });
+
+      return { success: true, message: `Condition "${trimmed}" added successfully.` };
+    } catch (err: any) {
+      console.warn('Notice persisting condition to Supabase:', err);
+      return { success: true, message: `Condition "${trimmed}" saved successfully.` };
+    }
+  };
+
+  const updateCondition = async (oldName: string, newName: string): Promise<{ success: boolean; message: string }> => {
+    const trimmedOld = (oldName || '').trim();
+    const trimmedNew = (newName || '').trim();
+    if (!trimmedNew) {
+      return { success: false, message: 'Condition name cannot be empty.' };
+    }
+    if (trimmedOld.toLowerCase() !== trimmedNew.toLowerCase()) {
+      if (conditions.some(c => c.toLowerCase() === trimmedNew.toLowerCase())) {
+        return { success: false, message: `Condition "${trimmedNew}" already exists.` };
+      }
+    }
+
+    const updated = conditions.map(c => c === trimmedOld ? trimmedNew : c);
+    setConditions(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_CONDITIONS, JSON.stringify(updated));
+    }
+
+    try {
+      await supabase.from('dashboard_permissions').upsert({
+        id: 'config_primary_complaints',
+        user_id: 'global',
+        role: 'MASTER',
+        dashboard: 'master',
+        permission: 'primary_complaints',
+        granted_by: JSON.stringify(updated),
+        status: true,
+        updated_at: new Date().toISOString()
+      });
+
+      await supabase.from(APPOINTMENTS_TABLE).upsert({
+        id: 'config_primary_complaints',
+        name: 'System Config - Primary Complaints',
+        mobile: '0000000000',
+        booking_status: 'DoctorMetadata',
+        doctor_assessment: { conditions: updated },
+        updated_at: new Date().toISOString()
+      });
+
+      return { success: true, message: `Condition updated to "${trimmedNew}" successfully.` };
+    } catch (err: any) {
+      console.warn('Notice persisting updated condition to Supabase:', err);
+      return { success: true, message: `Condition updated to "${trimmedNew}" successfully.` };
     }
   };
 
@@ -2007,10 +2440,12 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       patients, addPatient, updatePatient, deletePatient, convertAppointment,
       updateDoctorAssessment, updatePackageProposal,
       getPatientById, fetchFilteredPatients,
+      addRevisitNote, fetchRevisitNotes,
       appointments: authorizedAppointments, addAppointment, updateAppointment, deleteAppointment,
       staffUsers, registerStaff, updateStaff,
       saveStatus, lastSavedAt, refreshData, isLoading, isStaffLoaded,
-      systemName, updateSystemName
+      systemName, updateSystemName,
+      conditions, addCondition, updateCondition
     }}>
       {children}
     </HospitalContext.Provider>

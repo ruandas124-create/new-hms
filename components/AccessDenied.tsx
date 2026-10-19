@@ -18,6 +18,7 @@ const DASHBOARD_NAMES: Record<DashboardKey, string> = {
   doctor_performance: 'Doctor Performance Report',
   front_office: 'Front Office Dashboard',
   doctor: 'Doctor Dashboard',
+  doctor_medication_done: 'Doctor Medication Done',
   doctor_appointments: 'Doctor Appointments',
   doctor_availability: 'Doctor Availability',
   doctor_profile: 'Doctor Profile',

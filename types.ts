@@ -24,6 +24,7 @@ export type DashboardKey =
   | 'doctor_performance'
   | 'front_office' 
   | 'doctor' 
+  | 'doctor_medication_done'
   | 'doctor_appointments'
   | 'doctor_availability'
   | 'doctor_profile'
@@ -84,6 +85,17 @@ export enum Condition {
   Other = 'Other',
 }
 
+export const DEFAULT_CONDITIONS: string[] = [
+  'Piles',
+  'Fissure',
+  'Fistula',
+  'Hernia',
+  'Gallstones',
+  'Appendix',
+  'Varicose Veins',
+  'Other',
+];
+
 export enum SurgeonCode {
   M1 = 'M1 - Medication Only',
   S1 = 'S1 - Surgery Recommended',
@@ -123,6 +135,10 @@ export interface DoctorAssessment {
   surgeryProcedure?: string;
   assignedDoctorId?: string;
   assignedDoctorName?: string;
+  scheduled_date?: string;
+  appointment_date?: string;
+  appointment_time?: string;
+  [key: string]: any;
 }
 
 export type ProposalOutcome = 'Scheduled' | 'Follow-Up' | 'Lost' | 'Completed';
@@ -154,6 +170,7 @@ export interface PackageProposal {
 export interface Patient {
   id: string; 
   hospital_id: string; 
+  hospitalName?: string;
   name: string;
   dob?: string; 
   gender: Gender;
@@ -164,7 +181,7 @@ export interface Patient {
   insuranceName?: string; 
   source: string;
   sourceDoctorName?: string;
-  condition: Condition;
+  condition: Condition | string;
   visitType: 'OPD' | 'Follow Up';
   visit_type?: string; // Persisted 'New' or 'Revisit'
   registeredAt: string;
@@ -195,12 +212,28 @@ export type LeadStatus = 'New Leads' | 'Schedule' | 'Follow-up' | 'Junk';
 export interface LeadNote {
   id: string;
   lead_id: string;
+  hospital_id?: string;
   note: string;
   created_at: string;
   created_date?: string;
   created_time?: string;
   created_by?: string;
   created_by_name: string;
+}
+
+export interface RevisitNote {
+  id: string;
+  patient_id: string;
+  hospital_id?: string;
+  doctor_id?: string;
+  doctor_name?: string;
+  note: string;
+  revisit_date?: string;
+  revisit_time?: string;
+  action_type?: 'Scheduled' | 'Arrived' | string;
+  created_at: string;
+  created_by?: string;
+  created_by_name?: string;
 }
 
 export interface Appointment {
@@ -210,7 +243,7 @@ export interface Appointment {
   source: string;
   sourceDoctorName?: string;
   referral_person?: string | null;
-  condition: Condition;
+  condition: Condition | string;
   mobile: string;
   date: string; 
   time: string; 
@@ -232,13 +265,16 @@ export interface Appointment {
   followup_history?: { id: string; date: string; status: string; notes?: string; createdAt: string; author: string }[];
   scheduled_by?: string;
   scheduled_by_role?: string;
+  created_by_user_id?: string;
+  sales_user_id?: string;
+  remarks?: string;
   doctor_assessment?: any;
 }
 
 /**
  * Determines who scheduled the appointment:
  * - If scheduled from Front Office -> "Front Office"
- * - If scheduled by Sales -> "Acquire OPD Team"
+ * - If scheduled by Sales -> "Acquire OPD team"
  */
 export function getScheduleBy(item: any, staffUsers?: any[] | null): string {
   if (!item) return 'Front Office';
@@ -252,8 +288,8 @@ export function getScheduleBy(item: any, staffUsers?: any[] | null): string {
 
   if (explicitScheduledBy && typeof explicitScheduledBy === 'string') {
     const norm = explicitScheduledBy.toLowerCase().trim();
-    if (norm === 'acquire opd team' || norm.includes('acquire') || norm.includes('sales')) {
-      return 'Acquire OPD Team';
+    if (norm.includes('acquire') || norm.includes('sales')) {
+      return 'Acquire OPD team';
     }
     if (norm === 'front office' || norm.includes('front') || norm.includes('reception')) {
       return 'Front Office';
@@ -269,7 +305,7 @@ export function getScheduleBy(item: any, staffUsers?: any[] | null): string {
 
   if (explicitRole && typeof explicitRole === 'string') {
     const r = explicitRole.toLowerCase().trim();
-    if (r === 'sales') return 'Acquire OPD Team';
+    if (r === 'sales') return 'Acquire OPD team';
     if (r === 'front_office' || r === 'frontoffice') return 'Front Office';
   }
 
@@ -284,7 +320,7 @@ export function getScheduleBy(item: any, staffUsers?: any[] | null): string {
 
   if (creator) {
     if (creator.includes('sales') || creator.includes('acquire') || creator.includes('ruandas124')) {
-      return 'Acquire OPD Team';
+      return 'Acquire OPD team';
     }
     if (creator.includes('front') || creator.includes('reception') || creator.includes('punyareception') || creator.includes('desk')) {
       return 'Front Office';
@@ -296,7 +332,7 @@ export function getScheduleBy(item: any, staffUsers?: any[] | null): string {
         (u.username && u.username.toLowerCase() === creator)
       );
       if (match) {
-        if (match.role === 'SALES') return 'Acquire OPD Team';
+        if (match.role === 'SALES') return 'Acquire OPD team';
         if (match.role === 'FRONT_OFFICE') return 'Front Office';
       }
     }

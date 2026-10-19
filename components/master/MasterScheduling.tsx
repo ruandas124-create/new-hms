@@ -9,6 +9,7 @@ import {
   Eye, Pencil, Trash2, MapPin, Tag, CreditCard, Info, Coffee, Loader2
 } from 'lucide-react';
 import { formatDateToDDMMMYYYY } from '../../utils/dateFormatter';
+import { ManagePrimaryComplaintsModal } from './ManagePrimaryComplaintsModal';
 
 const STATUS_OPTIONS: { label: string; dotClass: string }[] = [
   { label: 'New Leads', dotClass: 'bg-indigo-500' },
@@ -637,7 +638,8 @@ export const MasterScheduling: React.FC = () => {
     schedulingPermissions, 
     updateSchedulingPermission,
     staffUsers,
-    patients = []
+    patients = [],
+    conditions
   } = useHospital();
 
   const [updatingTarget, setUpdatingTarget] = useState<string | null>(null);
@@ -647,6 +649,7 @@ export const MasterScheduling: React.FC = () => {
   const [selectedHospitalFilter, setSelectedHospitalFilter] = useState('all');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('all');
   const [showBookModal, setShowBookModal] = useState(false);
+  const [isManageComplaintsModalOpen, setIsManageComplaintsModalOpen] = useState(false);
 
   // Assignment Form State
   const [assignmentType, setAssignmentType] = useState<'doctor' | 'hospital'>('hospital');
@@ -661,7 +664,7 @@ export const MasterScheduling: React.FC = () => {
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
   const [patientName, setPatientName] = useState('');
   const [mobile, setMobile] = useState('');
-  const [condition, setCondition] = useState<Condition>(Condition.Other);
+  const [condition, setCondition] = useState<Condition | string>(Condition.Other);
   const [apptDate, setApptDate] = useState(new Date().toISOString().split('T')[0]);
   const [apptTime, setApptTime] = useState('');
   const [isTimeSelectorOpen, setIsTimeSelectorOpen] = useState(true);
@@ -1948,16 +1951,26 @@ export const MasterScheduling: React.FC = () => {
 
                     {/* Primary Complaint / Condition */}
                     <div>
-                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">
-                        Primary Complaint
-                      </label>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                          Primary Complaint
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setIsManageComplaintsModalOpen(true)}
+                          className="text-[10px] font-bold text-hospital-600 hover:text-hospital-800 hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          + Manage Conditions
+                        </button>
+                      </div>
                       <select 
                         required 
-                        className="w-full border-b-2 border-slate-100 p-2 outline-none focus:border-hospital-500 text-sm font-bold bg-white" 
+                        className="w-full border-b-2 border-slate-100 p-2 outline-none focus:border-hospital-500 text-sm font-bold bg-white cursor-pointer" 
                         value={condition} 
                         onChange={e => setCondition(e.target.value as Condition)}
                       >
-                        {Object.values(Condition).map(c => (
+                        <option value="">Select Condition</option>
+                        {conditions.map(c => (
                           <option key={c} value={c}>{c}</option>
                         ))}
                       </select>
@@ -3205,6 +3218,11 @@ export const MasterScheduling: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ManagePrimaryComplaintsModal 
+        isOpen={isManageComplaintsModalOpen} 
+        onClose={() => setIsManageComplaintsModalOpen(false)} 
+      />
     </div>
   );
 };

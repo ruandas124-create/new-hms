@@ -3,7 +3,7 @@ import { useHospital } from '../context/HospitalContext';
 import { 
   LogOut, Activity, User, Briefcase, FileText, Menu, X, Cloud, 
   Check, Loader2, AlertCircle, RefreshCw, BarChart3, AlertTriangle, 
-  Clock, Calendar, Shield, Crown, ChevronRight, ChevronLeft, Lock, Target, Key, Award, Stethoscope
+  Clock, Calendar, Shield, Crown, ChevronRight, ChevronLeft, Lock, Target, Key, Award, Stethoscope, CalendarCheck
 } from 'lucide-react';
 import { SurgeonCode, DashboardKey, HOSPITAL_LOGO_URL } from '../types';
 
@@ -69,7 +69,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       case 'DOCTOR': return 'Doctor Panel';
       case 'PACKAGE_TEAM': return 'Counseling Packages';
       case 'ANALYTICS': return 'Analytics Hub';
-      case 'SALES': return 'Sales & Scheduling';
+      case 'SALES': return 'Sales Dashboard';
       default: return currentUserRole || 'Staff';
     }
   };
@@ -82,7 +82,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       case 'DOCTOR': return <Activity className="w-5 h-5 text-emerald-400" />;
       case 'PACKAGE_TEAM': return <Briefcase className="w-5 h-5 text-purple-400" />;
       case 'ANALYTICS': return <BarChart3 className="w-5 h-5 text-indigo-400" />;
-      case 'SALES': return <Target className="w-5 h-5 text-rose-400" />;
+      case 'SALES': return <CalendarCheck className="w-5 h-5 text-emerald-400" />;
       default: return <FileText className="w-5 h-5 text-slate-400" />;
     }
   };
@@ -126,6 +126,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     if (currentUserRole === 'DOCTOR') {
       const currentDocId = typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_id') || '' : '';
       const currentDocName = typeof window !== 'undefined' ? localStorage.getItem('hms_hospital_name') || '' : '';
+      const loggedDocObj = staffUsers?.find(u => u.id === currentDocId);
+      const docHospId = loggedDocObj?.hospital_id || (loggedDocObj as any)?.hospitalId || '';
+
       const docApptCount = (appointments || []).filter(a => {
         const matchDoc = (currentDocId && a.assignedDoctorId === currentDocId) || 
                          (currentDocName && a.assignedDoctorName && a.assignedDoctorName.toLowerCase().trim() === currentDocName.toLowerCase().trim());
@@ -135,11 +138,30 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         return matchDoc;
       }).length;
 
+      const medDoneCount = (patients || []).filter(p => {
+        const isMed = p.status === 'Medication Done' || p.doctorAssessment?.quickCode === SurgeonCode.M1;
+        if (!isMed) return false;
+        if (docHospId) {
+          const patHospId = p.hospital_id || p.doctorAssessment?.hospital_id;
+          const assignedDoc = p.doctorAssessment?.assignedDoctorId;
+          if (assignedDoc && currentDocId && assignedDoc === currentDocId) return true;
+          if (patHospId && patHospId !== docHospId) return false;
+        }
+        return true;
+      }).length;
+
       return [
         { key: 'doctor' as DashboardKey, label: 'Patients Queue', icon: User, colorClass: 'text-emerald-400' },
+        { key: 'doctor_medication_done' as DashboardKey, label: `Medication Done${medDoneCount > 0 ? ` (${medDoneCount})` : ''}`, icon: Activity, colorClass: 'text-purple-400' },
         { key: 'doctor_appointments' as DashboardKey, label: `Appointments${docApptCount > 0 ? ` (${docApptCount})` : ''}`, icon: Calendar, colorClass: 'text-emerald-400' },
         { key: 'doctor_availability' as DashboardKey, label: 'Availability Mode', icon: Clock, colorClass: 'text-emerald-400' },
         { key: 'doctor_profile' as DashboardKey, label: 'Profile', icon: User, colorClass: 'text-emerald-400' }
+      ];
+    }
+
+    if (currentUserRole === 'SALES') {
+      return [
+        { key: 'sales' as DashboardKey, label: 'Sales Bookings', icon: CalendarCheck, colorClass: 'text-emerald-400' }
       ];
     }
 

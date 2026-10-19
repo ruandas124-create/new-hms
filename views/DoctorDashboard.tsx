@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
-import { SurgeonCode, PainSeverity, Affordability, ConversionReadiness, Patient, DoctorAssessment, Appointment } from '../types';
-import { formatDateToDDMMMYYYY, formatDateTimeToDDMMMYYYY } from '../utils/dateFormatter';
-import { Stethoscope, Check, ChevronRight, ChevronLeft, User, Calendar, Save, Briefcase, CreditCard, Activity, Tag, FileText, Database, Clock, Share2, ShieldCheck, Search, Filter, History, ClipboardList, RefreshCcw, Upload, Trash2, Loader2, Plus, CheckCircle2 } from 'lucide-react';
+import { SurgeonCode, PainSeverity, Affordability, ConversionReadiness, Patient, DoctorAssessment, Appointment, Gender } from '../types';
+import { formatDateToDDMMMYYYY, formatDateTimeToDDMMMYYYY, getTodayLocalIso } from '../utils/dateFormatter';
+import { Stethoscope, Check, ChevronRight, ChevronLeft, User, Calendar, Save, Briefcase, CreditCard, Activity, Tag, FileText, Database, Clock, Share2, ShieldCheck, Search, Filter, History, ClipboardList, RefreshCcw, Upload, Trash2, Loader2, Plus, CheckCircle2, CheckCircle, CalendarCheck, AlertCircle, X, Phone, Building2, Lock } from 'lucide-react';
 
 const PROCEDURES = [
   "Lap Cholecystectomy",
@@ -133,15 +133,19 @@ export const DoctorDashboard: React.FC = () => {
     schedulingPermissions, 
     appointments, 
     updateAppointment,
+    addAppointment,
     currentUserRole,
     activeDashboard,
-    setActiveDashboard
+    setActiveDashboard,
+    addRevisitNote,
+    fetchRevisitNotes
   } = useHospital();
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Current active view synced with side menu
-  const activeTab: 'patients' | 'appointments' | 'availability' | 'profile' = useMemo(() => {
+  const activeTab: 'patients' | 'medication_done' | 'appointments' | 'availability' | 'profile' = useMemo(() => {
+    if (activeDashboard === 'doctor_medication_done') return 'medication_done';
     if (activeDashboard === 'doctor_appointments') return 'appointments';
     if (activeDashboard === 'doctor_availability') return 'availability';
     if (activeDashboard === 'doctor_profile') return 'profile';
@@ -289,6 +293,13 @@ export const DoctorDashboard: React.FC = () => {
     }
   }, [loggedInDoctor.id, loggedInDoctor.availability]);
 
+  const [showRevisitModal, setShowRevisitModal] = useState(false);
+  const [showRevisitScheduleModal, setShowRevisitScheduleModal] = useState(false);
+  const [revisitPatient, setRevisitPatient] = useState<Patient | null>(null);
+  const [revisitScheduleData, setRevisitScheduleData] = useState({ date: getTodayLocalIso(), time: '10:00' });
+  const [isSubmittingRevisitArrived, setIsSubmittingRevisitArrived] = useState(false);
+  const [isSubmittingRevisitSchedule, setIsSubmittingRevisitSchedule] = useState(false);
+
   useEffect(() => {
     if (selectedPatient) {
       setFormState(selectedPatient.doctorAssessment || {
@@ -342,6 +353,110 @@ export const DoctorDashboard: React.FC = () => {
       alert("Failed to save assessment. Please try again.");
     } finally {
       setIsSavingAssessment(false);
+    }
+  };
+
+  const handleRevisitClick = (item: Patient) => {
+    setRevisitPatient(item);
+    setShowRevisitModal(true);
+  };
+
+  const handleRevisitArrived = async () => {
+    if (!revisitPatient || isSubmittingRevisitArrived) return;
+    setIsSubmittingRevisitArrived(true);
+    const item = revisitPatient;
+    const baseId = item.id.split('_V')[0];
+    const newVisitId = `${baseId}_V${Date.now()}`;
+    const revisitData: Omit<Patient, 'registeredAt' | 'hospital_id'> = { 
+      id: newVisitId, 
+      name: item.name, 
+      dob: item.dob || undefined, 
+      gender: item.gender || Gender.Other, 
+      age: item.age || 0, 
+      mobile: item.mobile, 
+      occupation: item.occupation || '', 
+      condition: item.condition, 
+      source: item.source || 'Others', 
+      hasInsurance: item.hasInsurance || 'No', 
+      insuranceName: item.insuranceName || '', 
+      sourceDoctorName: item.sourceDoctorName || '', 
+      visitType: 'Follow Up', 
+      visit_type: 'Revisit',
+      entry_date: getTodayLocalIso(),
+      arrivalTime: new Date().toTimeString().split(' ')[0].substring(0, 5)
+    };
+    try { 
+      // Ensure hospital_id is passed correctly
+      const resolvedHospId = item.hospital_id || item.doctorAssessment?.hospital_id || loggedInDoctor.hospital_id || undefined;
+      const finalRevisitData = { ...revisitData, hospital_id: resolvedHospId };
+      await addRevisitNote({
+        patientId: item.id,
+        hospitalId: resolvedHospId,
+        doctorId: loggedInDoctor.id,
+        doctorName: loggedInDoctor.name,
+        note: `Revisit (Arrived Now) created for ${item.name}`,
+        revisitDate: getTodayLocalIso(),
+        revisitTime: new Date().toTimeString().split(' ')[0].substring(0, 5),
+        actionType: 'Arrived'
+      });
+      setShowRevisitModal(false);
+      setRevisitPatient(null);
+      alert(`Patient ${item.name} marked as Revisit Arrived successfully!`);
+    } catch (error) { 
+      alert("Failed to create revisit record. Please check connection and try again.");
+    } finally {
+      setIsSubmittingRevisitArrived(false);
+    }
+  };
+
+  const handleRevisitScheduleSubmit = async () => {
+    if (!revisitPatient || !revisitScheduleData.date || !revisitScheduleData.time || isSubmittingRevisitSchedule) {
+      if (!revisitScheduleData.date || !revisitScheduleData.time) {
+        alert("Please select both date and time to schedule revisit.");
+      }
+      return;
+    }
+    setIsSubmittingRevisitSchedule(true);
+    const item = revisitPatient;
+    const resolvedHospId = item.hospital_id || item.doctorAssessment?.hospital_id || loggedInDoctor.hospital_id || undefined;
+    const apptData: any = {
+      name: item.name,
+      mobile: item.mobile,
+      source: item.source || 'Others',
+      sourceDoctorName: item.sourceDoctorName || '',
+      condition: item.condition,
+      date: revisitScheduleData.date,
+      time: revisitScheduleData.time,
+      bookingType: 'Scheduled',
+      visit_type: 'Revisit',
+      scheduled_by: loggedInDoctor.name || 'Doctor',
+      scheduled_by_role: 'doctor',
+      username: loggedInDoctor.name || 'Doctor',
+      assignedDoctorId: loggedInDoctor.id,
+      assignedDoctorName: loggedInDoctor.name,
+      hospital_id: resolvedHospId,
+      hospitalName: loggedInDoctor.hospitalName || item.hospitalName || 'Hospital'
+    };
+    
+    try {
+      await addAppointment(apptData);
+      await addRevisitNote({
+        patientId: item.id,
+        hospitalId: resolvedHospId,
+        doctorId: loggedInDoctor.id,
+        doctorName: loggedInDoctor.name,
+        note: `Revisit Scheduled for ${revisitScheduleData.date} at ${revisitScheduleData.time}`,
+        revisitDate: revisitScheduleData.date,
+        revisitTime: revisitScheduleData.time,
+        actionType: 'Scheduled'
+      });
+      setShowRevisitScheduleModal(false);
+      setRevisitPatient(null);
+      alert(`Revisit scheduled for ${item.name} on ${revisitScheduleData.date} at ${revisitScheduleData.time}!`);
+    } catch (error: any) {
+      alert(`Failed to schedule revisit: ${error?.message || 'Database error'}`);
+    } finally {
+      setIsSubmittingRevisitSchedule(false);
     }
   };
 
@@ -951,23 +1066,35 @@ export const DoctorDashboard: React.FC = () => {
                   <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                     <ShieldCheck className="w-3.5 h-3.5 text-slate-400" /> Assessment Record
                   </div>
-                  <button 
-                    type="submit" 
-                    disabled={isSavingAssessment}
-                    className="w-full sm:w-auto bg-hospital-600 text-white px-5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 hover:bg-hospital-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm cursor-pointer ml-auto"
-                  >
-                    {isSavingAssessment ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Saving Assessment...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        <span>Save Assessment</span>
-                      </>
+                  <div className="flex items-center gap-2.5 ml-auto">
+                    {formState.quickCode === SurgeonCode.M1 && (
+                      <button 
+                        type="button"
+                        onClick={() => handleRevisitClick(selectedPatient)}
+                        className="w-full sm:w-auto bg-indigo-600 text-white px-5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all shadow-sm cursor-pointer"
+                      >
+                        <History className="w-4 h-4" />
+                        <span>Revisit</span>
+                      </button>
                     )}
-                  </button>
+                    <button 
+                      type="submit" 
+                      disabled={isSavingAssessment}
+                      className="w-full sm:w-auto bg-hospital-600 text-white px-5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 hover:bg-hospital-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm cursor-pointer"
+                    >
+                      {isSavingAssessment ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Saving Assessment...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" />
+                          <span>Save Assessment</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </form>
             ) : (
@@ -986,6 +1113,111 @@ export const DoctorDashboard: React.FC = () => {
               </div>
             )}
           </div>
+        </div>
+      ) : activeTab === 'medication_done' ? (
+        /* Medication Done Tab with Revisit Button */
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-6 animate-in fade-in duration-300">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-4">
+            <div>
+              <span className="text-[10px] font-black uppercase text-purple-600 tracking-wider">Medication Follow-up</span>
+              <h3 className="text-xl font-black text-slate-800">Medication Done Patients</h3>
+              <p className="text-xs text-slate-500">Patients who completed medication assessment. Click Revisit to schedule or mark arrival.</p>
+            </div>
+            <div className="text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+              Total Records: <strong className="text-purple-700">
+                {
+                  (patients || []).filter(p => {
+                    const isMed = p.status === 'Medication Done' || p.doctorAssessment?.quickCode === SurgeonCode.M1;
+                    if (!isMed) return false;
+                    const loggedDocId = loggedInDoctor.id;
+                    const loggedDocName = (loggedInDoctor.name || '').toLowerCase().trim();
+                    const assignedId = p.doctorAssessment?.assignedDoctorId;
+                    const assignedName = (p.doctorAssessment?.assignedDoctorName || '').toLowerCase().trim();
+                    const loggedHospId = loggedInDoctor.hospital_id || (loggedInDoctor as any).hospitalId;
+                    const patHospId = p.hospital_id || p.doctorAssessment?.hospital_id;
+
+                    if (loggedHospId && patHospId && patHospId !== loggedHospId) return false;
+                    if (loggedDocId && assignedId && assignedId !== loggedDocId && loggedDocId !== 'static_doctor') return false;
+                    return true;
+                  }).length
+                }
+              </strong>
+            </div>
+          </div>
+
+          {(() => {
+            const medDonePatients = (patients || []).filter(p => {
+              const isMed = p.status === 'Medication Done' || p.doctorAssessment?.quickCode === SurgeonCode.M1;
+              if (!isMed) return false;
+              const loggedDocId = loggedInDoctor.id;
+              const loggedDocName = (loggedInDoctor.name || '').toLowerCase().trim();
+              const assignedId = p.doctorAssessment?.assignedDoctorId;
+              const assignedName = (p.doctorAssessment?.assignedDoctorName || '').toLowerCase().trim();
+              const loggedHospId = loggedInDoctor.hospital_id || (loggedInDoctor as any).hospitalId;
+              const patHospId = p.hospital_id || p.doctorAssessment?.hospital_id;
+
+              if (loggedHospId && patHospId && patHospId !== loggedHospId) return false;
+              if (loggedDocId && assignedId && assignedId !== loggedDocId && loggedDocId !== 'static_doctor') return false;
+              return true;
+            });
+
+            if (medDonePatients.length === 0) {
+              return (
+                <div className="text-center py-16 text-slate-400 space-y-2">
+                  <Activity className="w-12 h-12 mx-auto text-purple-300" />
+                  <div className="font-bold text-slate-600 text-sm">No patients in Medication Done</div>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto">When patients complete medication assessments assigned to your hospital, they will appear here.</p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[800px]">
+                  <thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b">
+                    <tr>
+                      <th className="p-4">Patient Name</th>
+                      <th className="p-4">Age / Gender</th>
+                      <th className="p-4">Mobile</th>
+                      <th className="p-4">Condition</th>
+                      <th className="p-4">Facility / Hospital</th>
+                      <th className="p-4">Assessment Date</th>
+                      <th className="p-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {medDonePatients.map((p: Patient) => (
+                      <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="p-4 font-bold text-slate-900">{p.name}</td>
+                        <td className="p-4 text-slate-600 font-semibold">{p.age}Y • {p.gender}</td>
+                        <td className="p-4 font-mono text-slate-600">{p.mobile}</td>
+                        <td className="p-4">
+                          <span className="px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 text-[11px] font-bold">
+                            {p.condition}
+                          </span>
+                        </td>
+                        <td className="p-4 text-slate-600 font-bold">
+                          {p.hospitalName || p.doctorAssessment?.hospitalName || loggedInDoctor.hospitalName || 'Hospital'}
+                        </td>
+                        <td className="p-4 font-mono text-slate-500">
+                          {p.entry_date || '—'}
+                        </td>
+                        <td className="p-4 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => handleRevisitClick(p)}
+                            className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-[9px] font-black uppercase hover:bg-indigo-100 transition-all inline-flex items-center gap-1.5 shadow-sm border border-indigo-100 cursor-pointer"
+                          >
+                            <History className="w-3.5 h-3.5" /> Revisit
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
         </div>
       ) : activeTab === 'appointments' ? (
         /* Doctor Scheduled Appointments Roster view */
@@ -1108,28 +1340,126 @@ export const DoctorDashboard: React.FC = () => {
 
             {/* Profile Info Fields */}
             <div className="flex-1 w-full space-y-4">
+              {/* Admin-Managed Banner */}
+              <div className="flex items-center gap-2.5 p-3.5 bg-amber-50/90 border border-amber-200/80 rounded-xl text-amber-900 text-xs shadow-2xs">
+                <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  Profile credentials (<strong>Full Name / Doctor Name</strong>, <strong>Email Address</strong>, and <strong>Mobile Number</strong>) are read-only and maintained by authorized Administrators or Master Admin.
+                </span>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
-                  <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1.5">Doctor Name</span>
-                  <span className="text-sm font-black text-slate-900">{getFormattedDoctorName(loggedInDoctor.name)}</span>
+                {/* Full Name / Doctor Name - Read-Only Form Input */}
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="doctor-fullname" className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                      Full Name / Doctor Name
+                    </label>
+                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      <Lock className="w-2.5 h-2.5" /> Read-Only
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      id="doctor-fullname"
+                      name="doctorName"
+                      value={loggedInDoctor.name || ''}
+                      readOnly
+                      disabled
+                      aria-readonly="true"
+                      className="w-full bg-slate-50/90 border border-slate-200 text-slate-800 text-sm font-bold rounded-xl px-3.5 py-2.5 pr-9 cursor-not-allowed select-none focus:outline-none"
+                      placeholder="Doctor Name"
+                    />
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400">Controlled by Admin / Master Admin</p>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
-                  <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1.5">Clinic Role</span>
-                  <span className="inline-block text-[10px] font-black text-hospital-700 bg-hospital-50 px-2.5 py-1 rounded-md border border-hospital-200 uppercase tracking-wider">
-                    {loggedInDoctor.role}
-                  </span>
+
+                {/* Clinic Role */}
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                      Clinic Role
+                    </label>
+                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                      Assigned Role
+                    </span>
+                  </div>
+                  <div className="py-2">
+                    <span className="inline-block text-xs font-black text-hospital-700 bg-hospital-50 px-3 py-1.5 rounded-lg border border-hospital-200 uppercase tracking-wider">
+                      {loggedInDoctor.role}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400">Hospital Staff Role</p>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
-                  <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1.5">Email ID</span>
-                  <span className="text-sm font-black text-slate-800">{loggedInDoctor.email || 'N/A'}</span>
+
+                {/* Email Address - Read-Only Form Input */}
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="doctor-email" className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                      Email Address
+                    </label>
+                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      <Lock className="w-2.5 h-2.5" /> Read-Only
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="email"
+                      id="doctor-email"
+                      name="emailAddress"
+                      value={loggedInDoctor.email || ''}
+                      readOnly
+                      disabled
+                      aria-readonly="true"
+                      className="w-full bg-slate-50/90 border border-slate-200 text-slate-800 text-sm font-bold rounded-xl px-3.5 py-2.5 pr-9 cursor-not-allowed select-none focus:outline-none"
+                      placeholder="Email Address"
+                    />
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400">Controlled by Admin / Master Admin</p>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
-                  <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1.5">Contact Number</span>
-                  <span className="text-sm font-black text-slate-800 font-mono">{loggedInDoctor.mobile || 'N/A'}</span>
+
+                {/* Mobile Number - Read-Only Form Input */}
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="doctor-mobile" className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                      Mobile Number
+                    </label>
+                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      <Lock className="w-2.5 h-2.5" /> Read-Only
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="tel"
+                      id="doctor-mobile"
+                      name="mobileNumber"
+                      value={loggedInDoctor.mobile || ''}
+                      readOnly
+                      disabled
+                      aria-readonly="true"
+                      className="w-full bg-slate-50/90 border border-slate-200 text-slate-800 text-sm font-bold font-mono rounded-xl px-3.5 py-2.5 pr-9 cursor-not-allowed select-none focus:outline-none"
+                      placeholder="Mobile Number"
+                    />
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400">Controlled by Admin / Master Admin</p>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs sm:col-span-2">
-                  <span className="block text-[9px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1.5">Doctor Account ID</span>
-                  <span className="text-xs font-mono font-bold text-slate-600">{loggedInDoctor.id}</span>
+
+                {/* Doctor Account ID */}
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs sm:col-span-2 space-y-1.5">
+                  <span className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">Doctor Account ID</span>
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/70">
+                    <span className="text-xs font-mono font-bold text-slate-600 select-all">{loggedInDoctor.id}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1443,6 +1773,98 @@ export const DoctorDashboard: React.FC = () => {
               </>
             )}
           </button>
+        </div>
+      )}
+
+      {showRevisitModal && revisitPatient && (
+        <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl p-8 border border-slate-100 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-6"><History className="w-8 h-8 text-indigo-600" /></div>
+            <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight text-center">Revisit Action</h3>
+            <p className="text-sm text-slate-500 font-medium mb-8 text-center leading-relaxed">Choose an action for <span className="text-indigo-600 font-bold">{revisitPatient.name}</span></p>
+            <div className="flex flex-col gap-3">
+              <button 
+                type="button"
+                disabled={isSubmittingRevisitArrived}
+                onClick={handleRevisitArrived} 
+                className="w-full py-2.5 px-4 text-xs font-bold uppercase tracking-wider text-white bg-emerald-600 rounded-xl shadow-xs hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[42px]"
+              >
+                {isSubmittingRevisitArrived ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Registering Arrival...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" /> 
+                    <span>Patient Arrived Now</span>
+                  </>
+                )}
+              </button>
+              <button 
+                type="button"
+                disabled={isSubmittingRevisitArrived}
+                onClick={() => { setShowRevisitModal(false); setShowRevisitScheduleModal(true); }} 
+                className="w-full py-2.5 px-4 text-xs font-bold uppercase tracking-wider text-white bg-indigo-600 rounded-xl shadow-xs hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[42px]"
+              >
+                <Calendar className="w-4 h-4" /> 
+                <span>Schedule Appointment</span>
+              </button>
+              <button 
+                type="button"
+                disabled={isSubmittingRevisitArrived}
+                onClick={() => { setShowRevisitModal(false); setRevisitPatient(null); }} 
+                className="w-full py-2 text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRevisitScheduleModal && revisitPatient && (
+        <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 sm:p-8 border border-slate-100 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-blue-600"><CalendarCheck className="w-6 h-6" /></div>
+            <h3 className="text-lg font-black text-slate-900 mb-1 uppercase tracking-tight text-center">Schedule Appointment</h3>
+            <p className="text-xs text-slate-500 font-medium mb-6 text-center leading-relaxed">For <span className="text-blue-600 font-bold">{revisitPatient.name}</span></p>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1 tracking-widest">Date</label>
+                <input type="date" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold outline-none focus:border-blue-500 focus:bg-white transition-all font-mono" value={revisitScheduleData.date} onChange={e => setRevisitScheduleData({...revisitScheduleData, date: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1 tracking-widest">Time</label>
+                <input type="time" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold outline-none focus:border-blue-500 focus:bg-white transition-all font-mono" value={revisitScheduleData.time} onChange={e => setRevisitScheduleData({...revisitScheduleData, time: e.target.value})} />
+              </div>
+            </div>
+            <div className="flex gap-2.5">
+              <button 
+                type="button"
+                disabled={isSubmittingRevisitSchedule}
+                onClick={() => { setShowRevisitScheduleModal(false); setShowRevisitModal(true); }} 
+                className="flex-1 py-2.5 px-4 text-xs font-bold uppercase tracking-wider text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                Back
+              </button>
+              <button 
+                type="button"
+                disabled={isSubmittingRevisitSchedule}
+                onClick={handleRevisitScheduleSubmit} 
+                className="flex-[2] py-2.5 px-5 text-xs font-bold uppercase tracking-wider text-white bg-blue-600 rounded-xl shadow-xs hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[42px]"
+              >
+                {isSubmittingRevisitSchedule ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Scheduling...</span>
+                  </>
+                ) : (
+                  <span>Confirm Schedule</span>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

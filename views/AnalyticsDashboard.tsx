@@ -9,7 +9,7 @@ import {
   Lock, Activity, BarChart3, PieChart as PieChartIcon, Target as TargetIcon, 
   LayoutDashboard, RefreshCw, Zap, TrendingUp, TrendingDown, Landmark,
   CalendarDays, Calculator, Globe, Target, CheckCircle, Banknote,
-  FileSpreadsheet, Search, Printer, X, Calendar, Users, ArrowUpRight, Tag, Phone, Download
+  FileSpreadsheet, Search, Printer, X, Calendar, Users, ArrowUpRight, Tag, Phone, Download, Building2
 } from 'lucide-react';
 import { formatDateToDDMMMYYYY } from '../utils/dateFormatter';
 
@@ -207,6 +207,8 @@ export const AnalyticsDashboard: React.FC = () => {
     currentUserRole, 
     currentTenantId,
     currentUserStaff,
+    analyticsAccounts,
+    selectedTenantFilter,
     dashboardPermissions, 
     reportPermissions,
     schedulingPermissions,
@@ -226,6 +228,9 @@ export const AnalyticsDashboard: React.FC = () => {
   
   const tenantHospitalId = currentTenantId || currentUserStaff?.hospital_id || currentUserStaff?.id;
   
+  const selectedHospital = analyticsAccounts.find(h => h.id === selectedTenantFilter || h.hospital_id === selectedTenantFilter);
+  const activeHospitalName = selectedHospital?.name || currentUserStaff?.hospitalName || currentTenantId || 'Hospital Facility';
+
   const hospitalDoctors = useMemo(() => {
     return staffUsers.filter(u => u.role === 'DOCTOR' && (u.hospital_id === tenantHospitalId || u.grantedBy === 'Analytics Hub') && u.accessStatus !== 'Revoked');
   }, [staffUsers, tenantHospitalId]);
@@ -2172,6 +2177,13 @@ export const AnalyticsDashboard: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Bottom-Right Corner Hospital Name Footer */}
+      <footer className="mt-8 pt-4 border-t border-slate-200 flex justify-end items-center">
+        <div className="text-xs font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-2 bg-white px-4 py-2 rounded-2xl shadow-xs border border-slate-200/80">
+          <Building2 className="w-4 h-4 text-hospital-600" />
+          <span>Hospital: <strong className="text-slate-900 font-black">{activeHospitalName}</strong></span>
+        </div>
+      </footer>
     </div>
   );
 };

@@ -243,7 +243,7 @@ export const FrontOfficeDashboard: React.FC = () => {
   const { 
     patients, addPatient, updatePatient, deletePatient, convertAppointment,
     appointments, addAppointment, updateAppointment, staffUsers, isLoading,
-    currentTenantId, currentUserStaff
+    currentTenantId, currentUserStaff, conditions
   } = useHospital();
   
   const [activeTab, setActiveTab] = useState<'REGISTRATION' | 'APPOINTMENTS' | 'GLOBAL_SEARCH'>('APPOINTMENTS');
@@ -290,15 +290,17 @@ export const FrontOfficeDashboard: React.FC = () => {
   }, [activeTab]);
 
   const handleSingleDateChange = (newDate: string) => {
+    if (!newDate) return;
+    const cleanDate = normalizeToIsoDate(newDate) || newDate;
     setIsTabLoading(true);
     if (activeTab === 'REGISTRATION') {
-      setOpdStartDate(newDate);
-      setOpdEndDate(newDate);
+      setOpdStartDate(cleanDate);
+      setOpdEndDate(cleanDate);
     } else if (activeTab === 'APPOINTMENTS') {
-      setApptStartDate(newDate);
-      setApptEndDate(newDate);
+      setApptStartDate(cleanDate);
+      setApptEndDate(cleanDate);
     }
-    setTimeout(() => setIsTabLoading(false), 200);
+    setTimeout(() => setIsTabLoading(false), 150);
   };
 
   const [historyFilters, setHistoryFilters] = useState({
@@ -313,7 +315,7 @@ export const FrontOfficeDashboard: React.FC = () => {
   const [revisitPatient, setRevisitPatient] = useState<any>(null);
   const [showRevisitModal, setShowRevisitModal] = useState(false);
   const [showRevisitScheduleModal, setShowRevisitScheduleModal] = useState(false);
-  const [revisitScheduleData, setRevisitScheduleData] = useState({ date: new Date().toISOString().split('T')[0], time: '10:00' });
+  const [revisitScheduleData, setRevisitScheduleData] = useState({ date: getTodayLocalIso(), time: '10:00' });
   
   // Loading indicators for form submissions and async actions
   const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
@@ -328,7 +330,7 @@ export const FrontOfficeDashboard: React.FC = () => {
     mobile: '', occupation: '', hasInsurance: 'No', insuranceName: '',
     source: '', condition: undefined, visitType: 'OPD', visit_type: '',
     sourceDoctorName: '', sourceDoctorNotes: '', sourceOtherDetails: '',
-    entry_date: new Date().toISOString().split('T')[0],
+    entry_date: getTodayLocalIso(),
     arrivalTime: new Date().toTimeString().split(' ')[0].substring(0, 5)
   });
 
@@ -398,7 +400,7 @@ export const FrontOfficeDashboard: React.FC = () => {
   const resetForm = () => { 
     setFormData({ 
       id: '', name: '', dob: '', gender: undefined, age: undefined, mobile: '', occupation: '', hasInsurance: 'No', insuranceName: '', source: '', condition: undefined, visitType: 'OPD', visit_type: '', sourceDoctorName: '', sourceDoctorNotes: '', sourceOtherDetails: '',
-      entry_date: new Date().toISOString().split('T')[0],
+      entry_date: getTodayLocalIso(),
       arrivalTime: new Date().toTimeString().split(' ')[0].substring(0, 5)
     }); 
     setEditingId(null); 
@@ -432,7 +434,7 @@ export const FrontOfficeDashboard: React.FC = () => {
       if (item.source?.startsWith('Other: ')) { sourceOtherDetails = item.source.substring(7); }
       setFormData({ 
         ...item, source: item.source, sourceOtherDetails, visitType: item.visitType || 'OPD', visit_type: item.visit_type || '', hasInsurance: item.hasInsurance || 'No', insuranceName: item.insuranceName || '', sourceDoctorName, sourceDoctorNotes,
-        entry_date: item.entry_date || new Date().toISOString().split('T')[0],
+        entry_date: item.entry_date || getTodayLocalIso(),
         arrivalTime: item.arrivalTime || new Date().toTimeString().split(' ')[0].substring(0, 5)
       });
       setEditingId(item.id);
@@ -451,6 +453,7 @@ export const FrontOfficeDashboard: React.FC = () => {
 
     const apptDoctorId = appt.assignedDoctorId || (existingPatient?.doctorAssessment?.assignedDoctorId);
     const apptDoctorName = appt.assignedDoctorName || (existingPatient?.doctorAssessment?.assignedDoctorName);
+    const apptScheduledDate = appt.date || (appt as any).doctor_assessment?.appointment_date || (appt as any).doctor_assessment?.scheduled_date;
 
     setFormData({ 
       id: '', 
@@ -467,12 +470,15 @@ export const FrontOfficeDashboard: React.FC = () => {
       condition: appt.condition || existingPatient?.condition, 
       visitType: appt.bookingType === 'Follow Up' ? 'Follow Up' : 'OPD', 
       visit_type: appt.visit_type || 'New',
-      entry_date: new Date().toISOString().split('T')[0],
+      entry_date: getTodayLocalIso(),
       arrivalTime: new Date().toTimeString().split(' ')[0].substring(0, 5),
-      doctorAssessment: apptDoctorId ? {
+      doctorAssessment: {
+        ...(existingPatient?.doctorAssessment || {}),
         assignedDoctorId: apptDoctorId,
-        assignedDoctorName: apptDoctorName
-      } : existingPatient?.doctorAssessment
+        assignedDoctorName: apptDoctorName,
+        scheduled_date: apptScheduledDate,
+        appointment_date: apptScheduledDate
+      }
     }); 
     setEditingId(null); 
     setOriginatingAppointmentId(appt.id); 
@@ -506,7 +512,7 @@ export const FrontOfficeDashboard: React.FC = () => {
       sourceDoctorName: item.sourceDoctorName || '', 
       visitType: 'Follow Up', 
       visit_type: 'Revisit',
-      entry_date: new Date().toISOString().split('T')[0],
+      entry_date: getTodayLocalIso(),
       arrivalTime: new Date().toTimeString().split(' ')[0].substring(0, 5)
     };
     try { 
@@ -514,8 +520,8 @@ export const FrontOfficeDashboard: React.FC = () => {
       setShowRevisitModal(false);
       setRevisitPatient(null);
       setSearchTerm(item.mobile); 
-      setOpdStartDate(new Date().toISOString().split('T')[0]); 
-      setOpdEndDate(new Date().toISOString().split('T')[0]); 
+      setOpdStartDate(todayIso); 
+      setOpdEndDate(todayIso); 
       setActiveTab('REGISTRATION'); 
       setFeedbackBanner({
         type: 'success',
@@ -778,9 +784,17 @@ export const FrontOfficeDashboard: React.FC = () => {
   };
 
   const filteredPatients = patients.filter(p => {
-    const pDate = normalizeToIsoDate(p.entry_date);
-    if (opdStartDate && pDate && pDate < opdStartDate) return false;
-    if (opdEndDate && pDate && pDate > opdEndDate) return false;
+    // Scheduled / appointment booking date or registration entry date
+    const pDate = normalizeToIsoDate(
+      p.doctorAssessment?.scheduled_date || 
+      p.doctorAssessment?.appointment_date || 
+      p.entry_date
+    );
+    if (!showAllApptDates) {
+      if (!pDate) return false;
+      if (opdStartDate && pDate < opdStartDate) return false;
+      if (opdEndDate && pDate > opdEndDate) return false;
+    }
     const sTerm = searchTerm.toLowerCase().trim(); 
     return !sTerm || 
       p.name.toLowerCase().includes(sTerm) || 
@@ -791,18 +805,25 @@ export const FrontOfficeDashboard: React.FC = () => {
       (p.status && p.status.toLowerCase().includes(sTerm)) ||
       (p.doctorAssessment?.assignedDoctorName && p.doctorAssessment.assignedDoctorName.toLowerCase().includes(sTerm));
   }).sort((a, b) => {
-    const keyA = (normalizeToIsoDate(a.entry_date) || '') + (a.arrivalTime || '');
-    const keyB = (normalizeToIsoDate(b.entry_date) || '') + (b.arrivalTime || '');
+    const keyA = (normalizeToIsoDate(a.doctorAssessment?.scheduled_date || a.doctorAssessment?.appointment_date || a.entry_date) || '') + (a.arrivalTime || '');
+    const keyB = (normalizeToIsoDate(b.doctorAssessment?.scheduled_date || b.doctorAssessment?.appointment_date || b.entry_date) || '') + (b.arrivalTime || '');
     return keyB.localeCompare(keyA);
   });
 
   const filteredAppointments = appointments.filter(a => { 
-    const sTerm = searchTerm.toLowerCase().trim(); 
-    const aDate = normalizeToIsoDate(a.date);
-    if (!showAllApptDates && !sTerm) {
-      if (apptStartDate && aDate && aDate < apptStartDate) return false;
-      if (apptEndDate && aDate && aDate > apptEndDate) return false;
+    // Actual Appointment Booking Date / Scheduled Date of each appointment
+    const aDate = normalizeToIsoDate(
+      a.date || 
+      a.doctor_assessment?.appointment_date || 
+      a.doctor_assessment?.scheduled_date || 
+      (a as any).entry_date
+    );
+    if (!showAllApptDates) {
+      if (!aDate) return false;
+      if (apptStartDate && aDate < apptStartDate) return false;
+      if (apptEndDate && aDate > apptEndDate) return false;
     }
+    const sTerm = searchTerm.toLowerCase().trim(); 
     return !sTerm || 
       a.name.toLowerCase().includes(sTerm) || 
       a.mobile.includes(sTerm) ||
@@ -813,8 +834,10 @@ export const FrontOfficeDashboard: React.FC = () => {
       (a.assignedDoctorName && a.assignedDoctorName.toLowerCase().includes(sTerm)) ||
       (a.hospitalName && a.hospitalName.toLowerCase().includes(sTerm)); 
   }).sort((a, b) => {
-    const keyA = (normalizeToIsoDate(a.date) || '') + (a.time || '');
-    const keyB = (normalizeToIsoDate(b.date) || '') + (b.time || '');
+    const dateA = normalizeToIsoDate(a.date || a.doctor_assessment?.appointment_date || a.doctor_assessment?.scheduled_date || (a as any).entry_date) || '';
+    const dateB = normalizeToIsoDate(b.date || b.doctor_assessment?.appointment_date || b.doctor_assessment?.scheduled_date || (b as any).entry_date) || '';
+    const keyA = dateA + (a.time || '');
+    const keyB = dateB + (b.time || '');
     return showAllApptDates ? keyB.localeCompare(keyA) : keyA.localeCompare(keyB);
   });
 
@@ -910,8 +933,14 @@ export const FrontOfficeDashboard: React.FC = () => {
   const currentActiveDate = activeTab === 'REGISTRATION' ? opdStartDate : activeTab === 'APPOINTMENTS' ? apptStartDate : todayIso;
   const filterInputClasses = "h-10 w-full bg-slate-50 border border-slate-100 rounded-xl px-3 text-[10px] font-bold focus:ring-2 focus:ring-hospital-500 outline-none transition-all appearance-none";
 
-  const todayRegCount = patients.filter(p => normalizeToIsoDate(p.entry_date) === todayIso).length;
-  const todayApptCount = appointments.filter(a => normalizeToIsoDate(a.date) === todayIso).length;
+  const todayRegCount = patients.filter(p => {
+    const pDate = normalizeToIsoDate(p.doctorAssessment?.scheduled_date || p.doctorAssessment?.appointment_date || p.entry_date);
+    return pDate === todayIso;
+  }).length;
+  const todayApptCount = appointments.filter(a => {
+    const aDate = normalizeToIsoDate(a.date || a.doctor_assessment?.appointment_date || a.doctor_assessment?.scheduled_date || (a as any).entry_date);
+    return aDate === todayIso;
+  }).length;
   const totalCount = patients.length;
 
   return (
@@ -976,13 +1005,49 @@ export const FrontOfficeDashboard: React.FC = () => {
                 <div className="w-7 h-7 rounded-lg bg-hospital-100 text-hospital-700 flex items-center justify-center font-bold shrink-0 shadow-2xs">
                   <Calendar className="w-3.5 h-3.5" />
                 </div>
-                <div>
+                <div className="relative">
                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block">
                     {activeTab === 'REGISTRATION' ? 'Registry Date' : 'Schedule Date'}
                   </span>
                   <div className="text-xs font-black text-slate-900 flex items-center gap-2 mt-0.5 whitespace-nowrap">
                     <span>{formatReadableDate(currentActiveDate)}</span>
+                    <input 
+                      type="date"
+                      value={currentActiveDate}
+                      onChange={e => handleSingleDateChange(e.target.value)}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      title="Click to select date"
+                    />
                   </div>
+                </div>
+                <div className="flex items-center gap-1 ml-2 border-l border-slate-200 pl-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSingleDateChange(shiftIsoDate(currentActiveDate, -1))}
+                    title="Previous Day"
+                    className="p-1 hover:bg-slate-200 rounded-lg text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSingleDateChange(todayIso)}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase transition-colors ${
+                      currentActiveDate === todayIso
+                        ? 'bg-hospital-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSingleDateChange(shiftIsoDate(currentActiveDate, 1))}
+                    title="Next Day"
+                    className="p-1 hover:bg-slate-200 rounded-lg text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             )}
@@ -1062,7 +1127,13 @@ export const FrontOfficeDashboard: React.FC = () => {
                     type="date" 
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white" 
                     value={opdStartDate} 
-                    onChange={e => setOpdStartDate(e.target.value)} 
+                    onChange={e => {
+                      const val = e.target.value;
+                      setOpdStartDate(val);
+                      if (!opdEndDate || opdEndDate < val || opdStartDate === opdEndDate) {
+                        setOpdEndDate(val);
+                      }
+                    }} 
                   />
                 </div>
                 <div>
@@ -1097,7 +1168,13 @@ export const FrontOfficeDashboard: React.FC = () => {
                     type="date" 
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white" 
                     value={apptStartDate} 
-                    onChange={e => setApptStartDate(e.target.value)} 
+                    onChange={e => {
+                      const val = e.target.value;
+                      setApptStartDate(val);
+                      if (!apptEndDate || apptEndDate < val || apptStartDate === apptEndDate) {
+                        setApptEndDate(val);
+                      }
+                    }} 
                   />
                 </div>
                 <div>
@@ -1161,7 +1238,7 @@ export const FrontOfficeDashboard: React.FC = () => {
                     <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">Condition</label>
                     <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white cursor-pointer" value={historyFilters.condition} onChange={e => setHistoryFilters({...historyFilters, condition: e.target.value})}>
                       <option value="">All Conditions</option>
-                      {Object.values(Condition).map(c => <option key={c} value={c}>{c}</option>)}
+                      {conditions.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
@@ -1238,7 +1315,7 @@ export const FrontOfficeDashboard: React.FC = () => {
                           ? `You have ${appointments.length} scheduled appointment(s) on other dates.`
                           : 'Try choosing a different date or booking a new appointment.'}
                       </span>
-                      {activeTab === 'APPOINTMENTS' && appointments.length > 0 && !showAllApptDates && (
+                      {activeTab === 'APPOINTMENTS' && appointments.length > 0 && !showAllApptDates && filteredAppointments.length > 0 && (
                         <button
                           type="button"
                           onClick={() => setShowAllApptDates(true)}
@@ -1358,7 +1435,7 @@ export const FrontOfficeDashboard: React.FC = () => {
                       <td className="p-5 whitespace-nowrap">
                         {(() => {
                           const schedBy = getScheduleBy(item, staffUsers);
-                          const isAcquire = schedBy === 'Acquire OPD Team';
+                          const isAcquire = schedBy === 'Acquire OPD team' || schedBy.toLowerCase().includes('acquire') || schedBy.toLowerCase().includes('sales');
                           return (
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase shadow-2xs border ${
                               isAcquire 
@@ -1376,9 +1453,6 @@ export const FrontOfficeDashboard: React.FC = () => {
                     )}
                     <td className="p-5 text-right whitespace-nowrap">
                       <div className="flex justify-end gap-2 items-center">
-                        {(activeTab === 'REGISTRATION' || activeTab === 'GLOBAL_SEARCH') && item.recordType === 'Registration' && (
-                          <button onClick={() => handleRevisitClick(item)} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-[9px] font-black uppercase hover:bg-indigo-100 transition-all flex items-center gap-1.5 shadow-sm border border-indigo-100"><History className="w-3.5 h-3.5" /> Revisit</button>
-                        )}
                         {activeTab === 'APPOINTMENTS' && (
                           <button onClick={() => handleArrived(item)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase shadow-sm transition-all flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5" /> Arrived & Register</button>
                         )}
@@ -1438,7 +1512,7 @@ export const FrontOfficeDashboard: React.FC = () => {
                       <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Primary Complaint <span className="text-rose-500">*</span></label>
                       <select required className="w-full border-b-2 border-slate-100 p-2 outline-none focus:border-hospital-500 text-sm font-bold bg-white cursor-pointer" value={bookingData.condition || ''} onChange={e => setBookingData({...bookingData, condition: e.target.value as Condition})}>
                         <option value="">Select Condition</option>
-                        {Object.values(Condition).map(c => <option key={c} value={c}>{c}</option>)}
+                        {conditions.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
                     <div>
@@ -1610,7 +1684,9 @@ export const FrontOfficeDashboard: React.FC = () => {
                        <div><label className="block text-[10px] font-black uppercase text-slate-500 mb-2">Age</label><input type="number" required className="w-full text-xl font-bold border-b-2 border-slate-100 bg-slate-50/30 p-2 outline-none" value={formData.age ?? ''} onChange={e => setFormData({...formData, age: parseInt(e.target.value, 10) || undefined})} /></div>
                        <div><label className="block text-[10px] font-black uppercase text-slate-500 mb-2">Gender</label><div className="flex gap-2 p-1 bg-slate-100 rounded-xl">{Object.values(Gender).map(g => (<button key={g} type="button" onClick={() => setFormData({...formData, gender: g as Gender})} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase ${formData.gender === g ? 'bg-hospital-600 text-white shadow' : 'text-slate-500'}`}>{g}</button>))}</div></div>
                        <div><label className="block text-[10px] font-black uppercase text-slate-500 mb-2">Mobile</label><input required type="tel" className="w-full text-xl border-b-2 border-slate-100 p-2 outline-none" value={formData.mobile || ''} onChange={e => setFormData({...formData, mobile: e.target.value})} /></div>
-                       <div><label className="block text-[10px] font-black uppercase text-slate-500 mb-2">Condition</label><select required className="w-full border-b-2 border-slate-100 p-2 bg-white" value={formData.condition || ''} onChange={e => setFormData({...formData, condition: e.target.value as Condition})}><option value="">Select...</option>{Object.values(Condition).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                       <div><label className="block text-[10px] font-black uppercase text-slate-500 mb-2">Condition</label><select required className="w-full border-b-2 border-slate-100 p-2 bg-white cursor-pointer" value={formData.condition || ''} onChange={e => setFormData({...formData, condition: e.target.value as Condition})}><option value="">Select Condition</option>{
+                          [...conditions].sort((a, b) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)).map(c => <option key={c} value={c}>{c}</option>)
+                        }</select></div>
                        <div><label className="block text-[10px] font-black uppercase text-slate-500 mb-2">Occupation</label><input className="w-full border-b-2 border-slate-100 p-2 outline-none" value={formData.occupation || ''} onChange={e => setFormData({...formData, occupation: e.target.value})} /></div>
                        <div>
                          <label className="block text-[10px] font-black uppercase text-slate-500 mb-2">Assigned Doctor</label>

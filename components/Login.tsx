@@ -150,6 +150,24 @@ export const Login: React.FC = () => {
       return;
     }
 
+    if ((inputLower === "sales@hms.com" || inputLower === "sales") && (password === "Sales@123" || password === "Welcome@123")) {
+      setCurrentUserRole("SALES");
+      localStorage.setItem("hms_hospital_email", "sales@hms.com");
+      localStorage.setItem("hms_hospital_name", "Sales Executive One");
+      localStorage.setItem("hms_hospital_id", "staff_sales_01");
+      setIsLoading(false);
+      return;
+    }
+
+    if ((inputLower === "sales2@hms.com" || inputLower === "sales2") && (password === "Sales@123" || password === "Welcome@123")) {
+      setCurrentUserRole("SALES");
+      localStorage.setItem("hms_hospital_email", "sales2@hms.com");
+      localStorage.setItem("hms_hospital_name", "Sales Executive Two");
+      localStorage.setItem("hms_hospital_id", "staff_sales_02");
+      setIsLoading(false);
+      return;
+    }
+
     setError("This email or mobile number is not recognized as an authorized staff account.");
     setIsLoading(false);
   };

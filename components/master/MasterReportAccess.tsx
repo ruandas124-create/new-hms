@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useHospital } from '../../context/HospitalContext';
 import { ReportPermissionKey } from '../../types';
+import { AnalyticsDashboard } from '../../views/AnalyticsDashboard';
 import { 
   FileText, CheckCircle2, XCircle, BarChart3, Activity, 
   TrendingUp, Layers, Check, Loader2, Info, Lock, Unlock, 
-  Stethoscope, Calendar, DollarSign, PieChart
+  Stethoscope, Calendar, DollarSign, PieChart, Building2, ChevronDown
 } from 'lucide-react';
 
 interface ReportItem {
@@ -19,7 +20,13 @@ interface ReportItem {
 }
 
 export const MasterReportAccess: React.FC = () => {
-  const { reportPermissions, updateReportPermission } = useHospital();
+  const { 
+    reportPermissions, 
+    updateReportPermission, 
+    analyticsAccounts, 
+    selectedTenantFilter, 
+    setSelectedTenantFilter 
+  } = useHospital();
   const [updatingKey, setUpdatingKey] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -91,8 +98,11 @@ export const MasterReportAccess: React.FC = () => {
     }
   };
 
+  const selectedHospital = analyticsAccounts.find(h => h.id === selectedTenantFilter || h.hospital_id === selectedTenantFilter);
+  const isViewingSpecificHospitalHub = selectedTenantFilter && selectedTenantFilter !== 'ALL';
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className="space-y-6 animate-in fade-in duration-300">
       {/* Toast Alert */}
       {toastMessage && (
         <div className="fixed top-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-slate-700 animate-in slide-in-from-top-3">
@@ -101,185 +111,173 @@ export const MasterReportAccess: React.FC = () => {
         </div>
       )}
 
-      {/* 1. Header Information */}
-      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm p-4 sm:p-6 md:p-8">
-        <div className={`flex flex-col md:flex-row md:items-center justify-between gap-4 ${visibleReportCards.length > 0 ? 'border-b border-slate-100 pb-6 mb-6' : ''}`}>
+      {/* Centered Hospital Dropdown Selector */}
+      {!isViewingSpecificHospitalHub && (
+        <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm p-6 sm:p-8 flex flex-col items-center justify-center text-center space-y-3">
+          <div className="w-10 h-10 rounded-2xl bg-hospital-50 text-hospital-600 flex items-center justify-center shadow-xs">
+            <Building2 className="w-5 h-5" />
+          </div>
           <div>
-            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-hospital-600 mb-1">
-              <FileText className="w-4 h-4" /> 4. Report Access Management
-            </div>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight">
-              Hospital Intelligence & Report Governance
-            </h2>
-            <p className="text-xs text-slate-500 mt-1 max-w-2xl">
-              Independently grant or restrict access to strategic hospital reports. Revoked reports are automatically masked across all user sessions.
-            </p>
+            <h3 className="text-base font-extrabold text-slate-900">Select Hospital Facility</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Choose a hospital to view its complete Analytic Hub</p>
           </div>
-
-          <div className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-black text-slate-700 w-fit">
-            <Info className="w-4 h-4 text-hospital-600 shrink-0" />
-            Independent Report Permissions
+          <div className="relative w-full max-w-md mt-2">
+            <Building2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <select
+              value={selectedTenantFilter && selectedTenantFilter !== 'ALL' ? selectedTenantFilter : 'ALL'}
+              onChange={(e) => setSelectedTenantFilter(e.target.value)}
+              className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-hospital-500 cursor-pointer appearance-none text-center"
+            >
+              <option value="ALL" className="text-center">-- Select Hospital Facility --</option>
+              {analyticsAccounts.map(h => (
+                <option key={h.id} value={h.id} className="text-left">
+                  {h.name} {h.city ? `(${h.city})` : ''}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         </div>
+      )}
 
-        {/* Reports Grid with Independent Toggles (hidden when all specified cards are removed) */}
-        {visibleReportCards.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-6 pt-6 border-t border-slate-100">
-            {visibleReportCards.map((rep) => {
-              const isGranted = !!reportPermissions[rep.key];
-              const isUpdating = updatingKey === rep.key;
-              const Icon = rep.icon;
-
-              return (
-                <div
-                  key={rep.key}
-                  id={`report-card-${rep.key}`}
-                  className={`bg-white rounded-2xl border transition-all p-6 flex flex-col justify-between space-y-5 ${
-                    isGranted 
-                      ? 'border-emerald-200 shadow-sm hover:shadow-md' 
-                      : 'border-slate-200 bg-slate-50/40 opacity-90'
-                  }`}
-                >
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-start">
-                      <div className={`p-3 rounded-2xl ${
-                        isGranted ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400'
-                      } transition-colors`}>
-                        <Icon className="w-6 h-6" />
-                      </div>
-
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
-                        isGranted 
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                          : 'bg-rose-50 text-rose-700 border border-rose-200'
-                      }`}>
-                        {isGranted ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                        {isGranted ? 'ACCESS ON' : 'ACCESS OFF'}
-                      </span>
-                    </div>
-
-                    <div>
-                      <h3 className="font-extrabold text-slate-900 text-base">{rep.title}</h3>
-                      <p className="text-xs font-semibold text-slate-500">{rep.subtitle}</p>
-                      <p className="text-xs text-slate-400 mt-2 leading-relaxed">{rep.description}</p>
-                    </div>
-
-                    {/* Metrics Included Tags */}
-                    <div className="space-y-1.5 pt-2">
-                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block">
-                        Exposed Metrics & Analytics
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {rep.metricsIncluded.map((m, idx) => (
-                          <span key={idx} className="px-2 py-0.5 bg-slate-100 rounded-md text-[10px] font-bold text-slate-600">
-                            {m}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="pt-2 text-[10px] text-slate-400 font-bold uppercase">
-                      Audience: <span className="text-slate-700">{rep.audience}</span>
-                    </div>
-                  </div>
-
-                  {/* Switch Toggle */}
-                  <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
-                      Report State: <span className={isGranted ? 'text-emerald-600' : 'text-rose-600'}>{isGranted ? 'Visible (ON)' : 'Restricted (OFF)'}</span>
-                    </span>
-
-                    <button
-                      id={`toggle-report-${rep.key}`}
-                      type="button"
-                      disabled={isUpdating}
-                      onClick={() => handleToggle(rep.key)}
-                      className={`relative inline-flex h-8 w-16 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-hospital-500 focus:ring-offset-2 ${
-                        isGranted ? 'bg-emerald-600' : 'bg-slate-300'
-                      } ${isUpdating ? 'opacity-50 cursor-wait' : ''}`}
-                      aria-label={`Toggle ${rep.title}`}
-                    >
-                      <span className="sr-only">Toggle {rep.title}</span>
-                      <span
-                        aria-hidden="true"
-                        className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out flex items-center justify-center ${
-                          isGranted ? 'translate-x-8' : 'translate-x-0'
-                        }`}
-                      >
-                        {isUpdating ? (
-                          <Loader2 className="w-3.5 h-3.5 text-slate-500 animate-spin" />
-                        ) : isGranted ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        ) : (
-                          <XCircle className="w-3.5 h-3.5 text-slate-400" />
-                        )}
-                      </span>
-                    </button>
-                  </div>
+      {/* Conditional Display: If specific hospital is selected, render its Analytic Hub with Full Access */}
+      {isViewingSpecificHospitalHub ? (
+        <div className="space-y-4">
+          <div className="bg-hospital-900 text-white p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-md">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+                <Building2 className="w-5 h-5 text-hospital-300" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-black tracking-tight">
+                    Analytic Hub: {selectedHospital?.name || 'Selected Hospital'}
+                  </h3>
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Full Viewing & Reporting Access
+                  </span>
                 </div>
-              );
-            })}
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Displaying all reports, analytics, dashboards, performance metrics, and data specific to this hospital facility.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedTenantFilter('ALL')}
+              className="px-4 py-2 bg-white text-slate-900 hover:bg-slate-100 rounded-xl text-xs font-extrabold transition-all cursor-pointer shadow-xs shrink-0 flex items-center gap-1.5"
+            >
+              ← Back to Report Governance
+            </button>
           </div>
-        )}
-      </div>
 
-      {/* 2. Audit Summary Table */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 sm:p-8 space-y-4">
-        <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400">
-          <Layers className="w-4 h-4" /> Report Access Control Audit
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-6 shadow-sm">
+            <AnalyticsDashboard />
+          </div>
         </div>
+      ) : (
+        <div className="space-y-8">
+          {/* Reports Grid with Independent Toggles (hidden when all specified cards are removed) */}
+            {visibleReportCards.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-6 pt-6 border-t border-slate-100">
+                {visibleReportCards.map((rep) => {
+                  const isGranted = !!reportPermissions[rep.key];
+                  const isUpdating = updatingKey === rep.key;
+                  const Icon = rep.icon;
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs min-w-[1000px]">
-            <thead>
-              <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                <th className="pb-3 pl-2">Report Name</th>
-                <th className="pb-3">Permission Key</th>
-                <th className="pb-3">Current Status</th>
-                <th className="pb-3">Access Tier</th>
-                <th className="pb-3 pr-2 text-right">Master Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-medium">
-              {reports.map(rep => {
-                const isGranted = !!reportPermissions[rep.key];
-                return (
-                  <tr key={rep.key} className="hover:bg-slate-50/60">
-                    <td className="py-3.5 pl-2 font-bold text-slate-800 flex items-center gap-2">
-                      <rep.icon className="w-4 h-4 text-slate-500" />
-                      {rep.title}
-                    </td>
-                    <td className="py-3.5 font-mono text-[11px] text-slate-500">report_{rep.key}</td>
-                    <td className="py-3.5">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                        isGranted ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-                      }`}>
-                        {isGranted ? 'ON' : 'OFF'}
-                      </span>
-                    </td>
-                    <td className="py-3.5 text-slate-500 text-[11px]">Independent Granular Rule</td>
-                    <td className="py-3.5 pr-2 text-right">
-                      <button
-                        type="button"
-                        disabled={updatingKey === rep.key}
-                        onClick={() => handleToggle(rep.key)}
-                        className={`px-3 py-1 rounded-xl text-[11px] font-bold uppercase transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer ${
-                          isGranted 
-                            ? 'text-rose-600 hover:bg-rose-50 border border-rose-200' 
-                            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                        }`}
-                      >
-                        {updatingKey === rep.key && <Loader2 className="w-3 h-3 animate-spin" />}
-                        {updatingKey === rep.key ? 'Updating...' : (isGranted ? 'Turn OFF' : 'Turn ON')}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                  return (
+                    <div
+                      key={rep.key}
+                      id={`report-card-${rep.key}`}
+                      className={`bg-white rounded-2xl border transition-all p-6 flex flex-col justify-between space-y-5 ${
+                        isGranted 
+                          ? 'border-emerald-200 shadow-sm hover:shadow-md' 
+                          : 'border-slate-200 bg-slate-50/40 opacity-90'
+                      }`}
+                    >
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-start">
+                          <div className={`p-3 rounded-2xl ${
+                            isGranted ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400'
+                          } transition-colors`}>
+                            <Icon className="w-6 h-6" />
+                          </div>
+
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
+                            isGranted 
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                              : 'bg-rose-50 text-rose-700 border border-rose-200'
+                          }`}>
+                            {isGranted ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                            {isGranted ? 'ACCESS ON' : 'ACCESS OFF'}
+                          </span>
+                        </div>
+
+                        <div>
+                          <h3 className="font-extrabold text-slate-900 text-base">{rep.title}</h3>
+                          <p className="text-xs font-semibold text-slate-500">{rep.subtitle}</p>
+                          <p className="text-xs text-slate-400 mt-2 leading-relaxed">{rep.description}</p>
+                        </div>
+
+                        {/* Metrics Included Tags */}
+                        <div className="space-y-1.5 pt-2">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block">
+                            Exposed Metrics & Analytics
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {rep.metricsIncluded.map((m, idx) => (
+                              <span key={idx} className="px-2 py-0.5 bg-slate-100 rounded-md text-[10px] font-bold text-slate-600">
+                                {m}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="pt-2 text-[10px] text-slate-400 font-bold uppercase">
+                          Audience: <span className="text-slate-700">{rep.audience}</span>
+                        </div>
+                      </div>
+
+                      {/* Switch Toggle */}
+                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                          Report State: <span className={isGranted ? 'text-emerald-600' : 'text-rose-600'}>{isGranted ? 'Visible (ON)' : 'Restricted (OFF)'}</span>
+                        </span>
+
+                        <button
+                          id={`toggle-report-${rep.key}`}
+                          type="button"
+                          disabled={isUpdating}
+                          onClick={() => handleToggle(rep.key)}
+                          className={`relative inline-flex h-8 w-16 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-hospital-500 focus:ring-offset-2 ${
+                            isGranted ? 'bg-emerald-600' : 'bg-slate-300'
+                          } ${isUpdating ? 'opacity-50 cursor-wait' : ''}`}
+                          aria-label={`Toggle ${rep.title}`}
+                        >
+                          <span className="sr-only">Toggle {rep.title}</span>
+                          <span
+                            aria-hidden="true"
+                            className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out flex items-center justify-center ${
+                              isGranted ? 'translate-x-8' : 'translate-x-0'
+                            }`}
+                          >
+                            {isUpdating ? (
+                              <Loader2 className="w-3.5 h-3.5 text-slate-500 animate-spin" />
+                            ) : isGranted ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <XCircle className="w-3.5 h-3.5 text-slate-400" />
+                            )}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
         </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -192,6 +192,7 @@ CREATE INDEX IF NOT EXISTS idx_dashboard_permissions_role ON public.dashboard_pe
 CREATE TABLE IF NOT EXISTS public.lead_notes (
     id TEXT PRIMARY KEY,
     lead_id TEXT NOT NULL,
+    hospital_id TEXT,
     note TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     created_date TEXT,
@@ -202,6 +203,7 @@ CREATE TABLE IF NOT EXISTS public.lead_notes (
 
 ALTER TABLE public.lead_notes 
 ADD COLUMN IF NOT EXISTS lead_id TEXT,
+ADD COLUMN IF NOT EXISTS hospital_id TEXT,
 ADD COLUMN IF NOT EXISTS note TEXT,
 ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
 ADD COLUMN IF NOT EXISTS created_date TEXT,
@@ -210,7 +212,44 @@ ADD COLUMN IF NOT EXISTS created_by TEXT,
 ADD COLUMN IF NOT EXISTS created_by_name TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_lead_notes_lead_id ON public.lead_notes (lead_id);
+CREATE INDEX IF NOT EXISTS idx_lead_notes_hospital_id ON public.lead_notes (hospital_id);
 CREATE INDEX IF NOT EXISTS idx_lead_notes_created_at ON public.lead_notes (created_at DESC);
+
+-- =================================================================
+-- 4B. REVISIT NOTES TABLE (revisit_notes)
+-- Stores doctor & front-office revisit consultations and clinical follow-up notes
+-- =================================================================
+CREATE TABLE IF NOT EXISTS public.revisit_notes (
+    id TEXT PRIMARY KEY,
+    patient_id TEXT NOT NULL,
+    hospital_id TEXT,
+    doctor_id TEXT,
+    doctor_name TEXT,
+    note TEXT NOT NULL,
+    revisit_date DATE,
+    revisit_time TIME,
+    action_type TEXT DEFAULT 'Scheduled',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by TEXT,
+    created_by_name TEXT
+);
+
+ALTER TABLE public.revisit_notes
+ADD COLUMN IF NOT EXISTS patient_id TEXT,
+ADD COLUMN IF NOT EXISTS hospital_id TEXT,
+ADD COLUMN IF NOT EXISTS doctor_id TEXT,
+ADD COLUMN IF NOT EXISTS doctor_name TEXT,
+ADD COLUMN IF NOT EXISTS note TEXT,
+ADD COLUMN IF NOT EXISTS revisit_date DATE,
+ADD COLUMN IF NOT EXISTS revisit_time TIME,
+ADD COLUMN IF NOT EXISTS action_type TEXT DEFAULT 'Scheduled',
+ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
+ADD COLUMN IF NOT EXISTS created_by TEXT,
+ADD COLUMN IF NOT EXISTS created_by_name TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_revisit_notes_patient_id ON public.revisit_notes (patient_id);
+CREATE INDEX IF NOT EXISTS idx_revisit_notes_hospital_id ON public.revisit_notes (hospital_id);
+CREATE INDEX IF NOT EXISTS idx_revisit_notes_created_at ON public.revisit_notes (created_at DESC);
 
 -- =================================================================
 -- 5. AUTO-UPDATE TRIGGER FUNCTION FOR 'updated_at'
@@ -244,6 +283,7 @@ ALTER TABLE public.himas_appointments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.staff_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.dashboard_permissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lead_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.revisit_notes ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow Public Access on Appointments" ON public.himas_appointments;
 CREATE POLICY "Allow Public Access on Appointments" 
@@ -260,6 +300,10 @@ ON public.dashboard_permissions FOR ALL TO public USING (true) WITH CHECK (true)
 DROP POLICY IF EXISTS "Allow Public Access on Lead Notes" ON public.lead_notes;
 CREATE POLICY "Allow Public Access on Lead Notes" 
 ON public.lead_notes FOR ALL TO public USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow Public Access on Revisit Notes" ON public.revisit_notes;
+CREATE POLICY "Allow Public Access on Revisit Notes" 
+ON public.revisit_notes FOR ALL TO public USING (true) WITH CHECK (true);
 
 -- =================================================================
 -- 7. SUPABASE REALTIME PUBLICATION
@@ -307,10 +351,12 @@ ALTER TABLE public.lead_notes REPLICA IDENTITY FULL;
 -- Safe to run repeatedly (uses ON CONFLICT DO UPDATE / NOTHING)
 -- =================================================================
 
--- Default Staff Accounts (Root Master Administrator)
+-- Default Staff Accounts (Root Master Administrator & Sales Executives)
 INSERT INTO public.staff_users (id, name, email, mobile, role, password, hospital_id, hospital_name, specialization, department)
 VALUES 
-  ('staff_master_01', 'Master Administrator', 'master@hms.com', '+10000000000', 'MASTER', 'Master@123', NULL, 'Global Control Center', 'Administration', 'Executive Management')
+  ('staff_master_01', 'Master Administrator', 'master@hms.com', '+10000000000', 'MASTER', 'Master@123', NULL, 'Global Control Center', 'Administration', 'Executive Management'),
+  ('staff_sales_01', 'Sales Executive One', 'sales@hms.com', '+19999990001', 'SALES', 'Sales@123', NULL, 'All Hospitals', 'Patient Outreach', 'Acquire OPD'),
+  ('staff_sales_02', 'Sales Executive Two', 'sales2@hms.com', '+19999990002', 'SALES', 'Sales@123', NULL, 'All Hospitals', 'Patient Outreach', 'Acquire OPD')
 ON CONFLICT (id) DO UPDATE SET 
   email = EXCLUDED.email,
   password = EXCLUDED.password,

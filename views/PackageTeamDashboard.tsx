@@ -236,8 +236,8 @@ export const PackageTeamDashboard: React.FC = () => {
     }
   };
 
-  const handleSaveProposal = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveProposal = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (selectedPatient && !isSavingProposal) {
       setIsSavingProposal(true);
       try {
@@ -272,39 +272,27 @@ export const PackageTeamDashboard: React.FC = () => {
 
   const renderActionButtons = (currentOutcome: ProposalOutcome | undefined) => {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
-        <button 
-          type="button" 
-          onClick={() => handleOpenOutcomeModal('Scheduled')} 
-          className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-xs flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+      <div className="relative w-full">
+        <select
+          value={currentOutcome || ''}
+          onChange={(e) => {
+            const val = e.target.value;
+            if (val === 'SAVE_PROPOSAL') {
+              handleSaveProposal();
+            } else if (val) {
+              handleOpenOutcomeModal(val as ProposalOutcome);
+            }
+          }}
+          className="w-full px-4 py-3 bg-slate-900 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider outline-none focus:ring-2 focus:ring-hospital-500 cursor-pointer appearance-none shadow-md pr-10 text-center"
         >
-          <Calendar className="w-4 h-4 shrink-0" /> 
-          <span>Schedule</span>
-        </button>
-        <button 
-          type="button" 
-          onClick={() => handleOpenOutcomeModal('Follow-Up')} 
-          className="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-xs flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
-        >
-          <Clock className="w-4 h-4 shrink-0" /> 
-          <span>Follow-Up</span>
-        </button>
-        <button 
-          type="button" 
-          onClick={() => handleOpenOutcomeModal('Completed')} 
-          className="py-2.5 px-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-xs shadow-xs flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
-        >
-          <BadgeCheck className="w-4 h-4 shrink-0" /> 
-          <span>Completed</span>
-        </button>
-        <button 
-          type="button" 
-          onClick={() => handleOpenOutcomeModal('Lost')} 
-          className="py-2.5 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs shadow-xs flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
-        >
-          <Trash2 className="w-4 h-4 shrink-0" /> 
-          <span>Lost</span>
-        </button>
+          <option value="" disabled className="bg-white text-slate-800">-- Select Action / Status --</option>
+          <option value="SAVE_PROPOSAL" className="bg-white text-hospital-700 font-bold">Save / Update Proposal Details</option>
+          <option value="Scheduled" className="bg-white text-emerald-700 font-bold">Schedule Surgery</option>
+          <option value="Follow-Up" className="bg-white text-blue-700 font-bold">Follow-Up</option>
+          <option value="Completed" className="bg-white text-teal-700 font-bold">Completed</option>
+          <option value="Lost" className="bg-white text-rose-700 font-bold">Lost</option>
+        </select>
+        <ChevronDown className="w-4 h-4 text-white absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
       </div>
     );
   };
@@ -931,32 +919,7 @@ export const PackageTeamDashboard: React.FC = () => {
                               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                             </div>
                           </div>
-                          <div>
-                            <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1.5">Objection Identified</label>
-                            <div className="relative">
-                              <select 
-                                className={selectClasses} 
-                                value={proposal.objectionIdentified || ''} 
-                                onChange={v => setProposal({...proposal, objectionIdentified: v.target.value})}
-                              >
-                                <option value="" disabled>Select Objection If Any</option>
-                                {[
-                                  'None / General Hesitation',
-                                  'Cost / Financial Constraints',
-                                  'Wants Cashless Insurance Approval First',
-                                  'Family member decision pending',
-                                  'Fear of surgery / anesthesia',
-                                  'Wants to manage with medications only',
-                                  'Seeking a second opinion',
-                                  'Distance / Transportation issues',
-                                  'Other'
-                                ].map(obj => (
-                                  <option key={obj} value={obj}>{obj}</option>
-                                ))}
-                              </select>
-                              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                            </div>
-                          </div>
+
                           <div>
                             <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1.5 flex items-center gap-1.5">
                               <FileText className="w-3.5 h-3.5" /> Counseling Notes / Remarks
@@ -971,26 +934,9 @@ export const PackageTeamDashboard: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Action Buttons & Save */}
-                      <div className="pt-4 border-t border-slate-100 space-y-3">
+                      {/* Action Dropdown */}
+                      <div className="pt-4 border-t border-slate-100">
                         {renderActionButtons(selectedPatient.packageProposal?.outcome)}
-                        <button 
-                          type="submit" 
-                          disabled={isSavingProposal}
-                          className="w-full py-2.5 px-4 bg-hospital-600 hover:bg-hospital-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
-                        >
-                          {isSavingProposal ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              <span>Saving Proposal...</span>
-                            </>
-                          ) : (
-                            <>
-                              <BadgeCheck className="w-4 h-4" />
-                              <span>Save / Update Proposal Details</span>
-                            </>
-                          )}
-                        </button>
                       </div>
                     </form>
                   </div>
