@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
 import { SurgeonCode, PainSeverity, Affordability, ConversionReadiness, Patient, DoctorAssessment, Appointment, Gender } from '../types';
-import { formatDateToDDMMMYYYY, formatDateTimeToDDMMMYYYY, getTodayLocalIso } from '../utils/dateFormatter';
-import { Stethoscope, Check, ChevronRight, ChevronLeft, User, Calendar, Save, Briefcase, CreditCard, Activity, Tag, FileText, Database, Clock, Share2, ShieldCheck, Search, Filter, History, ClipboardList, RefreshCcw, Upload, Trash2, Loader2, Plus, CheckCircle2, CheckCircle, CalendarCheck, AlertCircle, X, Phone, Building2, Lock } from 'lucide-react';
+import { formatDateToDDMMMYYYY, formatDateTimeToDDMMMYYYY, getTodayLocalIso, normalizeToIsoDate, shiftIsoDate } from '../utils/dateFormatter';
+import { Stethoscope, Check, ChevronRight, ChevronLeft, User, Calendar, Save, Briefcase, CreditCard, Activity, Tag, FileText, Database, Clock, Share2, ShieldCheck, Search, Filter, History, ClipboardList, RefreshCcw, Upload, Trash2, Loader2, Plus, CheckCircle2, CheckCircle, CalendarCheck, AlertCircle, X, Phone, Building2, Lock, RotateCcw } from 'lucide-react';
 
 const PROCEDURES = [
   "Lap Cholecystectomy",
@@ -152,9 +152,14 @@ export const DoctorDashboard: React.FC = () => {
     return 'patients';
   }, [activeDashboard]);
 
-  // Updated state for Date Range
+  // Updated state for Date Range (Patient Queue)
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Appointment date filter state (defaults to current date / today)
+  const todayIso = useMemo(() => getTodayLocalIso(), []);
+  const [apptStartDate, setApptStartDate] = useState<string>(todayIso);
+  const [apptEndDate, setApptEndDate] = useState<string>(todayIso);
 
   const [formState, setFormState] = useState<Partial<DoctorAssessment>>({
     quickCode: undefined,
@@ -668,7 +673,7 @@ export const DoctorDashboard: React.FC = () => {
   const pendingCount = allPatients.filter(p => p.status === 'Arrived' && !isAssessmentCompleted(p)).length;
   const doneCount = allPatients.filter(p => isAssessmentCompleted(p)).length;
 
-  const doctorAppointments = useMemo(() => {
+  const allDoctorAppointments = useMemo(() => {
     return (appointments || []).filter(a => {
       const docId = loggedInDoctor.id;
       const docName = loggedInDoctor.name ? loggedInDoctor.name.toLowerCase().trim() : '';
@@ -685,8 +690,26 @@ export const DoctorDashboard: React.FC = () => {
         return matchDoc || !a.assignedDoctorId;
       }
       return matchDoc;
-    }).sort((a, b) => ((b.date || '') + (b.time || '')).localeCompare((a.date || '') + (a.time || '')));
+    });
   }, [appointments, loggedInDoctor]);
+
+  const doctorAppointments = useMemo(() => {
+    return allDoctorAppointments.filter(a => {
+      const aDate = normalizeToIsoDate(a.date);
+      // Exclude appointments with missing date from date-filtered view
+      if (!aDate) return false;
+
+      // Date range filtering (accurate boundary check including start and end date)
+      if (apptStartDate && aDate < apptStartDate) return false;
+      if (apptEndDate && aDate > apptEndDate) return false;
+
+      return true;
+    }).sort((a, b) => {
+      const keyA = (normalizeToIsoDate(a.date) || '') + (a.time || '');
+      const keyB = (normalizeToIsoDate(b.date) || '') + (b.time || '');
+      return keyA.localeCompare(keyB);
+    });
+  }, [allDoctorAppointments, apptStartDate, apptEndDate]);
     
   const isSurgery = formState.quickCode === SurgeonCode.S1;
 
@@ -1233,11 +1256,47 @@ export const DoctorDashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* Date Range & Quick Preset Filter Bar */}
+          {/* Date Range Filter Bar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 shadow-2xs">
+              <span className="text-[10px] font-black uppercase text-slate-500">From Date:</span>
+              <input
+                type="date"
+                min={todayIso}
+                value={apptStartDate}
+                onChange={(e) => {
+                  const newStart = e.target.value;
+                  setApptStartDate(newStart);
+                  if (newStart && apptEndDate && newStart > apptEndDate) {
+                    setApptEndDate(newStart);
+                  }
+                }}
+                className="text-xs font-bold text-slate-800 bg-transparent outline-none cursor-pointer"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 shadow-2xs">
+              <span className="text-[10px] font-black uppercase text-slate-500">To Date:</span>
+              <input
+                type="date"
+                min={apptStartDate || todayIso}
+                value={apptEndDate}
+                onChange={(e) => setApptEndDate(e.target.value)}
+                className="text-xs font-bold text-slate-800 bg-transparent outline-none cursor-pointer"
+              />
+            </div>
+          </div>
+
           {doctorAppointments.length === 0 ? (
             <div className="text-center py-16 text-slate-400 space-y-2">
               <Calendar className="w-12 h-12 mx-auto text-slate-300" />
-              <div className="font-bold text-slate-600 text-sm">No scheduled appointments</div>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">When patients are booked for your consultation by Sales or Front Office, they will appear here.</p>
+              <div className="font-bold text-slate-600 text-sm">
+                No scheduled appointments
+              </div>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                No appointments found for the selected date range.
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">

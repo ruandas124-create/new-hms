@@ -138,21 +138,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         return matchDoc;
       }).length;
 
-      const medDoneCount = (patients || []).filter(p => {
-        const isMed = p.status === 'Medication Done' || p.doctorAssessment?.quickCode === SurgeonCode.M1;
-        if (!isMed) return false;
-        if (docHospId) {
-          const patHospId = p.hospital_id || p.doctorAssessment?.hospital_id;
-          const assignedDoc = p.doctorAssessment?.assignedDoctorId;
-          if (assignedDoc && currentDocId && assignedDoc === currentDocId) return true;
-          if (patHospId && patHospId !== docHospId) return false;
-        }
-        return true;
-      }).length;
-
       return [
         { key: 'doctor' as DashboardKey, label: 'Patients Queue', icon: User, colorClass: 'text-emerald-400' },
-        { key: 'doctor_medication_done' as DashboardKey, label: `Medication Done${medDoneCount > 0 ? ` (${medDoneCount})` : ''}`, icon: Activity, colorClass: 'text-purple-400' },
         { key: 'doctor_appointments' as DashboardKey, label: `Appointments${docApptCount > 0 ? ` (${docApptCount})` : ''}`, icon: Calendar, colorClass: 'text-emerald-400' },
         { key: 'doctor_availability' as DashboardKey, label: 'Availability Mode', icon: Clock, colorClass: 'text-emerald-400' },
         { key: 'doctor_profile' as DashboardKey, label: 'Profile', icon: User, colorClass: 'text-emerald-400' }
