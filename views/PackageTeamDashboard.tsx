@@ -110,7 +110,21 @@ export const PackageTeamDashboard: React.FC = () => {
 
   useEffect(() => {
     if (selectedPatient) {
-      setProposal(selectedPatient.packageProposal || initialProposalState);
+      const pProposal = selectedPatient.packageProposal;
+      const initialOutcome = pProposal?.outcome || (selectedPatient.surgery_date ? 'Scheduled' : selectedPatient.followup_date ? 'Follow-Up' : selectedPatient.completed_surgery ? 'Completed' : selectedPatient.surgery_lost_date ? 'Lost' : undefined);
+      const initialSurgeryDate = pProposal?.surgeryDate || selectedPatient.surgery_date || selectedPatient.doctorAssessment?.tentativeSurgeryDate || '';
+      const initialFollowUpDate = pProposal?.followUpDate || selectedPatient.followup_date || '';
+      const initialOutcomeDate = pProposal?.outcomeDate || selectedPatient.completed_surgery || selectedPatient.surgery_lost_date || (initialOutcome === 'Scheduled' ? initialSurgeryDate : initialOutcome === 'Follow-Up' ? initialFollowUpDate : '');
+
+      setProposal(prev => ({
+        ...initialProposalState,
+        ...(pProposal || {}),
+        outcome: prev.outcome || initialOutcome,
+        surgeryDate: prev.surgeryDate || initialSurgeryDate,
+        followUpDate: prev.followUpDate || initialFollowUpDate,
+        outcomeDate: prev.outcomeDate || initialOutcomeDate,
+        lostReason: prev.lostReason || pProposal?.lostReason || ''
+      }));
     }
   }, [selectedPatient]);
 
@@ -200,7 +214,21 @@ export const PackageTeamDashboard: React.FC = () => {
 
   const handlePatientSelect = (p: Patient) => {
     setSelectedPatient(p);
-    setProposal(p.packageProposal || initialProposalState);
+    const pProposal = p.packageProposal;
+    const initialOutcome = pProposal?.outcome || (p.surgery_date ? 'Scheduled' : p.followup_date ? 'Follow-Up' : p.completed_surgery ? 'Completed' : p.surgery_lost_date ? 'Lost' : undefined);
+    const initialSurgeryDate = pProposal?.surgeryDate || p.surgery_date || p.doctorAssessment?.tentativeSurgeryDate || '';
+    const initialFollowUpDate = pProposal?.followUpDate || p.followup_date || '';
+    const initialOutcomeDate = pProposal?.outcomeDate || p.completed_surgery || p.surgery_lost_date || (initialOutcome === 'Scheduled' ? initialSurgeryDate : initialOutcome === 'Follow-Up' ? initialFollowUpDate : '');
+
+    setProposal({
+      ...initialProposalState,
+      ...(pProposal || {}),
+      outcome: initialOutcome,
+      surgeryDate: initialSurgeryDate,
+      followUpDate: initialFollowUpDate,
+      outcomeDate: initialOutcomeDate,
+      lostReason: pProposal?.lostReason || ''
+    });
   };
 
   const handleOpenOutcomeModal = (type: ProposalOutcome) => {
@@ -265,10 +293,17 @@ export const PackageTeamDashboard: React.FC = () => {
     if (selectedPatient && !isSavingProposal) {
       setIsSavingProposal(true);
       try {
+        const currentOutcome = proposal.outcome || selectedPatient.packageProposal?.outcome;
+        const currentSurgeryDate = proposal.surgeryDate || selectedPatient.surgery_date || selectedPatient.packageProposal?.surgeryDate || '';
+        const currentFollowUpDate = proposal.followUpDate || selectedPatient.followup_date || selectedPatient.packageProposal?.followUpDate || '';
+        const currentOutcomeDate = proposal.outcomeDate || (currentOutcome === 'Scheduled' ? currentSurgeryDate : currentOutcome === 'Follow-Up' ? currentFollowUpDate : selectedPatient.packageProposal?.outcomeDate) || '';
+
         const toSave: PackageProposal = {
           ...(proposal as PackageProposal),
-          surgeryDate: proposal.surgeryDate || selectedPatient.surgery_date || selectedPatient.packageProposal?.surgeryDate || '',
-          followUpDate: proposal.followUpDate || selectedPatient.followup_date || selectedPatient.packageProposal?.followUpDate || '',
+          outcome: currentOutcome,
+          surgeryDate: currentSurgeryDate,
+          followUpDate: currentFollowUpDate,
+          outcomeDate: currentOutcomeDate,
           proposalCreatedAt: proposal.proposalCreatedAt || new Date().toISOString()
         };
         setProposal(toSave);
@@ -276,7 +311,9 @@ export const PackageTeamDashboard: React.FC = () => {
           ...prev,
           packageProposal: toSave,
           surgery_date: toSave.surgeryDate || prev.surgery_date,
-          followup_date: toSave.followUpDate || prev.followup_date
+          followup_date: toSave.followUpDate || prev.followup_date,
+          completed_surgery: toSave.outcome === 'Completed' ? toSave.outcomeDate : prev.completed_surgery,
+          surgery_lost_date: toSave.outcome === 'Lost' ? toSave.outcomeDate : prev.surgery_lost_date
         } : null);
 
         await updatePackageProposal(selectedPatient.id, toSave);
@@ -305,29 +342,107 @@ export const PackageTeamDashboard: React.FC = () => {
   const selectClasses = "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-hospital-500 transition-all appearance-none cursor-pointer pr-9";
   const filterInputClasses = "w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-hospital-500 focus:bg-white";
 
+  const [actionDropdownOpen, setActionDropdownOpen] = useState(false);
+
+  const handleActionSelect = (val: string) => {
+    setActionDropdownOpen(false);
+    if (val === 'SAVE_PROPOSAL') {
+      handleSaveProposal();
+      return;
+    }
+    if (!val) return;
+    const outcomeType = val as ProposalOutcome;
+
+    let defaultDate = new Date().toISOString().split('T')[0];
+    if (outcomeType === 'Scheduled') {
+      defaultDate = proposal.surgeryDate || selectedPatient?.surgery_date || selectedPatient?.packageProposal?.surgeryDate || selectedPatient?.doctorAssessment?.tentativeSurgeryDate || defaultDate;
+    } else if (outcomeType === 'Follow-Up') {
+      defaultDate = proposal.followUpDate || selectedPatient?.followup_date || selectedPatient?.packageProposal?.followUpDate || defaultDate;
+    } else if (outcomeType === 'Completed') {
+      defaultDate = proposal.outcomeDate || selectedPatient?.completed_surgery || selectedPatient?.packageProposal?.outcomeDate || defaultDate;
+    } else if (outcomeType === 'Lost') {
+      defaultDate = selectedPatient?.surgery_lost_date || proposal.outcomeDate || defaultDate;
+    }
+
+    setProposal(prev => ({
+      ...prev,
+      outcome: outcomeType,
+      outcomeDate: defaultDate,
+      surgeryDate: outcomeType === 'Scheduled' ? (prev.surgeryDate || defaultDate) : prev.surgeryDate,
+      followUpDate: outcomeType === 'Follow-Up' ? (prev.followUpDate || defaultDate) : prev.followUpDate,
+      lostReason: outcomeType === 'Lost' ? (prev.lostReason || lostReasons[0]) : prev.lostReason
+    }));
+
+    handleOpenOutcomeModal(outcomeType);
+  };
+
   const renderActionButtons = (currentOutcome: ProposalOutcome | undefined) => {
+    const activeOutcome = proposal.outcome || currentOutcome;
+    const displayLabel = activeOutcome 
+      ? (activeOutcome === 'Scheduled' ? 'SCHEDULE SURGERY' : activeOutcome.toUpperCase()) 
+      : '-- SELECT ACTION / STATUS --';
+
     return (
       <div className="relative w-full">
-        <select
-          value={currentOutcome || ''}
-          onChange={(e) => {
-            const val = e.target.value;
-            if (val === 'SAVE_PROPOSAL') {
-              handleSaveProposal();
-            } else if (val) {
-              handleOpenOutcomeModal(val as ProposalOutcome);
-            }
-          }}
-          className="w-full px-4 py-3 bg-slate-900 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider outline-none focus:ring-2 focus:ring-hospital-500 cursor-pointer appearance-none shadow-md pr-10 text-center"
+        <button
+          type="button"
+          onClick={() => setActionDropdownOpen(prev => !prev)}
+          className="w-full px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider outline-none focus:ring-2 focus:ring-hospital-500 cursor-pointer shadow-md transition-all flex items-center justify-between"
         >
-          <option value="" disabled className="bg-white text-slate-800">-- Select Action / Status --</option>
-          <option value="SAVE_PROPOSAL" className="bg-white text-hospital-700 font-bold">Save / Update Proposal Details</option>
-          <option value="Scheduled" className="bg-white text-emerald-700 font-bold">Schedule Surgery</option>
-          <option value="Follow-Up" className="bg-white text-blue-700 font-bold">Follow-Up</option>
-          <option value="Completed" className="bg-white text-teal-700 font-bold">Completed</option>
-          <option value="Lost" className="bg-white text-rose-700 font-bold">Lost</option>
-        </select>
-        <ChevronDown className="w-4 h-4 text-white absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <span className="flex-1 text-center truncate">{displayLabel}</span>
+          <ChevronDown className={`w-4 h-4 text-white transition-transform duration-200 ${actionDropdownOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {actionDropdownOpen && (
+          <>
+            <div 
+              className="fixed inset-0 z-40" 
+              onClick={() => setActionDropdownOpen(false)} 
+            />
+            <div className="absolute left-0 right-0 bottom-full mb-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-bottom-2 duration-150 divide-y divide-slate-100">
+              <button
+                type="button"
+                onClick={() => handleActionSelect('SAVE_PROPOSAL')}
+                className="w-full px-4 py-2.5 text-left text-xs font-bold text-hospital-700 hover:bg-hospital-50 flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <BadgeCheck className="w-4 h-4 text-hospital-600" />
+                <span>Save / Update Proposal Details</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleActionSelect('Scheduled')}
+                className="w-full px-4 py-2.5 text-left text-xs font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <Calendar className="w-4 h-4 text-emerald-600" />
+                <span>Schedule Surgery</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleActionSelect('Follow-Up')}
+                className="w-full px-4 py-2.5 text-left text-xs font-bold text-blue-700 hover:bg-blue-50 flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <Clock className="w-4 h-4 text-blue-600" />
+                <span>Follow-Up</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleActionSelect('Completed')}
+                className="w-full px-4 py-2.5 text-left text-xs font-bold text-teal-700 hover:bg-teal-50 flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <BadgeCheck className="w-4 h-4 text-teal-600" />
+                <span>Completed</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleActionSelect('Lost')}
+                className="w-full px-4 py-2.5 text-left text-xs font-bold text-rose-700 hover:bg-rose-50 flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                <span>Lost</span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
     );
   };
@@ -968,6 +1083,103 @@ export const PackageTeamDashboard: React.FC = () => {
                           </div>
                         </div>
                       </div>
+
+                      {/* Dynamic Date & Status Fields based on selected action/status */}
+                      {(() => {
+                        const currentStatus = proposal.outcome || selectedPatient?.packageProposal?.outcome;
+                        if (!currentStatus) return null;
+
+                        return (
+                          <div className="pt-4 border-t border-slate-100 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                            <div className="flex items-center justify-between">
+                              <label className="text-[10px] font-bold uppercase text-slate-600 tracking-wider flex items-center gap-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-hospital-600" />
+                                {currentStatus === 'Scheduled' ? 'Surgery Schedule Date' :
+                                 currentStatus === 'Follow-Up' ? 'Follow-Up Date' :
+                                 currentStatus === 'Completed' ? 'Completion Date' :
+                                 'Lost Date'}
+                              </label>
+                              <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md ${
+                                currentStatus === 'Scheduled' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                currentStatus === 'Follow-Up' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                                currentStatus === 'Completed' ? 'bg-teal-50 text-teal-700 border border-teal-200' :
+                                'bg-rose-50 text-rose-700 border border-rose-200'
+                              }`}>
+                                {currentStatus}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {currentStatus === 'Scheduled' && (
+                                <div className="space-y-1">
+                                  <input 
+                                    type="date"
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-hospital-500 font-mono transition-all cursor-pointer"
+                                    value={proposal.surgeryDate || selectedPatient?.surgery_date || proposal.outcomeDate || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setProposal(prev => ({ ...prev, surgeryDate: val, outcomeDate: val }));
+                                    }}
+                                  />
+                                </div>
+                              )}
+
+                              {currentStatus === 'Follow-Up' && (
+                                <div className="space-y-1">
+                                  <input 
+                                    type="date"
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-hospital-500 font-mono transition-all cursor-pointer"
+                                    value={proposal.followUpDate || selectedPatient?.followup_date || proposal.outcomeDate || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setProposal(prev => ({ ...prev, followUpDate: val, outcomeDate: val }));
+                                    }}
+                                  />
+                                </div>
+                              )}
+
+                              {currentStatus === 'Completed' && (
+                                <div className="space-y-1">
+                                  <input 
+                                    type="date"
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-hospital-500 font-mono transition-all cursor-pointer"
+                                    value={proposal.outcomeDate || selectedPatient?.completed_surgery || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setProposal(prev => ({ ...prev, outcomeDate: val }));
+                                    }}
+                                  />
+                                </div>
+                              )}
+
+                              {currentStatus === 'Lost' && (
+                                <>
+                                  <div className="space-y-1">
+                                    <input 
+                                      type="date"
+                                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-hospital-500 font-mono transition-all cursor-pointer"
+                                      value={proposal.outcomeDate || selectedPatient?.surgery_lost_date || ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setProposal(prev => ({ ...prev, outcomeDate: val }));
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <select
+                                      className={selectClasses}
+                                      value={proposal.lostReason || selectedPatient?.packageProposal?.lostReason || lostReasons[0]}
+                                      onChange={(e) => setProposal(prev => ({ ...prev, lostReason: e.target.value }))}
+                                    >
+                                      {lostReasons.map(r => <option key={r} value={r}>{r}</option>)}
+                                    </select>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Action Dropdown */}
                       <div className="pt-4 border-t border-slate-100">
