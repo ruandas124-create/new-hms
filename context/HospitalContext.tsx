@@ -329,7 +329,7 @@ const mapRowToPatient = (row: any): Patient => {
   const dbProposal = row.package_proposal;
   let uiProposal: PackageProposal | undefined = undefined;
 
-  if (dbProposal || row.follow_up_date || row.surgery_date || row.completed_surgery || row.surgery_lost_date) {
+  if (dbProposal || row.followup_date || row.follow_up_date || row.surgery_date || row.completed_surgery || row.surgery_lost_date || row.doctor_assessment?.tentativeSurgeryDate || row.doctor_assessment?.followup_date) {
     let outcomeStatus = dbProposal?.status;
     if (outcomeStatus === 'Surgery Fixed' || outcomeStatus === 'Schedule Surgery') {
       outcomeStatus = 'Scheduled';
@@ -342,7 +342,7 @@ const mapRowToPatient = (row: any): Patient => {
     uiProposal = {
       outcome: (outcomeStatus || undefined) as ProposalOutcome,
       modeOfPayment: dbProposal?.paymentMode || undefined,
-      surgeryDate: row.surgery_date || dbProposal?.surgeryDate || dbProposal?.outcomeDate || undefined,
+      surgeryDate: row.surgery_date || row.doctor_assessment?.tentativeSurgeryDate || dbProposal?.surgeryDate || dbProposal?.outcomeDate || undefined,
       outcomeDate: row.completed_surgery || row.surgery_lost_date || dbProposal?.outcomeDate || undefined,
       roomType: dbProposal?.roomType || undefined,
       stayDays: dbProposal?.stayDays || undefined,
@@ -358,7 +358,7 @@ const mapRowToPatient = (row: any): Patient => {
       decisionPattern: dbProposal?.decisionPattern || '',
       objectionIdentified: dbProposal?.objectionIdentified || '',
       counselingStrategy: dbProposal?.counselingStrategy || '',
-      followUpDate: row.followup_date || row.follow_up_date || dbProposal?.followUpDate || '',
+      followUpDate: row.followup_date || row.follow_up_date || row.doctor_assessment?.followup_date || dbProposal?.followUpDate || '',
       proposalCreatedAt: dbProposal?.proposalCreatedAt || new Date().toISOString(),
       proposalStage: dbProposal?.proposalStage || undefined,
     };
@@ -369,6 +369,8 @@ const mapRowToPatient = (row: any): Patient => {
     uiAssessment = {
       ...row.doctor_assessment,
       patient_id: row.id,
+      tentativeSurgeryDate: row.doctor_assessment?.tentativeSurgeryDate || row.surgery_date || undefined,
+      followup_date: row.doctor_assessment?.followup_date || row.followup_date || row.follow_up_date || undefined
     };
   }
 
@@ -394,10 +396,10 @@ const mapRowToPatient = (row: any): Patient => {
     updated_at: row.updated_at || row.created_at || new Date().toISOString(),
     status_updated_at: row.status_updated_at || null,
     entry_date: normalizeToIsoDate(
-      row.doctor_assessment?.scheduled_date || 
-      row.doctor_assessment?.appointment_date || 
-      row.doctor_assessment?.date || 
       row.entry_date || 
+      row.doctor_assessment?.appointment_date || 
+      row.doctor_assessment?.scheduled_date || 
+      row.doctor_assessment?.date || 
       ''
     ),
     arrivalTime: row.arrival_time ? row.arrival_time.substring(0, 5) : (row.booking_time ? row.booking_time.substring(0, 5) : (row.doctor_assessment?.appointment_time || '')),
@@ -406,7 +408,7 @@ const mapRowToPatient = (row: any): Patient => {
       : (row.booking_status || 'Arrived'),
     packageProposal: uiProposal,
     doctorAssessment: uiAssessment,
-    surgery_date: row.surgery_date || '',
+    surgery_date: row.surgery_date || row.doctor_assessment?.tentativeSurgeryDate || '',
     followup_date: row.followup_date || row.follow_up_date || row.doctor_assessment?.followup_date || '',
     followup_notes: row.doctor_assessment?.followup_notes || '',
     followup_history: row.doctor_assessment?.followup_history || [],
@@ -1280,10 +1282,10 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
 
           const resolvedSource = normalizeSource(r.source || r.doctor_assessment?.source || 'Other');
           const rawScheduledDate = 
-            r.doctor_assessment?.scheduled_date ||
-            r.doctor_assessment?.appointment_date ||
-            r.doctor_assessment?.date ||
             r.entry_date ||
+            r.doctor_assessment?.appointment_date ||
+            r.doctor_assessment?.scheduled_date ||
+            r.doctor_assessment?.date ||
             '';
           const resolvedDate = normalizeToIsoDate(rawScheduledDate);
           const resolvedTime = r.booking_time ? r.booking_time.substring(0, 5) : (r.doctor_assessment?.appointment_time || r.doctor_assessment?.time || '');
@@ -1461,9 +1463,9 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       const existingPatient = patients.find(p => p.id === targetId);
       let dbPackageProposal = null;
       let followUpDateVal = patient.followup_date || (patient as any).follow_up_date || existingPatient?.followup_date || null;
-      let surgeryDateVal = null;
-      let surgeryLostDateVal = null;
-      let completedSurgeryVal = null;
+      let surgeryDateVal = patient.surgery_date || (patient as any).surgeryDate || existingPatient?.surgery_date || null;
+      let surgeryLostDateVal = patient.surgery_lost_date || existingPatient?.surgery_lost_date || null;
+      let completedSurgeryVal = patient.completed_surgery || existingPatient?.completed_surgery || null;
       let remarksVal = null;
       
       const oldOutcome = existingPatient?.packageProposal?.outcome;
@@ -1476,20 +1478,30 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       if (patient.packageProposal) {
         const uiProposal = patient.packageProposal;
-        followUpDateVal = nullify(uiProposal.followUpDate);
-        surgeryDateVal = nullify(uiProposal.surgeryDate);
-        remarksVal = nullify(uiProposal.remarks);
+        if (uiProposal.followUpDate !== undefined) {
+          followUpDateVal = nullify(uiProposal.followUpDate);
+        }
+        if (uiProposal.surgeryDate !== undefined) {
+          surgeryDateVal = nullify(uiProposal.surgeryDate);
+        }
+        if (uiProposal.remarks !== undefined) {
+          remarksVal = nullify(uiProposal.remarks);
+        }
         
-        if (uiProposal.outcome === 'Lost') {
-          surgeryLostDateVal = nullify(uiProposal.outcomeDate);
+        if (uiProposal.outcome === 'Scheduled') {
+          surgeryDateVal = nullify(uiProposal.surgeryDate) || nullify(uiProposal.outcomeDate) || surgeryDateVal;
+        } else if (uiProposal.outcome === 'Follow-Up') {
+          followUpDateVal = nullify(uiProposal.followUpDate) || nullify(uiProposal.outcomeDate) || followUpDateVal;
+        } else if (uiProposal.outcome === 'Lost') {
+          surgeryLostDateVal = nullify(uiProposal.outcomeDate) || surgeryLostDateVal;
         } else if (uiProposal.outcome === 'Completed') {
-          completedSurgeryVal = nullify(uiProposal.outcomeDate);
+          completedSurgeryVal = nullify(uiProposal.outcomeDate) || completedSurgeryVal;
         }
 
         dbPackageProposal = {
           status: uiProposal.outcome ? (uiProposal.outcome === 'Scheduled' ? 'Surgery Fixed' : (uiProposal.outcome === 'Completed' ? 'Surgery Completed' : uiProposal.outcome)) : null,
           paymentMode: nullify(uiProposal.modeOfPayment),
-          outcomeDate: nullify(uiProposal.outcomeDate || uiProposal.surgeryDate),
+          outcomeDate: nullify(uiProposal.outcomeDate || uiProposal.surgeryDate || uiProposal.followUpDate),
           roomType: nullify(uiProposal.roomType),
           stayDays: nullify(uiProposal.stayDays),
           icuCharges: nullify(uiProposal.icuCharges),
@@ -1522,13 +1534,16 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         ? (patient as any).followup_history 
         : (patientAssessment.followup_history || existingAssessment.followup_history || []);
 
-      const updatedAssessment = (patient.doctorAssessment || resolvedFollowupNotes || (resolvedFollowupHistory && resolvedFollowupHistory.length > 0)) ? {
+      const resolvedTentativeSurgeryDate = surgeryDateVal || patientAssessment.tentativeSurgeryDate || existingAssessment.tentativeSurgeryDate || null;
+
+      const updatedAssessment = (patient.doctorAssessment || resolvedFollowupNotes || (resolvedFollowupHistory && resolvedFollowupHistory.length > 0) || resolvedTentativeSurgeryDate) ? {
         ...(existingAssessment || {}),
         ...(patient.doctorAssessment || {}),
         patient_id: patient.id,
         followup_notes: resolvedFollowupNotes,
         followup_history: resolvedFollowupHistory,
-        followup_date: followUpDateVal || existingAssessment.followup_date || null
+        followup_date: followUpDateVal || existingAssessment.followup_date || null,
+        tentativeSurgeryDate: resolvedTentativeSurgeryDate
       } : null;
 
       const updateData = {
@@ -1546,9 +1561,9 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         has_insurance: patient.hasInsurance,
         insurance_name: patient.insuranceName,
         source_doctor_name: patient.sourceDoctorName,
-        entry_date: nullify(patient.entry_date) || new Date().toISOString().split('T')[0],
-        arrival_time: nullify(patient.arrivalTime) || new Date().toTimeString().split(' ')[0].substring(0, 5),
-        booking_status: patient.status || 'Arrived',
+        entry_date: nullify(patient.entry_date) || existingPatient?.entry_date || new Date().toISOString().split('T')[0],
+        arrival_time: nullify(patient.arrivalTime) || existingPatient?.arrivalTime || new Date().toTimeString().split(' ')[0].substring(0, 5),
+        booking_status: patient.status || existingPatient?.status || 'Arrived',
         package_proposal: dbPackageProposal,
         doctor_assessment: updatedAssessment,
         remarks: remarksVal,
@@ -1564,6 +1579,23 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       const { error } = await supabase.from(APPOINTMENTS_TABLE).update(updateData).eq('id', targetId);
       if (error) throw error;
       
+      // In-memory optimistic update so consecutive date edits immediately persist and display
+      setAllPatients(prev => prev.map(p => p.id === targetId ? {
+        ...p,
+        ...patient,
+        surgery_date: surgeryDateVal || '',
+        followup_date: followUpDateVal || '',
+        surgery_lost_date: surgeryLostDateVal || '',
+        completed_surgery: completedSurgeryVal || '',
+        packageProposal: patient.packageProposal ? {
+          ...patient.packageProposal,
+          surgeryDate: surgeryDateVal || '',
+          followUpDate: followUpDateVal || '',
+          outcomeDate: (patient.packageProposal.outcome === 'Scheduled' ? surgeryDateVal : patient.packageProposal.outcome === 'Follow-Up' ? followUpDateVal : patient.packageProposal.outcomeDate) || ''
+        } : p.packageProposal,
+        doctorAssessment: updatedAssessment || p.doctorAssessment
+      } : p));
+
       syncToSheets(patient);
       await refreshData();
       setSaveStatus('saved');
@@ -1674,6 +1706,11 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
             assessedAt: new Date().toISOString()
         };
 
+        const resolvedSurgeryDate = nullify(updatedAssessment.tentativeSurgeryDate) || patient.surgery_date || null;
+        if (resolvedSurgeryDate) {
+          updatedAssessment.tentativeSurgeryDate = resolvedSurgeryDate;
+        }
+
         let resolvedDoctorStatus = customStatus;
         if (!resolvedDoctorStatus) {
           if (updatedAssessment.quickCode === SurgeonCode.S1) {
@@ -1685,16 +1722,29 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           }
         }
 
+        const updatePayload: any = { 
+            doctor_assessment: updatedAssessment,
+            booking_status: resolvedDoctorStatus,
+            status_updated_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        };
+        if (resolvedSurgeryDate !== undefined) {
+            updatePayload.surgery_date = resolvedSurgeryDate;
+        }
+
         const { error } = await supabase
             .from(APPOINTMENTS_TABLE)
-            .update({ 
-                doctor_assessment: updatedAssessment,
-                booking_status: resolvedDoctorStatus,
-                status_updated_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            })
+            .update(updatePayload)
             .eq('id', patientId);
         if (error) throw error;
+
+        // In-memory optimistic update
+        setAllPatients(prev => prev.map(p => p.id === patientId ? {
+            ...p,
+            doctorAssessment: updatedAssessment,
+            surgery_date: resolvedSurgeryDate || p.surgery_date,
+            status: resolvedDoctorStatus
+        } : p));
 
         syncToSheets({ ...patient, status: resolvedDoctorStatus, doctorAssessment: updatedAssessment });
         await refreshData();
@@ -2080,20 +2130,24 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
       const resolvedScheduleBy = existingScheduledBy || (isSalesAppointment ? 'Acquire OPD team' : (appointment.scheduled_by || getScheduleBy(appointment, allStaffUsers) || 'Front Office'));
       const resolvedScheduleByRole = existingScheduledByRole || (isSalesAppointment ? 'sales' : (appointment.scheduled_by_role || 'front_office'));
 
+      const resolvedApptDate = nullify(appointment.date) || nullify((appointment as any).entry_date) || existingAppt?.date || null;
+      const resolvedApptTime = nullify(appointment.time) || nullify((appointment as any).booking_time) || existingAppt?.time || null;
+
       const updateData: any = {
         name: appointment.name,
         mobile: appointment.mobile,
         source: resolvedSource,
         source_doctor_name: resolvedReferralPerson || nullify(appointment.sourceDoctorName),
         condition: appointment.condition,
-        entry_date: nullify(appointment.date),
-        booking_time: nullify(appointment.time),
+        entry_date: resolvedApptDate,
+        booking_time: resolvedApptTime,
         booking_status: targetStatus, 
         is_follow_up: targetStatus === 'Follow Up' || appointment.bookingType === 'Follow Up',
         visit_type: appointment.visit_type || '',
         hospital_id: resolvedHospitalId,
         remarks: activeUsername,
         followup_date: resolvedFollowupDate || null,
+        follow_up_date: resolvedFollowupDate || null,
         updated_at: new Date().toISOString(),
         doctor_assessment: {
           ...existingAppt?.doctor_assessment,
@@ -2107,8 +2161,11 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
           hospital_id: resolvedHospitalId,
           hospitalName: resolvedHospitalName,
           patient_id: resolvedPatientId,
-          appointment_date: appointment.date,
-          appointment_time: appointment.time,
+          appointment_date: resolvedApptDate,
+          scheduled_date: resolvedApptDate,
+          date: resolvedApptDate,
+          appointment_time: resolvedApptTime,
+          time: resolvedApptTime,
           source: resolvedSource,
           referral_person: resolvedReferralPerson,
           followup_date: resolvedFollowupDate || null,
@@ -2127,7 +2184,21 @@ export const HospitalProvider: React.FC<{ children: ReactNode }> = ({ children }
         throw error;
       }
 
-      setAllAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, ...appointment } : a));
+      setAllAppointments(prev => prev.map(a => a.id === appointment.id ? { 
+        ...a, 
+        ...appointment,
+        date: resolvedApptDate || a.date,
+        time: resolvedApptTime || a.time,
+        followup_date: resolvedFollowupDate !== null ? (resolvedFollowupDate || '') : a.followup_date,
+        doctor_assessment: updateData.doctor_assessment
+      } : a));
+      setAllPatients(prev => prev.map(p => p.id === appointment.id ? {
+        ...p,
+        entry_date: resolvedApptDate || p.entry_date,
+        arrivalTime: resolvedApptTime || p.arrivalTime,
+        followup_date: resolvedFollowupDate !== null ? (resolvedFollowupDate || '') : p.followup_date,
+        doctorAssessment: updateData.doctor_assessment || p.doctorAssessment
+      } : p));
       refreshData(true);
       setSaveStatus('saved');
       setLastSavedAt(new Date());

@@ -313,6 +313,7 @@ export const SalesDashboard: React.FC = () => {
     appointments = [], 
     addAppointment, 
     updateAppointment, 
+    updatePatient,
     staffUsers = [], 
     schedulingPermissions,
     conditions = [],
@@ -939,8 +940,20 @@ export const SalesDashboard: React.FC = () => {
           ...appt,
           status: followupStatusInput,
           bookingType: followupStatusInput === 'Follow-up' ? 'Follow Up' : 'Scheduled',
-          followup_date: followupDateInput || undefined,
+          followup_date: followupDateInput || '',
           followup_notes: followupNotesInput.trim() || appt.followup_notes
+        });
+      }
+
+      const p = patients.find(pat => pat.id === followupBooking.appointmentId || pat.id === followupBooking.id);
+      if (p) {
+        await updatePatient(p.id, {
+          ...p,
+          followup_date: followupDateInput || '',
+          doctorAssessment: p.doctorAssessment ? {
+            ...p.doctorAssessment,
+            followup_date: followupDateInput || ''
+          } : undefined
         });
       }
 

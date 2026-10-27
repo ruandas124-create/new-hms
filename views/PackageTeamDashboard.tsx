@@ -204,11 +204,22 @@ export const PackageTeamDashboard: React.FC = () => {
   };
 
   const handleOpenOutcomeModal = (type: ProposalOutcome) => {
+    let initialDate = new Date().toISOString().split('T')[0];
+    if (type === 'Scheduled') {
+      initialDate = proposal.surgeryDate || selectedPatient?.surgery_date || selectedPatient?.packageProposal?.surgeryDate || selectedPatient?.doctorAssessment?.tentativeSurgeryDate || initialDate;
+    } else if (type === 'Follow-Up') {
+      initialDate = proposal.followUpDate || selectedPatient?.followup_date || selectedPatient?.packageProposal?.followUpDate || initialDate;
+    } else if (type === 'Completed') {
+      initialDate = proposal.outcomeDate || selectedPatient?.completed_surgery || selectedPatient?.packageProposal?.outcomeDate || initialDate;
+    } else if (type === 'Lost') {
+      initialDate = selectedPatient?.surgery_lost_date || proposal.outcomeDate || initialDate;
+    }
+
     setOutcomeModal({
       show: true,
       type,
-      date: new Date().toISOString().split('T')[0],
-      reason: lostReasons[0]
+      date: initialDate,
+      reason: proposal.lostReason || selectedPatient?.packageProposal?.lostReason || lostReasons[0]
     });
   };
 
@@ -221,11 +232,24 @@ export const PackageTeamDashboard: React.FC = () => {
         ...(proposal as PackageProposal),
         outcome: outcomeModal.type!,
         outcomeDate: newOutcomeDate,
-        surgeryDate: outcomeModal.type === 'Scheduled' ? newOutcomeDate : (proposal.surgeryDate || ''),
+        surgeryDate: outcomeModal.type === 'Scheduled' ? newOutcomeDate : (proposal.surgeryDate || selectedPatient.surgery_date || ''),
         lostReason: outcomeModal.type === 'Lost' ? outcomeModal.reason : undefined,
         proposalCreatedAt: proposal.proposalCreatedAt || new Date().toISOString(),
-        followUpDate: (outcomeModal.type === 'Follow-Up' ? outcomeModal.date : proposal.followUpDate) || ''
+        followUpDate: outcomeModal.type === 'Follow-Up' ? newOutcomeDate : (proposal.followUpDate || selectedPatient.followup_date || '')
       };
+
+      // Immediately synchronize local state so consecutive date edits persist without stale resets
+      setProposal(updatedProposal);
+      const updatedPatient: Patient = {
+        ...selectedPatient,
+        packageProposal: updatedProposal,
+        surgery_date: updatedProposal.surgeryDate || selectedPatient.surgery_date,
+        followup_date: updatedProposal.followUpDate || selectedPatient.followup_date,
+        completed_surgery: outcomeModal.type === 'Completed' ? newOutcomeDate : selectedPatient.completed_surgery,
+        surgery_lost_date: outcomeModal.type === 'Lost' ? newOutcomeDate : selectedPatient.surgery_lost_date
+      };
+      setSelectedPatient(updatedPatient);
+
       await updatePackageProposal(selectedPatient.id, updatedProposal);
       setOutcomeModal({ ...outcomeModal, show: false });
     } catch (err) {
@@ -241,10 +265,21 @@ export const PackageTeamDashboard: React.FC = () => {
     if (selectedPatient && !isSavingProposal) {
       setIsSavingProposal(true);
       try {
-        await updatePackageProposal(selectedPatient.id, {
+        const toSave: PackageProposal = {
           ...(proposal as PackageProposal),
+          surgeryDate: proposal.surgeryDate || selectedPatient.surgery_date || selectedPatient.packageProposal?.surgeryDate || '',
+          followUpDate: proposal.followUpDate || selectedPatient.followup_date || selectedPatient.packageProposal?.followUpDate || '',
           proposalCreatedAt: proposal.proposalCreatedAt || new Date().toISOString()
-        });
+        };
+        setProposal(toSave);
+        setSelectedPatient(prev => prev ? {
+          ...prev,
+          packageProposal: toSave,
+          surgery_date: toSave.surgeryDate || prev.surgery_date,
+          followup_date: toSave.followUpDate || prev.followup_date
+        } : null);
+
+        await updatePackageProposal(selectedPatient.id, toSave);
         alert("Proposal details saved successfully.");
       } catch (err) {
         console.error("Failed to save proposal:", err);

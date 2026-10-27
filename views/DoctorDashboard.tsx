@@ -307,16 +307,17 @@ export const DoctorDashboard: React.FC = () => {
 
   useEffect(() => {
     if (selectedPatient) {
-      setFormState(selectedPatient.doctorAssessment || {
-        quickCode: undefined,
-        painSeverity: undefined,
-        affordability: undefined,
-        conversionReadiness: undefined,
-        tentativeSurgeryDate: '',
-        surgeryProcedure: '',
-        otherSurgeryName: '',
-        notes: '',
-        doctorSignature: ''
+      const assessment = selectedPatient.doctorAssessment || {};
+      setFormState({
+        quickCode: assessment.quickCode,
+        painSeverity: assessment.painSeverity,
+        affordability: assessment.affordability,
+        conversionReadiness: assessment.conversionReadiness,
+        tentativeSurgeryDate: assessment.tentativeSurgeryDate || selectedPatient.surgery_date || selectedPatient.packageProposal?.surgeryDate || '',
+        surgeryProcedure: assessment.surgeryProcedure || '',
+        otherSurgeryName: assessment.otherSurgeryName || '',
+        notes: assessment.notes || '',
+        doctorSignature: assessment.doctorSignature || ''
       });
     }
   }, [selectedPatient]);
