@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useHospital } from '../context/HospitalContext';
 import { Appointment, Patient, SurgeonCode, Condition, Gender, normalizeSource, normalizeToIsoDate } from '../types';
 import { supabase } from '../services/supabaseClient';
@@ -353,7 +353,17 @@ export const SalesDashboard: React.FC = () => {
   const [selectedHospitalId, setSelectedHospitalId] = useState<string>('');
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
   const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
+  const isSubmittingBookingRef = useRef(false);
   const [bookingToEdit, setBookingToEdit] = useState<BookingRecord | null>(null);
+
+  const handleCloseBookingModal = () => {
+    isSubmittingBookingRef.current = false;
+    setIsSubmittingBooking(false);
+    setShowBookingModal(false);
+    setBookingToEdit(null);
+    setSelectedHospitalId('');
+    setSelectedDoctorId('');
+  };
 
   // Follow-up & Notes Modals
   const [followupBooking, setFollowupBooking] = useState<BookingRecord | null>(null);
@@ -758,40 +768,53 @@ export const SalesDashboard: React.FC = () => {
 
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmittingBooking) return;
+    if (isSubmittingBookingRef.current || isSubmittingBooking) return;
+    isSubmittingBookingRef.current = true;
+    setIsSubmittingBooking(true);
 
     if (!selectedHospitalId) {
+      isSubmittingBookingRef.current = false;
+      setIsSubmittingBooking(false);
       setFeedbackBanner({ type: 'error', message: 'Please select a hospital facility.' });
       return;
     }
 
     if (!bookingFormData.name.trim() || !bookingFormData.mobile.trim() || !bookingFormData.date || !bookingFormData.time) {
+      isSubmittingBookingRef.current = false;
+      setIsSubmittingBooking(false);
       setFeedbackBanner({ type: 'error', message: 'Please complete all required fields (Name, Mobile, Date, Time).' });
       return;
     }
 
     // MANDATORY VALIDATION: Primary Complaint & Lead Source
     if (!bookingFormData.condition || !bookingFormData.condition.trim()) {
+      isSubmittingBookingRef.current = false;
+      setIsSubmittingBooking(false);
       setFeedbackBanner({ type: 'error', message: 'Primary Complaint is mandatory. Please select a condition.' });
       return;
     }
 
     if (!bookingFormData.source || !bookingFormData.source.trim()) {
+      isSubmittingBookingRef.current = false;
+      setIsSubmittingBooking(false);
       setFeedbackBanner({ type: 'error', message: 'Lead Source is mandatory. Please select a lead source.' });
       return;
     }
 
     if (bookingFormData.source === 'Doctor Recommended' && !bookingFormData.sourceDoctorName?.trim()) {
+      isSubmittingBookingRef.current = false;
+      setIsSubmittingBooking(false);
       setFeedbackBanner({ type: 'error', message: 'Please provide the referring Doctor Name.' });
       return;
     }
 
     if (bookingFormData.source === 'Others' && !bookingFormData.sourceOtherDetails?.trim()) {
+      isSubmittingBookingRef.current = false;
+      setIsSubmittingBooking(false);
       setFeedbackBanner({ type: 'error', message: 'Please provide specific Source Name / Details.' });
       return;
     }
 
-    setIsSubmittingBooking(true);
     try {
       const hosp = hospitals.find(h => h.id === selectedHospitalId || h.hospital_id === selectedHospitalId);
       const finalHospitalId = hosp?.hospital_id || hosp?.id || selectedHospitalId;
@@ -862,14 +885,12 @@ export const SalesDashboard: React.FC = () => {
         setFeedbackBanner({ type: 'success', message: `Appointment booked successfully for ${payload.name} at ${finalHospitalName}.` });
       }
 
-      setShowBookingModal(false);
-      setBookingToEdit(null);
-      setSelectedHospitalId('');
-      setSelectedDoctorId('');
+      handleCloseBookingModal();
     } catch (err: any) {
       setFeedbackBanner({ type: 'error', message: err?.message || 'Failed to save appointment. Please check details.' });
     } finally {
       setIsSubmittingBooking(false);
+      isSubmittingBookingRef.current = false;
     }
   };
 
@@ -1611,7 +1632,7 @@ export const SalesDashboard: React.FC = () => {
               </div>
               <button 
                 type="button"
-                onClick={() => { setShowBookingModal(false); setBookingToEdit(null); }} 
+                onClick={handleCloseBookingModal} 
                 className="p-2 hover:bg-slate-200 rounded-xl transition-colors text-slate-400 hover:text-slate-700 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1866,20 +1887,6 @@ export const SalesDashboard: React.FC = () => {
                       </div>
                     )}
                  </div>
-                 <button 
-                   type="submit" 
-                   disabled={isSubmittingBooking}
-                   className="w-full py-3 px-5 bg-hospital-600 hover:bg-hospital-700 active:scale-[0.99] text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all mt-6 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
-                 >
-                   {isSubmittingBooking ? (
-                     <>
-                       <Loader2 className="w-4 h-4 animate-spin" />
-                       <span>{bookingToEdit ? 'Updating Appointment...' : 'Saving Appointment...'}</span>
-                     </>
-                   ) : (
-                     <span>{bookingToEdit ? 'Update Appointment' : 'Create Appointment'}</span>
-                   )}
-                 </button>
                </form>
               )}
 
@@ -1902,7 +1909,7 @@ export const SalesDashboard: React.FC = () => {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => { setShowBookingModal(false); setBookingToEdit(null); }}
+                  onClick={handleCloseBookingModal}
                   className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
                 >
                   Cancel

@@ -190,6 +190,7 @@ export interface Patient {
   entry_date?: string;
   arrivalTime?: string;
   status?: string;
+  booking_status?: string;
   
   // Counseling Sub-table Native Fields
   surgery_date?: string;
@@ -269,6 +270,9 @@ export interface Appointment {
   sales_user_id?: string;
   remarks?: string;
   doctor_assessment?: any;
+  arrival_time?: string;
+  arrivalTime?: string;
+  booking_status?: string;
 }
 
 /**

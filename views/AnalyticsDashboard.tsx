@@ -1,10 +1,11 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useHospital } from '../context/HospitalContext';
-import { Patient, SurgeonCode, Condition, DashboardKey, normalizeSource } from '../types';
+import { Patient, Appointment, SurgeonCode, Condition, DashboardKey, normalizeSource } from '../types';
 import { AnalyticsAccessManagement } from '../components/AnalyticsAccessManagement';
 import { DoctorPerformanceReport } from '../components/DoctorPerformanceReport';
 import { PeriodActivityReport } from '../components/PeriodActivityReport';
+import { supabase } from '../services/supabaseClient';
 import { 
   Lock, Activity, BarChart3, PieChart as PieChartIcon, Target as TargetIcon, 
   LayoutDashboard, RefreshCw, Zap, TrendingUp, TrendingDown, Landmark,
@@ -73,6 +74,181 @@ const calculateGrowth = (current: any, previous: any): number => {
   const prev = Number(previous) || 0;
   if (prev === 0) return curr > 0 ? 100 : 0;
   return ((curr - prev) / prev) * 100;
+};
+
+// Helper to identify if a record's current status is "Scheduled" or in an unprogressed scheduling stage
+const isScheduledStatus = (status?: string | null): boolean => {
+  if (!status) return true;
+  const s = status.trim().toLowerCase();
+  return (
+    s === 'scheduled' ||
+    s === 'schedule' ||
+    s === 'booked' ||
+    s === 'confirmed' ||
+    s === 'pending' ||
+    s === 'rescheduled' ||
+    s === 'new leads' ||
+    s === 'new lead'
+  );
+};
+
+// Helper to identify cancelled or junk records
+const isCancelledOrJunk = (status?: string | null): boolean => {
+  if (!status) return false;
+  const s = status.trim().toLowerCase();
+  return s === 'cancelled' || s === 'canceled' || s === 'junk' || s === 'no show' || s === 'no-show';
+};
+
+// Helper to verify if an appointment/patient record has progressed beyond the Scheduled stage
+const isProgressedOpdRecord = (record: { 
+  id?: string;
+  status?: string | null; 
+  booking_status?: string | null; 
+  arrival_time?: string | null;
+  arrivalTime?: string | null;
+  doctorAssessment?: any;
+  doctor_assessment?: any;
+  packageProposal?: any;
+  package_proposal?: any;
+}, statusLookup?: Map<string, string>): boolean => {
+  // Resolve actual current status using database statusLookup first if available
+  let raw = '';
+  if (statusLookup) {
+    if (record.id && statusLookup.has(record.id)) {
+      raw = statusLookup.get(record.id) || '';
+    } else {
+      const origId = record.doctorAssessment?.original_appointment_id || 
+                     record.doctor_assessment?.original_appointment_id || 
+                     (record as any).original_appointment_id;
+      if (origId && statusLookup.has(origId)) {
+        raw = statusLookup.get(origId) || '';
+      }
+    }
+  }
+  if (!raw) {
+    raw = (record.booking_status || record.status || '').trim();
+  }
+
+  const rawLower = raw.toLowerCase().trim();
+
+  // CRITICAL RULE 1: Explicitly NEVER count if status is Scheduled, Booked, Confirmed, Pending, Rescheduled, or Cancelled/Junk
+  if (!rawLower || isScheduledStatus(rawLower) || isCancelledOrJunk(rawLower)) {
+    return false;
+  }
+
+  // RULE 2: If explicitly in progressed stages:
+  if (
+    rawLower === 'arrived' ||
+    rawLower === 'in consultation' ||
+    rawLower === 'in-consultation' ||
+    rawLower === 'consultation' ||
+    rawLower === 'doctor done' ||
+    rawLower === 'doctor completed' ||
+    rawLower === 'medication done' ||
+    rawLower === 'package proposal' ||
+    rawLower === 'surgery scheduled' ||
+    rawLower === 'completed' ||
+    rawLower === 'surgery completed' ||
+    rawLower === 'follow-up surgery' ||
+    rawLower === 'followup surgery' ||
+    rawLower === 'revisit'
+  ) {
+    return true;
+  }
+
+  // RULE 3: If arrival time is recorded AND not scheduled/cancelled
+  if (record.arrival_time || record.arrivalTime) return true;
+
+  // RULE 4: If doctor assessment has taken place AND not scheduled/cancelled
+  const docAssessment = record.doctorAssessment || record.doctor_assessment;
+  if (docAssessment?.quickCode || docAssessment?.assessedAt) return true;
+
+  // RULE 5: If package proposal exists AND not scheduled/cancelled
+  const pkg = record.packageProposal || record.package_proposal;
+  if (pkg?.outcome || pkg?.proposalStage) return true;
+
+  return false;
+};
+
+// Helper to determine if a patient/appointment is a Revisit or Follow-up
+const isRevisitRecord = (record: { visit_type?: string | null; status?: string | null; visitType?: string | null; is_follow_up?: boolean | null }): boolean => {
+  const vt = (record.visit_type || '').trim().toLowerCase();
+  if (vt === 'revisit' || vt === 'follow-up' || vt === 'follow up') return true;
+  const st = (record.status || '').trim().toLowerCase();
+  if (st === 'revisit' || st === 'follow-up' || st === 'follow up' || st === 'follow-up surgery') return true;
+  if ((record.visitType || '').trim().toLowerCase() === 'follow up') return true;
+  if (record.is_follow_up === true) return true;
+  return false;
+};
+
+const getStatusBadgeClass = (status?: string): string => {
+  if (!status || status.toLowerCase().trim() === 'unknown') return 'bg-slate-100 text-slate-500 border-slate-200';
+  const s = status.toLowerCase().trim();
+  if (s.includes('completed')) return 'bg-teal-50 text-teal-700 border-teal-200';
+  if (s === 'arrived') return 'bg-cyan-50 text-cyan-700 border-cyan-200';
+  if (s.includes('medication done')) return 'bg-purple-50 text-purple-700 border-purple-200';
+  if (s.includes('package proposal')) return 'bg-violet-50 text-violet-700 border-violet-200';
+  if (s.includes('in consultation') || s.includes('consultation')) return 'bg-blue-50 text-blue-700 border-blue-200';
+  if (s.includes('doctor done') || s.includes('doctor completed')) return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+  if (s.includes('surgery scheduled')) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (s.includes('follow-up') || s.includes('follow up')) return 'bg-sky-50 text-sky-700 border-sky-200';
+  if (s.includes('lost') || s.includes('cancel')) return 'bg-rose-50 text-rose-700 border-rose-200';
+  if (s === 'revisit') return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (s === 'new' || s === 'new leads') return 'bg-teal-50 text-teal-700 border-teal-200';
+  if (s === 'scheduled' || s === 'schedule' || s === 'booked' || s === 'confirmed' || s === 'pending') return 'bg-slate-100 text-slate-600 border-slate-200';
+  return 'bg-slate-50 text-slate-700 border-slate-200';
+};
+
+// Helper to determine the record's current stage/status accurately using booking_status as single source
+const getRecordCurrentStatus = (p: Patient | any, statusLookup?: Map<string, string>): string => {
+  if (!p) return 'Unknown';
+
+  // 1. Lookup via database statusLookup (direct Supabase himas_appointments.booking_status) FIRST
+  if (statusLookup) {
+    // Check original appointment ID if patient was converted from appointment lead
+    const origApptId = p.doctorAssessment?.original_appointment_id || 
+                       p.doctor_assessment?.original_appointment_id ||
+                       (p as any).original_appointment_id;
+    if (origApptId && statusLookup.has(origApptId)) {
+      const s = statusLookup.get(origApptId);
+      if (s && s.trim()) return s.trim();
+    }
+
+    // Check unique appointment / patient ID
+    if (p.id) {
+      if (statusLookup.has(p.id)) {
+        const s = statusLookup.get(p.id);
+        if (s && s.trim()) return s.trim();
+      }
+      const cleanId = String(p.id).split('_V')[0];
+      if (statusLookup.has(cleanId)) {
+        const s = statusLookup.get(cleanId);
+        if (s && s.trim()) return s.trim();
+      }
+    }
+
+    // Check patient_id
+    const patientId = (p as any).patient_id;
+    if (patientId && statusLookup.has(patientId)) {
+      const s = statusLookup.get(patientId);
+      if (s && s.trim()) return s.trim();
+    }
+  }
+
+  // 2. Direct booking_status from Supabase if present on object
+  const directBookingStatus = typeof p.booking_status === 'string' ? p.booking_status.trim() : '';
+  if (directBookingStatus && directBookingStatus !== 'DoctorMetadata' && directBookingStatus !== 'LeadNote') {
+    return directBookingStatus;
+  }
+
+  // 3. Status field if present
+  const directStatus = typeof p.status === 'string' ? p.status.trim() : '';
+  if (directStatus && directStatus !== 'DoctorMetadata' && directStatus !== 'LeadNote') {
+    return directStatus;
+  }
+
+  // 4. Truly missing status: return Unknown per requirement
+  return 'Unknown';
 };
 
 interface AnalyticsStats {
@@ -217,6 +393,108 @@ export const AnalyticsDashboard: React.FC = () => {
     refreshData,
     isLoading
   } = useHospital();
+
+  const [liveDatabaseStatusMap, setLiveDatabaseStatusMap] = useState<Map<string, string>>(new Map());
+  const [isSyncingStatus, setIsSyncingStatus] = useState<boolean>(false);
+
+  // Direct fetch of booking_status from Supabase himas_appointments table (single source of truth)
+  const fetchLiveDatabaseStatuses = useCallback(async () => {
+    try {
+      setIsSyncingStatus(true);
+      const { data, error } = await supabase
+        .from('himas_appointments')
+        .select('id, booking_status, doctor_assessment');
+      if (error) {
+        console.warn('AnalyticsHub: Error fetching live booking_status from himas_appointments:', error);
+        return;
+      }
+      if (data && Array.isArray(data)) {
+        const map = new Map<string, string>();
+        for (const row of data) {
+          const s = (row.booking_status || '').trim();
+          if (!s || s === 'DoctorMetadata' || s === 'LeadNote') continue;
+
+          if (row.id) {
+            map.set(row.id, s);
+            const clean = String(row.id).split('_V')[0];
+            if (clean) map.set(clean, s);
+          }
+          const origId = row.doctor_assessment?.original_appointment_id;
+          if (origId) {
+            map.set(origId, s);
+            const cleanOrig = String(origId).split('_V')[0];
+            if (cleanOrig) map.set(cleanOrig, s);
+          }
+          const patId = row.doctor_assessment?.patient_id;
+          if (patId) {
+            map.set(patId, s);
+          }
+        }
+        setLiveDatabaseStatusMap(map);
+      }
+    } catch (err) {
+      console.warn('AnalyticsHub: Exception querying himas_appointments:', err);
+    } finally {
+      setIsSyncingStatus(false);
+    }
+  }, []);
+
+  // Fetch live database statuses on mount and subscribe to realtime changes on himas_appointments
+  useEffect(() => {
+    fetchLiveDatabaseStatuses();
+    refreshData(true);
+
+    const channel = supabase
+      .channel('analytics_hub_live_status_sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'himas_appointments' },
+        () => {
+          fetchLiveDatabaseStatuses();
+          refreshData(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchLiveDatabaseStatuses, refreshData]);
+
+  // Database single source of truth lookup map matching unique appointment ID or original_appointment_id to booking_status
+  const databaseStatusMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of appointments) {
+      const s = (a.booking_status || a.status || '').trim();
+      if (s && s !== 'DoctorMetadata' && s !== 'LeadNote') {
+        if (a.id) map.set(a.id, s);
+        if (a.patient_id) map.set(a.patient_id, s);
+        const origId = a.doctor_assessment?.original_appointment_id;
+        if (origId) map.set(origId, s);
+      }
+    }
+    for (const p of patients) {
+      const s = (p.booking_status || p.status || '').trim();
+      if (s && s !== 'DoctorMetadata' && s !== 'LeadNote') {
+        if (p.id) map.set(p.id, s);
+        const cleanId = p.id.split('_V')[0];
+        if (cleanId) map.set(cleanId, s);
+        const origId = p.doctorAssessment?.original_appointment_id || (p as any).doctor_assessment?.original_appointment_id;
+        if (origId) map.set(origId, s);
+        const patId = (p as any).patient_id;
+        if (patId) map.set(patId, s);
+      }
+    }
+    // Overlay live direct Supabase himas_appointments.booking_status as single source of truth
+    for (const [key, val] of liveDatabaseStatusMap.entries()) {
+      map.set(key, val);
+    }
+    return map;
+  }, [appointments, patients, liveDatabaseStatusMap]);
+
+  const resolveRecordStatus = useCallback((p: Patient | any) => {
+    return getRecordCurrentStatus(p, databaseStatusMap);
+  }, [databaseStatusMap]);
   
   // Tab state for switching between Analytics and Reports
   const [activeHubTab, setActiveHubTab] = useState<'analytics' | 'reports'>('analytics');
@@ -346,15 +624,13 @@ export const AnalyticsDashboard: React.FC = () => {
 
   // Calculate stats for the selected range
   const stats: AnalyticsStats = useMemo(() => {
-    const processSet = (dataset: Patient[], range: { from: string, to: string }) => {
-        // FLOW METRICS: Patients who arrived in the period (OPD Flow based on entry_date)
-        const arrivedPatients = dataset.filter(p => 
-          filterByRange(p.entry_date || p.registeredAt, range) && 
-          (p.status || '').trim().toLowerCase() !== 'scheduled'
-        );
-
+    const processSet = (
+      patientDataset: Patient[], 
+      range: { from: string, to: string }, 
+      apptDataset: Appointment[] = []
+    ) => {
         // REVENUE & COMPLETED METRICS: Patients who COMPLETED surgery in the period (using completed_surgery date)
-        const completedInPeriod = dataset.filter(p => 
+        const completedInPeriod = patientDataset.filter(p => 
           p.packageProposal?.outcome === 'Completed' && 
           filterByRange(p.completed_surgery || p.packageProposal?.outcomeDate, range)
         );
@@ -366,15 +642,76 @@ export const AnalyticsDashboard: React.FC = () => {
 
         const conversions = completedInPeriod.length;
 
-        // TOTAL OPD ACTIVITY: Only Arrived in period (exclude 'move on' dates from flow metrics as per request)
-        const flowDataset = arrivedPatients;
+        // DEDUPLICATED OPD FLOW DATASET: Exclude records with Scheduled status; count only progressed records
+        const flowMap = new Map<string, Patient>();
 
-        // STRICT visit_type BASED CALCULATION AS PER REQUEST
-        const newPatientsCount = flowDataset.filter(p => (p.visit_type || '').trim().toLowerCase() === 'new').length;
-        const revisitsCount = flowDataset.filter(p => (p.visit_type || '').trim().toLowerCase() === 'revisit').length;
+        // 1. Progressed patients from registry (arrived / active OPD stages)
+        patientDataset.forEach(p => {
+          const pDate = p.entry_date || p.registeredAt;
+          if (!filterByRange(pDate, range)) return;
+          // Rule 1 & 2: Do not include appointments/patients with Scheduled status. Count only progressed records.
+          if (!isProgressedOpdRecord(p, databaseStatusMap)) return;
+          flowMap.set(p.id, p);
+        });
 
-        // OPD Flow count calculated strictly based on visit_type column
-        const total = newPatientsCount + revisitsCount;
+        // 2. Progressed appointments from appointment roster (status changed from Scheduled to another status)
+        apptDataset.forEach(a => {
+          const aDate = a.date || a.createdAt;
+          if (!filterByRange(aDate, range)) return;
+          // Rule 1, 2 & 3: Do not count appointments with Scheduled status; count only appointments whose status has changed from Scheduled to another status (e.g. Arrived, In Consultation, Completed, etc.)
+          if (!isProgressedOpdRecord(a, databaseStatusMap)) return;
+
+          // Rule 5: Ensure there is no duplicate counting
+          if (flowMap.has(a.id) || (a.patient_id && flowMap.has(a.patient_id))) return;
+          const exists = Array.from(flowMap.values()).some(p => 
+            p.id === a.id || (a.patient_id && p.id === a.patient_id) || ((p as any).patient_id && (p as any).patient_id === a.patient_id)
+          );
+          if (exists) return;
+
+          const actualStatus = databaseStatusMap.get(a.id) || 
+                               (a.patient_id && databaseStatusMap.get(a.patient_id)) || 
+                               (a as any).booking_status || a.status || '';
+
+          const convertedPatient: Patient = {
+            id: a.id,
+            hospital_id: a.hospital_id || '',
+            hospitalName: a.hospitalName || '',
+            name: a.name,
+            mobile: a.mobile,
+            condition: a.condition as Condition,
+            entry_date: a.date,
+            source: getSourceDisplay(a.source),
+            visit_type: a.visit_type || (isRevisitRecord(a) ? 'Revisit' : 'New'),
+            gender: 'Other' as any,
+            age: 0,
+            registeredAt: a.createdAt,
+            hasInsurance: 'No' as any,
+            occupation: '',
+            visitType: (isRevisitRecord(a) ? 'Follow Up' : 'OPD') as any,
+            status: actualStatus,
+            booking_status: actualStatus,
+            arrivalTime: a.arrival_time ? a.arrival_time.substring(0, 5) : undefined,
+            packageProposal: (a as any).packageProposal || (a as any).package_proposal,
+            doctorAssessment: a.doctor_assessment
+          };
+          if (a.patient_id) {
+            (convertedPatient as any).patient_id = a.patient_id;
+          }
+          (convertedPatient as any).booking_status = actualStatus;
+          (convertedPatient as any).status = actualStatus;
+          (convertedPatient as any).arrival_time = a.arrival_time;
+          (convertedPatient as any).packageProposal = (a as any).packageProposal || (a as any).package_proposal;
+          flowMap.set(a.id, convertedPatient);
+        });
+
+        const flowDataset = Array.from(flowMap.values());
+
+        // ACCURATE VISIT BREAKDOWN
+        const revisitsCount = flowDataset.filter(p => isRevisitRecord(p)).length;
+        const newPatientsCount = flowDataset.length - revisitsCount;
+
+        // OPD Flow total represents only appointments that have progressed beyond Scheduled
+        const total = flowDataset.length;
         const newPatients = newPatientsCount;
         const revisits = revisitsCount;
 
@@ -382,27 +719,27 @@ export const AnalyticsDashboard: React.FC = () => {
         const leads = leadsDataset.length;
         const leadsRevenue = leadsDataset.reduce((sum, p) => sum + parseAmount(p.packageProposal?.packageAmount), 0);
 
-        // Grouping sources for the entire flow dataset (filtered by visit_type existence)
+        // Grouping sources for the entire flow dataset
         const sourcesMap: Record<string, { total: number, completed: number, revenue: number, new: number, revisit: number, scheduled: number, leads: number }> = {};
         
         flowDataset.forEach(p => {
-          const vt = (p.visit_type || '').trim().toLowerCase();
-          if (vt !== 'new' && vt !== 'revisit') return;
-
           const ds = getSourceDisplay(p.source);
           if (!sourcesMap[ds]) sourcesMap[ds] = { total: 0, completed: 0, revenue: 0, new: 0, revisit: 0, scheduled: 0, leads: 0 };
           sourcesMap[ds].total++;
           
-          if (vt === 'revisit') sourcesMap[ds].revisit++;
-          else sourcesMap[ds].new++;
+          if (isRevisitRecord(p)) {
+            sourcesMap[ds].revisit++;
+          } else {
+            sourcesMap[ds].new++;
+          }
 
           if (p.doctorAssessment?.quickCode === SurgeonCode.S1) {
             sourcesMap[ds].leads++;
           }
         });
 
-        // Add scheduled appointments in range
-        filteredAppointments.filter(a => filterByRange(a.date, range)).forEach(a => {
+        // Add scheduled appointments in range for source breakdown
+        apptDataset.filter(a => filterByRange(a.date, range)).forEach(a => {
           const ds = getSourceDisplay(a.source);
           if (!sourcesMap[ds]) sourcesMap[ds] = { total: 0, completed: 0, revenue: 0, new: 0, revisit: 0, scheduled: 0, leads: 0 };
           sourcesMap[ds].scheduled++;
@@ -416,10 +753,9 @@ export const AnalyticsDashboard: React.FC = () => {
           sourcesMap[ds].revenue += parseAmount(p.packageProposal?.packageAmount);
         });
 
-        // Digital split for 'New' patients flow strictly based on visit_type column
+        // Digital split for 'New' patients flow
         let onlineTotal = flowDataset.filter(p => {
-          const vt = (p.visit_type || '').trim().toLowerCase();
-          if (vt !== 'new') return false; // Exclusion of Revisit records for Digital vs Traditional Flow section
+          if (isRevisitRecord(p)) return false;
           return isOnlineSource(p.source);
         }).length;
 
@@ -429,8 +765,8 @@ export const AnalyticsDashboard: React.FC = () => {
           return isOnlineSource(p.source) && p.doctorAssessment?.quickCode === SurgeonCode.S1;
         });
         const marketingLeads = marketingLeadsData.length;
-        const marketingLeadsNew = marketingLeadsData.filter(p => (p.visit_type || '').trim().toLowerCase() === 'new').length;
-        const marketingLeadsRevisit = marketingLeadsData.filter(p => (p.visit_type || '').trim().toLowerCase() === 'revisit').length;
+        const marketingLeadsNew = marketingLeadsData.filter(p => !isRevisitRecord(p)).length;
+        const marketingLeadsRevisit = marketingLeadsData.filter(p => isRevisitRecord(p)).length;
 
         const marketingCompleted = completedInPeriod.filter(p => {
           return isOnlineSource(p.source);
@@ -447,7 +783,7 @@ export const AnalyticsDashboard: React.FC = () => {
         // Active counseling pool includes everyone who arrived in range and had assessment
         // OR completed in range (to ensure they show up in mix charts if they had activity)
         const counselingPoolMap = new Map();
-        arrivedPatients.filter(p => p.doctorAssessment?.quickCode === SurgeonCode.S1).forEach(p => counselingPoolMap.set(p.id, p));
+        flowDataset.filter(p => p.doctorAssessment?.quickCode === SurgeonCode.S1).forEach(p => counselingPoolMap.set(p.id, p));
         completedInPeriod.forEach(p => counselingPoolMap.set(p.id, p));
         const activeCounselingPatients = Array.from(counselingPoolMap.values());
 
@@ -485,11 +821,11 @@ export const AnalyticsDashboard: React.FC = () => {
         };
     };
 
-    const primaryStats = processSet(filteredPatients, appliedRange);
+    const primaryStats = processSet(filteredPatients, appliedRange, filteredAppointments);
     
     let compStats: any = null;
     if (showComparison && appliedCompRange) {
-        compStats = processSet(filteredPatients, appliedCompRange);
+        compStats = processSet(filteredPatients, appliedCompRange, filteredAppointments);
     }
 
     const scheduledCount = filteredAppointments.filter(a => filterByRange(a.date, appliedRange)).length;
@@ -499,7 +835,7 @@ export const AnalyticsDashboard: React.FC = () => {
       scheduledCount: scheduledCount as number,
       comparison: compStats as AnalyticsStats | null
     } as AnalyticsStats;
-  }, [filteredPatients, filteredAppointments, appliedRange, showComparison, appliedCompRange]);
+  }, [filteredPatients, filteredAppointments, appliedRange, showComparison, appliedCompRange, databaseStatusMap]);
 
   const sourceStats = useMemo(() => {
     const list = Object.entries(stats.sources)
@@ -531,8 +867,8 @@ export const AnalyticsDashboard: React.FC = () => {
       const actualRev = completedDay.reduce((sum, p) => sum + parseAmount(p.packageProposal?.packageAmount), 0);
       const combinedOppRev = flowDay.reduce((sum, p) => sum + parseAmount(p.packageProposal?.packageAmount), 0);
       
-      const dayNew = flowDay.filter(p => (p.visit_type || '').trim().toLowerCase() === 'new').length;
-      const dayRevisits = flowDay.filter(p => (p.visit_type || '').trim().toLowerCase() === 'revisit').length;
+      const dayRevisits = flowDay.filter(p => isRevisitRecord(p)).length;
+      const dayNew = flowDay.length - dayRevisits;
       const dayArrivals = dayNew + dayRevisits;
 
       return [
@@ -574,10 +910,10 @@ export const AnalyticsDashboard: React.FC = () => {
         p.id,
         p.name,
         getSourceDisplay(p.source),
-        p.packageProposal?.outcome || 'Pending',
+        resolveRecordStatus(p),
         p.packageProposal?.decisionPattern || '',
         p.packageProposal?.proposalStage || '',
-                formatDateToDDMMMYYYY(p.completed_surgery || (p.packageProposal?.outcome === 'Completed' ? p.packageProposal.outcomeDate : null)),
+        formatDateToDDMMMYYYY(p.completed_surgery || (p.packageProposal?.outcome === 'Completed' ? p.packageProposal.outcomeDate : null)),
         formatDateToDDMMMYYYY(p.entry_date || p.registeredAt),
         formatDateToDDMMMYYYY(p.surgery_lost_date || (p.packageProposal?.outcome === 'Lost' ? p.packageProposal.outcomeDate : null)),
         p.packageProposal?.lostReason || '---',
@@ -593,8 +929,8 @@ export const AnalyticsDashboard: React.FC = () => {
         p.mobile,
         p.visit_type || 'OPD',
         getSourceDisplay(p.source),
-        p.packageProposal?.outcome || 'Pending',
-                formatDateToDDMMMYYYY(p.entry_date),
+        resolveRecordStatus(p),
+        formatDateToDDMMMYYYY(p.entry_date),
         p.doctorAssessment?.affordability || '---',
         p.packageProposal?.packageAmount || '0'
       ]);
@@ -648,7 +984,10 @@ export const AnalyticsDashboard: React.FC = () => {
             registeredAt: a.createdAt,
             hasInsurance: 'No' as any,
             occupation: '',
-            visitType: 'OPD'
+            visitType: 'OPD',
+            status: (a as any).booking_status || a.status || '',
+            booking_status: (a as any).booking_status || a.status || '',
+            doctorAssessment: a.doctor_assessment
           } as Patient));
         break;
       case 'OPD Flow':
@@ -704,7 +1043,9 @@ export const AnalyticsDashboard: React.FC = () => {
         hasInsurance: 'No' as any,
         occupation: '',
         visitType: 'OPD',
-        status: a.status || 'Scheduled'
+        status: (a as any).booking_status || a.status || '',
+        booking_status: (a as any).booking_status || a.status || '',
+        doctorAssessment: a.doctor_assessment
       } as Patient))
     ];
 
@@ -795,7 +1136,7 @@ export const AnalyticsDashboard: React.FC = () => {
 
       // Filter consultations (OPD arrived list in the period)
       const docArrivedRange = docPatients.filter(p => 
-        (p.status || '').trim().toLowerCase() !== 'scheduled' &&
+        (p.booking_status || '').trim().toLowerCase() !== 'scheduled' &&
         filterByRange(p.entry_date || p.registeredAt, appliedRange)
       );
 
@@ -1355,14 +1696,8 @@ export const AnalyticsDashboard: React.FC = () => {
                                 <span>{getSourceDisplay(p.source)}</span>
                               </td>
                              <td className="p-4">
-                               <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
-                                 p.packageProposal?.outcome === 'Completed' ? 'bg-teal-50 text-teal-700' :
-                                 p.packageProposal?.outcome === 'Scheduled' ? 'bg-emerald-50 text-emerald-700' :
-                                 p.packageProposal?.outcome === 'Lost' ? 'bg-rose-50 text-rose-700' :
-                                 p.packageProposal?.outcome === 'Follow-Up' ? 'bg-blue-50 text-blue-700' :
-                                 'bg-amber-50 text-amber-700'
-                               }`}>
-                                 {p.packageProposal?.outcome || 'Pending'}
+                               <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${getStatusBadgeClass(resolveRecordStatus(p))}`}>
+                                 {resolveRecordStatus(p)}
                                </span>
                              </td>
                              <td className="p-4 text-[10px] font-bold text-slate-600">{p.packageProposal?.decisionPattern || '---'}</td>
@@ -1380,18 +1715,22 @@ export const AnalyticsDashboard: React.FC = () => {
                  </div>
                ) : (
                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                   {drillDown.data.map((p, idx) => (
+                   {drillDown.data.map((p, idx) => {
+                     const currentStatus = resolveRecordStatus(p);
+                     return (
                      <div key={p.id + idx} className="bg-slate-50/50 border border-slate-100 p-6 rounded-[2rem] hover:bg-white hover:shadow-xl transition-all group">
                        <div className="flex justify-between items-start mb-4">
                          <div>
                            <div className="text-sm font-black text-slate-900">{p.name}</div>
                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{p.id.split('_V')[0]}</div>
                          </div>
-                         <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-md ${
-                           (p.visit_type || '').toLowerCase() === 'new' ? 'bg-teal-100 text-teal-700' : 'bg-orange-100 text-orange-700'
-                         }`}>
-                           {p.visit_type || 'OPD'}
-                         </span>
+                         <div className="flex flex-col items-end gap-1">
+                           <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-md ${
+                             (p.visit_type || '').toLowerCase() === 'new' ? 'bg-teal-100 text-teal-700' : 'bg-orange-100 text-orange-700'
+                           }`}>
+                             {p.visit_type || 'OPD'}
+                           </span>
+                         </div>
                        </div>
                        
                        <div className="space-y-3">
@@ -1413,6 +1752,15 @@ export const AnalyticsDashboard: React.FC = () => {
                            <div className="p-2 bg-white rounded-xl text-slate-400"><Globe className="w-3.5 h-3.5" /></div>
                            <span className="text-[10px] font-black uppercase truncate max-w-[150px] text-slate-600">{getSourceDisplay(p.source)}</span>
                          </div>
+                         <div className="flex items-center gap-3">
+                           <div className="p-2 bg-white rounded-xl text-slate-400"><Activity className="w-3.5 h-3.5" /></div>
+                           <div className="flex items-center gap-2">
+                             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Current Status:</span>
+                             <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${getStatusBadgeClass(currentStatus)}`}>
+                               {currentStatus}
+                             </span>
+                           </div>
+                         </div>
                        </div>
 
                        <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
@@ -1428,7 +1776,8 @@ export const AnalyticsDashboard: React.FC = () => {
                           )}
                        </div>
                      </div>
-                   ))}
+                   );
+                   })}
                  </div>
                )}
             </div>

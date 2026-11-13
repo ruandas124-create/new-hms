@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useHospital } from '../context/HospitalContext';
 import { ExportButtons } from '../components/ExportButtons';
 import { formatDateToDDMMMYYYY } from '../utils/dateFormatter';
@@ -810,36 +810,65 @@ export const FrontOfficeDashboard: React.FC = () => {
     return keyB.localeCompare(keyA);
   });
 
-  const filteredAppointments = appointments.filter(a => { 
-    // Actual Appointment Booking Date / Scheduled Date of each appointment
-    const aDate = normalizeToIsoDate(
-      a.date || 
-      a.doctor_assessment?.appointment_date || 
-      a.doctor_assessment?.scheduled_date || 
-      (a as any).entry_date
-    );
-    if (!showAllApptDates) {
-      if (!aDate) return false;
-      if (apptStartDate && aDate < apptStartDate) return false;
-      if (apptEndDate && aDate > apptEndDate) return false;
+  const filteredAppointments = useMemo(() => {
+    const seenIds = new Set<string>();
+    const seenComposite = new Set<string>();
+    const result: Appointment[] = [];
+
+    const sorted = [...appointments].sort((a, b) => {
+      const dateA = normalizeToIsoDate(a.date || a.doctor_assessment?.appointment_date || a.doctor_assessment?.scheduled_date || (a as any).entry_date) || '';
+      const dateB = normalizeToIsoDate(b.date || b.doctor_assessment?.appointment_date || b.doctor_assessment?.scheduled_date || (b as any).entry_date) || '';
+      const keyA = dateA + (a.time || '');
+      const keyB = dateB + (b.time || '');
+      return showAllApptDates ? keyB.localeCompare(keyA) : keyA.localeCompare(keyB);
+    });
+
+    for (const a of sorted) {
+      if (!a.id || seenIds.has(a.id)) continue;
+
+      // Actual Appointment Booking Date / Scheduled Date of each appointment
+      const aDate = normalizeToIsoDate(
+        a.date || 
+        a.doctor_assessment?.appointment_date || 
+        a.doctor_assessment?.scheduled_date || 
+        (a as any).entry_date
+      );
+      if (!showAllApptDates) {
+        if (!aDate) continue;
+        if (apptStartDate && aDate < apptStartDate) continue;
+        if (apptEndDate && aDate > apptEndDate) continue;
+      }
+      const sTerm = searchTerm.toLowerCase().trim(); 
+      const matchesSearch = !sTerm || 
+        a.name.toLowerCase().includes(sTerm) || 
+        a.mobile.includes(sTerm) ||
+        (a.id && a.id.toLowerCase().includes(sTerm)) ||
+        (a.source && a.source.toLowerCase().includes(sTerm)) ||
+        (a.condition && a.condition.toLowerCase().includes(sTerm)) ||
+        (a.status && a.status.toLowerCase().includes(sTerm)) ||
+        (a.assignedDoctorName && a.assignedDoctorName.toLowerCase().includes(sTerm)) ||
+        (a.hospitalName && a.hospitalName.toLowerCase().includes(sTerm)); 
+
+      if (!matchesSearch) continue;
+
+      // Composite key deduplication: prevent showing duplicate entries for same patient mobile, date, time & hospital
+      const cleanMobile = (a.mobile || '').replace(/\D/g, '').slice(-10);
+      const cleanTime = (a.time || '').substring(0, 5);
+      const cleanHosp = a.hospital_id || '';
+      if (cleanMobile && aDate && cleanTime) {
+        const compKey = `${cleanMobile}_${aDate}_${cleanTime}_${cleanHosp}`;
+        if (seenComposite.has(compKey)) {
+          continue;
+        }
+        seenComposite.add(compKey);
+      }
+
+      seenIds.add(a.id);
+      result.push(a);
     }
-    const sTerm = searchTerm.toLowerCase().trim(); 
-    return !sTerm || 
-      a.name.toLowerCase().includes(sTerm) || 
-      a.mobile.includes(sTerm) ||
-      (a.id && a.id.toLowerCase().includes(sTerm)) ||
-      (a.source && a.source.toLowerCase().includes(sTerm)) ||
-      (a.condition && a.condition.toLowerCase().includes(sTerm)) ||
-      (a.status && a.status.toLowerCase().includes(sTerm)) ||
-      (a.assignedDoctorName && a.assignedDoctorName.toLowerCase().includes(sTerm)) ||
-      (a.hospitalName && a.hospitalName.toLowerCase().includes(sTerm)); 
-  }).sort((a, b) => {
-    const dateA = normalizeToIsoDate(a.date || a.doctor_assessment?.appointment_date || a.doctor_assessment?.scheduled_date || (a as any).entry_date) || '';
-    const dateB = normalizeToIsoDate(b.date || b.doctor_assessment?.appointment_date || b.doctor_assessment?.scheduled_date || (b as any).entry_date) || '';
-    const keyA = dateA + (a.time || '');
-    const keyB = dateB + (b.time || '');
-    return showAllApptDates ? keyB.localeCompare(keyA) : keyA.localeCompare(keyB);
-  });
+
+    return result;
+  }, [appointments, showAllApptDates, apptStartDate, apptEndDate, searchTerm]);
 
   const combinedHistoryData = [
     ...patients.map(p => ({ 
@@ -849,7 +878,7 @@ export const FrontOfficeDashboard: React.FC = () => {
       displayEntryDate: p.entry_date, 
       displayStatus: getHistoryStatus(p) 
     })),
-    ...appointments.map(a => ({ 
+    ...filteredAppointments.map(a => ({ 
       id: a.id, 
       name: a.name, 
       mobile: a.mobile, 

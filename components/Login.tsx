@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const { setCurrentUserRole, staffUsers } = useHospital();
+  const { loginUser, staffUsers } = useHospital();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,10 +28,13 @@ export const Login: React.FC = () => {
     // 0. Support system Master Administrator login
     if (inputLower === "master@hms.com" || inputLower === "master") {
       if (password === "Master@123") {
-        setCurrentUserRole("MASTER");
-        localStorage.setItem("hms_hospital_email", "master@hms.com");
-        localStorage.setItem("hms_hospital_name", "Master Administrator");
-        localStorage.setItem("hms_hospital_id", "staff_master_01");
+        await loginUser({
+          role: "MASTER",
+          userId: "staff_master_01",
+          name: "Master Administrator",
+          email: "master@hms.com",
+          tenantId: null
+        });
         setIsLoading(false);
         return;
       } else {
@@ -44,10 +47,13 @@ export const Login: React.FC = () => {
     // 1. Support system Administrator login
     if (inputLower === "admin@hms.com" || inputLower === "admin") {
       if (password === "Admin@123") {
-        setCurrentUserRole("ADMIN");
-        localStorage.setItem("hms_hospital_email", "admin@hms.com");
-        localStorage.setItem("hms_hospital_name", "Administrator");
-        localStorage.setItem("hms_hospital_id", "admin_root_01");
+        await loginUser({
+          role: "ADMIN",
+          userId: "admin_root_01",
+          name: "Administrator",
+          email: "admin@hms.com",
+          tenantId: null
+        });
         setIsLoading(false);
         return;
       } else {
@@ -111,15 +117,17 @@ export const Login: React.FC = () => {
       }
 
       if (foundStaff.password === password) {
-        setCurrentUserRole(foundStaff.role);
-        localStorage.setItem("hms_hospital_email", foundStaff.email || foundStaff.mobile);
-        localStorage.setItem("hms_hospital_name", foundStaff.name);
-        localStorage.setItem("hms_hospital_id", foundStaff.id);
-        if (foundStaff.hospital_id) {
-          localStorage.setItem("hms_hospital_tenant_id", foundStaff.hospital_id);
-        } else if (foundStaff.role === 'HOSPITAL' || foundStaff.role === 'ANALYTICS' || foundStaff.role === 'ANALYTICS_HUB') {
-          localStorage.setItem("hms_hospital_tenant_id", foundStaff.id);
+        let resolvedTenantId = foundStaff.hospital_id || null;
+        if (!resolvedTenantId && (foundStaff.role === 'HOSPITAL' || foundStaff.role === 'ANALYTICS' || foundStaff.role === 'ANALYTICS_HUB')) {
+          resolvedTenantId = foundStaff.id;
         }
+        await loginUser({
+          role: foundStaff.role,
+          userId: foundStaff.id,
+          name: foundStaff.name,
+          email: foundStaff.email || foundStaff.mobile,
+          tenantId: resolvedTenantId
+        });
         setIsLoading(false);
         return;
       } else {
@@ -131,39 +139,49 @@ export const Login: React.FC = () => {
 
     // 3. Fallback demo support if staff accounts not yet provisioned in DB
     if ((inputLower === "doctor@hms.com" || inputLower === "doctor") && (password === "Doctor@123" || password === "Welcome@123")) {
-      setCurrentUserRole("DOCTOR");
-      localStorage.setItem("hms_hospital_email", "test123@gmail.com");
-      localStorage.setItem("hms_hospital_name", "Dr. Rupan Das");
-      localStorage.setItem("hms_hospital_id", "jxje5p9d3");
-      localStorage.setItem("hms_hospital_tenant_id", "vrdenfb7k");
+      await loginUser({
+        role: "DOCTOR",
+        userId: "jxje5p9d3",
+        name: "Dr. Rupan Das",
+        email: "test123@gmail.com",
+        tenantId: "vrdenfb7k"
+      });
       setIsLoading(false);
       return;
     }
 
     if ((inputLower === "frontoffice@hms.com" || inputLower === "frontoffice" || inputLower === "frontoffice@gmail.com") && (password === "Front@123" || password === "frontoffice@gmail.com" || password === "Welcome@123")) {
-      setCurrentUserRole("FRONT_OFFICE");
-      localStorage.setItem("hms_hospital_email", "frontoffice@gmail.com");
-      localStorage.setItem("hms_hospital_name", "Front Office Reception");
-      localStorage.setItem("hms_hospital_id", "h73fp51wx");
-      localStorage.setItem("hms_hospital_tenant_id", "vrdenfb7k");
+      await loginUser({
+        role: "FRONT_OFFICE",
+        userId: "h73fp51wx",
+        name: "Front Office Reception",
+        email: "frontoffice@gmail.com",
+        tenantId: "vrdenfb7k"
+      });
       setIsLoading(false);
       return;
     }
 
     if ((inputLower === "sales@hms.com" || inputLower === "sales") && (password === "Sales@123" || password === "Welcome@123")) {
-      setCurrentUserRole("SALES");
-      localStorage.setItem("hms_hospital_email", "sales@hms.com");
-      localStorage.setItem("hms_hospital_name", "Sales Executive One");
-      localStorage.setItem("hms_hospital_id", "staff_sales_01");
+      await loginUser({
+        role: "SALES",
+        userId: "staff_sales_01",
+        name: "Sales Executive One",
+        email: "sales@hms.com",
+        tenantId: null
+      });
       setIsLoading(false);
       return;
     }
 
     if ((inputLower === "sales2@hms.com" || inputLower === "sales2") && (password === "Sales@123" || password === "Welcome@123")) {
-      setCurrentUserRole("SALES");
-      localStorage.setItem("hms_hospital_email", "sales2@hms.com");
-      localStorage.setItem("hms_hospital_name", "Sales Executive Two");
-      localStorage.setItem("hms_hospital_id", "staff_sales_02");
+      await loginUser({
+        role: "SALES",
+        userId: "staff_sales_02",
+        name: "Sales Executive Two",
+        email: "sales2@hms.com",
+        tenantId: null
+      });
       setIsLoading(false);
       return;
     }
